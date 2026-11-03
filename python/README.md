@@ -66,8 +66,8 @@ nostr-sdk's UniFFI library. No Python Nostr library here verifies in pure Python
 
 | client | package | version | license | verify | crypto | websocket |
 |---|---|---|---|---|---|---|
-| `nostr-sdk-stream` | nostr-sdk (rust-nostr) | 0.45.1 | MIT | library | libsecp256k1 via Rust secp256k1 | tokio-tungstenite (Rust) |
-| `nostr-sdk-notifications` (variant) | nostr-sdk | 0.45.1 | MIT | library | same | same |
+| `nostr-sdk-notifications` | nostr-sdk (rust-nostr) | 0.45.1 | MIT | library | libsecp256k1 via Rust secp256k1 | tokio-tungstenite (Rust) |
+| `nostr-sdk-stream` (variant) | nostr-sdk | 0.45.1 | MIT | library | same | same |
 | `nostr-sdk-fetch` (variant) | nostr-sdk | 0.45.1 | MIT | library | same | same |
 | `pynostr-callback` | pynostr | 0.7.0 | MIT | library | coincurve | tornado 6.6 |
 | `pynostr-pool` (variant) | pynostr | 0.7.0 | MIT | library | coincurve | tornado 6.6 |
@@ -81,16 +81,25 @@ nostr-sdk's UniFFI library. No Python Nostr library here verifies in pure Python
 | `nostrclient` | nostrclient | 1.0.5 | Unlicense | explicit | secp256k1-py | websocket-client 1.9 (thread) |
 | `basic-nostr` | basic-nostr | 1.1.0 | MIT | harness | coincurve | websockets 17 |
 
-**nostr-sdk** (rust-nostr's UniFFI bindings). `stream_events(ReqTarget.single(url, [filter]))`
-and `ClientEventStream.next()` until the stream ends at EOSE (default exit policy). Relay I/O,
-JSON, id and signature checks run in Rust on tokio threads; each event crosses the FFI as an
-`Event` handle and the id is read with `Event.id().to_hex()`, so per-event cost is mostly
-the FFI future round-trip. Verifies every event (new `Client` and in-memory state per run),
-drops expired (NIP-40) events, accepts the ambiguous one. Variants: `subscribe` +
-`notifications()` (the stream `handle_notifications` wraps; the notification channel is a
-broadcast channel that drops what a slow consumer has not read, so it is sized at twice the
-workload) and `fetch_events` (whose default `max_events` cap fails the `all` workload with
-`too many fetched events`, so it is raised to the workload size).
+**nostr-sdk** (rust-nostr's UniFFI bindings). Headline: `subscribe(ReqTarget.single(url,
+[filter]))` and `notifications().next()` (the stream `handle_notifications` wraps) until the
+`MESSAGE` notification carrying the EOSE; events come as `NEW_EVENT`. Relay I/O, JSON, id and
+signature checks run in Rust on tokio threads; every notification crosses the FFI (a
+`NEW_EVENT` and a `MESSAGE` per EVENT frame) and the id is read with `Event.id().to_hex()`, so
+per-event cost is mostly the FFI round-trip. The client's notification channel is a broadcast
+channel that drops what a slow consumer has not read, so it is sized at twice the workload.
+Verifies every event (new `Client` and in-memory state per run), drops expired (NIP-40) events,
+accepts the ambiguous one.
+
+Variants: `stream_events` + `ClientEventStream.next()` (the documented short-lived streaming
+API) **silently loses events** with a Python consumer: when the consumer falls behind the Rust
+reader, the stream ends (no error item, no EOSE distinction) after a few thousand events. A
+0.1 ms sleep per event gives 2,558 of 29,548; under machine load with no sleep, runs delivered
+12,979, 9,073 or 18,704. `notification_channel_size` does not change it, so it looks like the
+relay's internal notification broadcast channel lagging. Hence it is a diagnostic row, and the
+row errors when a run's set differs from the first. `fetch_events` (fetch-all, collected in
+Rust, so it does not lag) needs `max_events` raised to the workload size: its default cap fails
+`all` with `too many fetched events`.
 
 **pynostr.** `RelayManager.add_relay(message_callback=...)`, `add_subscription_on_all_relays`,
 `run_sync()` (tornado). Verifies every event (`Event.from_dict` recomputes the id, `verify()`

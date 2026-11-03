@@ -51,8 +51,8 @@ var clients = []*clientDef{
 		ID: "go-nostr-relay-libsecp256k1", Library: "go-nostr", Module: gonostrMod,
 		API:       "RelayConnect + Relay.Subscribe (Events / EndOfStoredEvents channels)",
 		Websocket: coderWS, Crypto: secpVendored, Verify: "library",
-		Notes:   "Built with the library's libsecp256k1 build tag. " + gonostrIDNote,
-		Variant: true, Tag: "secp-gonostr",
+		Notes: "Built with the library's libsecp256k1 build tag. " + gonostrIDNote,
+		Tag:   "secp-gonostr",
 	},
 	{
 		ID: "go-nostr-pool", Library: "go-nostr", Module: gonostrMod,
@@ -76,8 +76,8 @@ var clients = []*clientDef{
 		ID: "fiatjaf-nostr-relay-libsecp256k1", Library: "fiatjaf.com/nostr", Module: fiatjafMod,
 		API:       "RelayConnect + Relay.Subscribe (Events / EndOfStoredEvents channels)",
 		Websocket: coderWS, Crypto: secpVendored, Verify: "library",
-		Notes:   "Built with the library's libsecp256k1 build tag. " + fiatjafNote,
-		Variant: true, Tag: "secp-fiatjaf",
+		Notes: "Built with the library's libsecp256k1 build tag. " + fiatjafNote,
+		Tag:   "secp-fiatjaf",
 	},
 	{
 		ID: "fiatjaf-nostr-pool", Library: "fiatjaf.com/nostr", Module: fiatjafMod,

@@ -107,9 +107,10 @@ secp256k1 implementation that actually ran (e.g. `libsecp256k1 0.6 (C, via secp2
    Record the time EOSE is delivered to the app.
 3. **End.** The run ends at `t_end = max(EOSE time, time of the last accepted event)`:
    some libraries verify on other threads and keep delivering after the EOSE. The harness
-   waits until EOSE has been seen and either `accepted` is complete (valid + every
-   ambiguous) or no event has arrived for 1 s (rejected ambiguous / broken library); the
-   wait after `t_end` is not timed. A run that sees no EOSE within `--timeout-ms` is an
+   waits until EOSE has been seen and either `accepted` is complete (`valid_events` +
+   every ambiguous event, expired ones included) or no event has arrived for 1 s (a
+   library that drops the expired or the ambiguous events, or a broken one); the wait
+   after `t_end` is not timed. A run that sees no EOSE within `--timeout-ms` is an
    error.
 4. **Teardown, untimed.** Close the subscription and the client.
 
@@ -145,7 +146,7 @@ Every harness exposes the same flags through its launcher (`<harness>/run.sh`):
 --min-time-ms N       default 10000
 --max-runs N          default 30
 --timeout-ms N        per run, default 300000
---quick               warmup-runs 1, min-runs 2, min-time-ms 0 (smoke test)
+--quick               warmup-runs 1, min-runs 2, min-time-ms 0 (smoke test; overrides those flags)
 --list                print client ids, one per line, and exit
 ```
 
@@ -202,7 +203,18 @@ Derived from the median run: `events_per_s = events / (median_ms / 1000)` and
 `us_per_event = median_ms * 1000 / events`, over **every** event the relay sent (valid or
 not: rejecting an invalid event is work too). `cpu_ms` is the median of the runs' CPU
 times. A client that fails (throws, never sees EOSE, crashes) still gets a row with
-`error` set and null timings.
+`error` set and null timings; `errors` is the number of runs that failed (a harness stops
+at the first, so it is 0 or 1).
+
+A build option or setting the library documents (a faster crypto backend behind a build
+tag, a bigger buffer) is a client entry of its own, not a variant: the ranking shows each
+library at its fastest documented configuration, and `notes` say which it is. Another API
+of the same library (a pool instead of a single relay, fetch instead of subscribe) is a
+variant.
+
+Streams can end early without an error (a library that drops events when the app falls
+behind its reader); "every run must deliver the same set as the first" is what catches it,
+so keep that check even when a library looks reliable.
 
 `client` ids are unique within a harness, lowercase, `<library>-<variant>`. Record the
 library's resolved version and its license (SPDX) as found in its own LICENSE file or

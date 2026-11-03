@@ -551,22 +551,28 @@ SECP_PY = "libsecp256k1 (C, bundled in secp256k1-py 0.14.0, cffi)"
 COINCURVE = "libsecp256k1 @1ad5185 (C, bundled in coincurve 21.0.0, cffi)"
 
 CLIENTS = [
-    dict(id="nostr-sdk-stream", library="nostr-sdk", dist="nostr-sdk", license="MIT", run=run_nostr_sdk_stream,
-         api="Client.stream_events(ReqTarget.single(url, [filter])) + ClientEventStream.next() until it ends at EOSE",
-         websocket="async-wsocket / tokio-tungstenite (Rust, inside the UniFFI .so)",
-         crypto="libsecp256k1 (C, via the Rust secp256k1 crate, inside the UniFFI .so)", verify="library",
-         notes="rust-nostr 0.45 through its UniFFI Python bindings; relay I/O, parsing and verification run on "
-               "tokio threads, each event crosses the FFI as an Event handle (id via Event.id().to_hex()). "
-               "Drops expired (NIP-40) events. New Client (and in-memory state) per run."),
     dict(id="nostr-sdk-notifications", library="nostr-sdk", dist="nostr-sdk", license="MIT",
-         run=run_nostr_sdk_notifications, variant=True,
-         api="Client.subscribe(ReqTarget.single(...)) + Client.notifications().next(): NEW_EVENT until the "
-             "MESSAGE carrying EOSE",
+         run=run_nostr_sdk_notifications,
+         api="Client.subscribe(ReqTarget.single(url, [filter])) + Client.notifications().next(): NEW_EVENT until "
+             "the MESSAGE carrying EOSE",
          websocket="async-wsocket / tokio-tungstenite (Rust, inside the UniFFI .so)",
          crypto="libsecp256k1 (C, via the Rust secp256k1 crate, inside the UniFFI .so)", verify="library",
-         notes="long-lived subscription, the notification stream that handle_notifications wraps; "
+         notes="rust-nostr 0.45 through its UniFFI Python bindings: relay I/O, parsing and verification run on "
+               "tokio threads; each notification crosses the FFI (a NEW_EVENT plus a MESSAGE for every EVENT "
+               "frame), id via Event.id().to_hex(). The stream handle_notifications wraps. "
                "notification_channel_size raised to 2x the workload (a broadcast channel drops what a slow "
-               "consumer has not read)"),
+               "consumer has not read). Drops expired (NIP-40) events. New Client per run. Headline row because "
+               "stream_events loses events with a Python consumer (see nostr-sdk-stream)."),
+    dict(id="nostr-sdk-stream", library="nostr-sdk", dist="nostr-sdk", license="MIT", run=run_nostr_sdk_stream,
+         variant=True,
+         api="Client.stream_events(ReqTarget.single(url, [filter])) + ClientEventStream.next() until it ends",
+         websocket="async-wsocket / tokio-tungstenite (Rust, inside the UniFFI .so)",
+         crypto="libsecp256k1 (C, via the Rust secp256k1 crate, inside the UniFFI .so)", verify="library",
+         notes="short-lived stream, ends at EOSE. When the Python consumer falls behind the relay (per-event FFI "
+               "await ~60-120 us vs the Rust reader), the stream ends early, with no error item, after a few "
+               "thousand events (reproduced with a 0.1 ms sleep per event: 2,558 of 29,548; under machine load "
+               "without any sleep: 12,979 then 9,073). notification_channel_size does not change it, so this is "
+               "presumably the relay's internal notification broadcast channel lagging. Diagnostic row."),
     dict(id="nostr-sdk-fetch", library="nostr-sdk", dist="nostr-sdk", license="MIT", run=run_nostr_sdk_fetch,
          variant=True, api="Client.fetch_events(ReqTarget.single(...), timeout) -> list after EOSE",
          websocket="async-wsocket / tokio-tungstenite (Rust, inside the UniFFI .so)",
