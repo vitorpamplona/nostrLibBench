@@ -129,7 +129,7 @@ fn serve(stream: TcpStream, cfg: &Config) -> Res<()> {
     };
     let Some(key) = headers.get("sec-websocket-key") else {
         // NIP-11 for clients that ask for it; anything else gets the same document.
-        let body = br#"{"name":"nostrLibBench blast-relay","description":"streams a fixed corpus to every REQ","supported_nips":[1,11],"software":"https://github.com/vitorpamplona/nostrLibBench","version":"0.1.0"}"#;
+        let body = br#"{"name":"nostrLibBench blast-relay","description":"streams a fixed corpus to every REQ","supported_nips":[1,11,15,20],"software":"https://github.com/vitorpamplona/nostrLibBench","version":"0.1.0"}"#;
         let head = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: application/nostr+json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
             body.len()
