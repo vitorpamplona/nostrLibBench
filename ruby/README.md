@@ -4,15 +4,15 @@
 and output schema. Output goes to `results/ruby.json`.
 
 ```bash
-ruby/run.sh --relay ws://127.0.0.1:7777 --quick
-ruby/run.sh --clients nostrb-rbsecp256k1 --workloads all,notes
+ruby/run.sh --relay ws://127.0.0.1:7777 --quick --workloads smoke
+ruby/run.sh --clients nostrb-fast --workloads all,notes
 ruby/run.sh --list
 ```
 
 `run.sh` installs the gems pinned in `Gemfile.lock` into `ruby/vendor` (git-ignored) with
 Bundler, again whenever the lockfile changes, then runs `bench.rb` from the repo root.
-The `fast` group (`rbsecp256k1`, used by one variant row) builds against the system
-libsecp256k1 (Debian/Ubuntu: `libsecp256k1-dev`; the gem's own build downloads the C
+The `fast` group (`rbsecp256k1` and `oj`, used by the `nostrb-fast` client) builds
+`rbsecp256k1` against the system libsecp256k1 (Debian/Ubuntu: `libsecp256k1-dev`; the gem's own build downloads the C
 library from GitHub, which may be blocked); if it doesn't build, `run.sh` installs the
 rest and that row reports the missing gem as its error.
 
@@ -34,7 +34,9 @@ Per run (HARNESS.md "A run"):
 2. Timed: `t0 = CLOCK_MONOTONIC` right before the subscription call with the filter
    `{"limit": <events>}`. Every event the library delivers is verified as the client's
    `verify` says, then counted and its id XORed into `accepted_xor` (Integer XOR of the
-   hex ids). EOSE is timestamped when it reaches the app.
+   hex ids; nothing else per event). EOSE is timestamped when it reaches the app. A
+   blocking subscription call (nostrb) runs on the main thread; the harness adds no
+   threads that do work (the per-run timeout is a sleeping watchdog thread).
 3. End: `t_end = max(EOSE, last accepted event)`; the harness waits for EOSE and then for
    a complete set or 1 s without events (untimed).
 4. Teardown, untimed: unsubscribe, close / stop the reactor.
@@ -45,10 +47,18 @@ Per run (HARNESS.md "A run"):
 A run that sees no EOSE within `--timeout-ms` (default 300 s) ends the client: the row
 gets `error: "timeout: …"` with how many events had been accepted and the time per
 accepted event so far, so the cost of a full run can still be read off. The pure-Ruby
-verifiers need 13-70 ms per event, i.e. 7-35 minutes for the 31,161-event `all` workload,
-so with the default timeout only `nostrb-rbsecp256k1` finishes `all`. To get their
-timings, raise the timeout (`--timeout-ms 3000000`) and expect hours with the default run
-counts, or use a small workload (`--workloads metadata` is 268 events).
+verifiers need 15-70 ms per event, i.e. 8-35 minutes for the 31,161-event `all` workload
+(measured: `nostr-client` 15.5 ms and `nostr_ruby-client` 17.8 ms per accepted event
+before the 300 s timeout), so with the default timeout only `nostrb-fast` finishes `all`.
+The `smoke` workload (1,417 events) takes 20 s to 1.5 min per run with them. For `all`,
+raise the timeout (`--timeout-ms 3000000`) and expect hours with the default run counts.
+
+**Fairness configuration** (HARNESS.md): every client verifies id and signature of every
+event (the library's functions where it has them), with library defaults except what each
+row's `notes` names: `nostr-client` passes `logger: nil` (the default logger prints every
+frame), the nostrb rows set `CONSOLE_LEVEL=error` (async-pool prints a warning on every
+connection close). nostrb's documented optional speed-ups are their own client,
+`nostrb-fast`, not a variant.
 
 ## Clients
 
@@ -57,7 +67,7 @@ counts, or use a small workload (`--workloads metadata` is 268 events).
 | `nostr-client` | [nostr](https://github.com/wilsonsilva/nostr) 0.7.0 (MIT) | explicit | bip-schnorr 0.8 + ecdsa_ext (pure Ruby) | faye-websocket 0.12 on EventMachine 1.2 |
 | `nostr_ruby-client` | [nostr_ruby](https://github.com/dtonon/nostr-ruby) 0.3.1 (MIT) | harness | bip-schnorr 0.8 + ecdsa_ext (pure Ruby) | faye-websocket 0.12 on EventMachine 1.2 |
 | `nostrb-client` | [nostrb](https://github.com/rickhull/nostrb) 0.2.0.1 (LGPL-2.1-only) | explicit | schnorr_sig 1.2 pure (ecdsa_ext / ecdsa, pure Ruby) | async-websocket 0.30 (async 2, fibers) |
-| `nostrb-rbsecp256k1` (variant) | nostrb 0.2.0.1 | explicit | libsecp256k1 (C, system lib) via rbsecp256k1 6.0 | async-websocket 0.30 |
+| `nostrb-fast` | nostrb 0.2.0.1 + rbsecp256k1 6.0 + oj 3.17 | explicit | libsecp256k1 (C, system lib) via rbsecp256k1 6.0 | async-websocket 0.30 |
 
 Licenses come from each gem's LICENSE file (nostr, nostr_ruby) or gemspec (nostrb).
 
@@ -93,7 +103,7 @@ serialize) and the signature with `Schnorr.valid_sig?` from bip-schnorr, the lib
 own crypto dependency. `on(:event)` fires for every subscription (the event object does
 not carry its subscription id). Teardown: `unsubscribe` + `close` (stops the reactor).
 
-### `nostrb-client` and `nostrb-rbsecp256k1` (rickhull/nostrb)
+### `nostrb-client` and `nostrb-fast` (rickhull/nostrb)
 
 `Nostrb::Client.new(url).subscribe(filter) { |hash| … }` opens a connection
 (async-websocket, lazily: the handshake is inside the timed part), sends the REQ, yields
@@ -104,16 +114,19 @@ id), the order nostrb's own relay uses, and drops events that raise.
 
 - `validate!` caps a tag at 99 values, so it drops one **valid** event of the corpus
   (`eff6ff2f…`, a kind 9734 zap request with a 104-value relays tag): both rows are
-  `accepted_ok: false` (29,613 accepted, one short).
-- nostrb's JSON uses Oj when it is installed; it is not, so stdlib `json` runs.
+  `accepted_ok: false` on `all` (29,613 accepted, one short). That event is not in
+  `smoke`.
+- nostrb's JSON uses Oj when it can load it, else stdlib `json`.
 - The gem does not declare its runtime dependency on `async-websocket` (the Gemfile adds
   it).
 - async-pool logs a harmless `Attempt to unlock a mutex which is not locked` warning from
   its gardener task on every connection close; children set `CONSOLE_LEVEL=error`.
 - schnorr_sig uses libsecp256k1 (via `rbsecp256k1`) whenever that gem can be required,
   else its pure-Ruby BIP-340 on ecdsa_ext/ecdsa (affine point math, ~70 ms per verify).
-  `nostrb-client` runs without the `fast` group on the load path (and checks it got the
-  pure implementation); `nostrb-rbsecp256k1` (variant) runs with it.
+  nostrb lists `rbsecp256k1` and `oj` as optional gems (`Nostrb::Optional::GEMS`), so
+  `nostrb-fast` (its documented fastest configuration, a client of its own) has both on
+  the load path and `nostrb-client` (the default configuration) neither; each child
+  checks which implementations it actually got.
 
 ## Not included
 

@@ -43,8 +43,11 @@ language:
    XORs its id into the accepted set. Nothing else, in every language.
 
 Every client uses one relay and one subscription, through the library's streaming API
-(callback, channel, flow, iterator). Pools, fetch-all APIs and multi-relay setups are
-variants (`variant: true`), shown but not ranked.
+(callback, channel, flow, iterator). The headline row uses the client the library's own
+docs and apps use (go-nostr's `Relay`, Quartz's `NostrClient`, nostr-sdk's `Client`), even
+when that client is a pool, configured with the one relay. The library's other APIs (a pool
+next to a single-relay client, fetch-all instead of subscribe) are variants
+(`variant: true`), shown but not ranked.
 
 **Configuration.** Library defaults, except what is needed to do the job above correctly,
 each named in `notes`:

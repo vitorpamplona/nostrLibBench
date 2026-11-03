@@ -287,18 +287,34 @@ Future<void> childMain(List<String> args, List<BenchClient> clients) async {
   final s = Settings(int.parse(req('--warmup-runs')), int.parse(req('--min-runs')),
       int.parse(req('--min-time-ms')), int.parse(req('--max-runs')), int.parse(req('--timeout-ms')));
   Map<String, Object?> row;
-  try {
-    row = await _measure(client, w, url, s);
-  } catch (e) {
-    row = errorRow(client, w, '$e');
-  }
+  // An exception the library throws on its own event loop (outside any future the harness
+  // awaits) would kill the process, as it would kill an app; catch it so the row names it.
+  final done = Completer<Map<String, Object?>>();
+  runZonedGuarded(() async {
+    try {
+      done.complete(await _measure(client, w, url, s));
+    } catch (e) {
+      if (!done.isCompleted) done.complete(errorRow(client, w, '$e'));
+    }
+  }, (e, st) {
+    final ctx = _current;
+    if (ctx != null && !ctx._done.isCompleted) {
+      ctx.fail('uncaught exception in the library: $e');
+    } else if (!done.isCompleted) {
+      done.complete(errorRow(client, w, 'uncaught exception in the library: $e'));
+    }
+  });
+  row = await done.future;
   File(req('--result')).writeAsStringSync(jsonEncode(row));
   // Libraries may leave timers, sockets or isolates behind: leave hard.
   exit(0);
 }
 
+RunCtx? _current;
+
 Future<_RunResult> _oneRun(BenchClient client, Workload w, Uri url, Settings s) async {
   final ctx = RunCtx(w);
+  _current = ctx;
   final timeout = Duration(milliseconds: s.timeoutMs);
   await client.setup(url, ctx).timeout(timeout,
       onTimeout: () => throw TimeoutException('setup (connect) did not finish within ${s.timeoutMs} ms'));
@@ -356,9 +372,10 @@ Future<Map<String, Object?>> _measure(BenchClient client, Workload w, Uri url, S
   _RunResult? first;
   String? error;
   void check(_RunResult r) {
-    if (r.accepted != first!.accepted || r.xor != first!.xor) {
+    final f = first!;
+    if (r.accepted != f.accepted || r.xor != f.xor) {
       throw Exception('run delivered a different set than the first run '
-          '(accepted ${r.accepted} vs ${first!.accepted}, xor ${r.xor} vs ${first!.xor})');
+          '(accepted ${r.accepted} vs ${f.accepted}, xor ${r.xor} vs ${f.xor})');
     }
   }
 

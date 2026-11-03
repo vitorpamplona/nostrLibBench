@@ -4,7 +4,7 @@
 and output schema. Output goes to `results/php.json`.
 
 ```bash
-php/run.sh --relay ws://127.0.0.1:7777 --quick
+php/run.sh --relay ws://127.0.0.1:7777 --quick --workloads smoke
 php/run.sh --clients nostr-php-persistent --workloads metadata
 php/run.sh --list
 ```
@@ -40,8 +40,14 @@ how many events it had accepted and the time per accepted event, and the row get
 **Cost.** `Event::verify` takes ~65 ms of CPU per event on this machine (paragonie/ecc's
 BIP-340 verify in PHP on GMP): about 34 minutes for the 31,161-event `all` workload, so
 with the default `--timeout-ms` (300 s) both rows on `all` end in a timeout error that
-carries the per-event cost. Use a small workload (`--workloads metadata`: 268 events,
-~18 s per run) or a much larger timeout to get timings.
+carries the per-event cost. `smoke` (1,417 events, 994 of them valid) takes about a minute
+per run; for `all`, raise the timeout (`--timeout-ms 2400000`) and expect hours with the
+default run counts.
+
+**Fairness configuration** (HARNESS.md): library defaults, except the WebSocket read
+timeout (`Client::setTimeout`, default 60 s) and `Request::setTimeout` (default 60 s), both
+raised to `--timeout-ms` so a slow download is never cut short. The library has no
+documented speed option (no native verifier backend), so there is one headline row.
 
 ## Clients
 

@@ -83,7 +83,7 @@ fn runPoolQuery(ctx: *common.RunCtx) !void {
     // relay goes quiet after EOSE, and stopReceiving (queryParallel's exit) / deinit join it
     // forever. 200 ms lets the thread see should_stop.
     for (pool.relays.items) |*h| {
-        if (h.client) |*c| _ = c;
+        if (h.client) |*c| c.setReadTimeout(200);
     }
 
     const filters = [_]nostr.Filter{.{ .limit_val = ctx.limit }};

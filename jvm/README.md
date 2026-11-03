@@ -224,15 +224,15 @@ the library's strings).
 
 | client | accepted | ambiguous | expired | ok | median ms | cpu ms |
 |---|---|---|---|---|---|---|
-| quartz-nostrclient | 994 | 1 | 66 | true | 68 | 145 |
-| quartz-parallelverifier | 994 | 1 | 66 | true | 107 | - |
-| quartz-standalone | 994 | 1 | 66 | true | 137 | 130 |
-| nostr-sdk-subscribe | 928 | 1 | 0 | true | 424 | 455 |
-| nostr-sdk-subscribe-defaultchannel | 928 | 1 | 0 | true | 525 | 450 |
-| nostr-sdk-stream | 928 | 1 | 0 | true | 297 | 285 |
-| nostr4j-pool | 928 | 1 | 0 | true | 598 | 575 |
-| nostr4j-pool-defaulttracker | 22 | 0 | 0 | false | 386 | 595 |
-| nostr-java-relaypool | 994 | 1 | 66 | true | 16 813 | 13 515 |
-| rhodium-request | 961 | 1 | 66 | false | 515 | 475 |
+| quartz-nostrclient | 995 | 1 | 66 | true | 114 | 140 |
+| quartz-parallelverifier | 995 | 1 | 66 | true | 155 | 190 |
+| quartz-standalone | 995 | 1 | 66 | true | 229 | 215 |
+| nostr-sdk-subscribe | 929 | 1 | 0 | true | 551 | 370 |
+| nostr-sdk-subscribe-defaultchannel | 929 | 1 | 0 | true | 834 | 390 |
+| nostr-sdk-stream | 929 | 1 | 0 | true | 478 | 360 |
+| nostr4j-pool | 929 | 1 | 0 | true | 396 | 545 |
+| nostr4j-pool-defaulttracker | 22 | 0 | 0 | false | 384 | 530 |
+| nostr-java-relaypool | 995 | 1 | 66 | true | 16 806 | 13 770 |
+| rhodium-request | 962 | 1 | 66 | false | 386 | 415 |
 
 `results/jvm.json` holds the latest run.
