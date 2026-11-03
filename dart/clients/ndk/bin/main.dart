@@ -8,7 +8,7 @@ Future<void> main(List<String> args) => childMain(args, [
           false),
       NdkClient('ndk-rust', 'RustEventVerifier() (Rust via FFI: id hash + BIP-340 in one native call)',
           () => RustEventVerifier(),
-          'libsecp256k1 (C, via rust secp256k1 0.31 in ndk\'s librust_lib_ndk.so, built by its build hook)', true),
+          'libsecp256k1 (C, via rust secp256k1 0.31 in ndk\'s librust_lib_ndk.so, built by its build hook)', false),
     ]);
 
 class NdkClient extends BenchClient {

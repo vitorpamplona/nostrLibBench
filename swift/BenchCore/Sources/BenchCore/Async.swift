@@ -2,6 +2,7 @@ import Foundation
 
 public struct TimeoutError: Error, CustomStringConvertible {
     public let what: String
+    public init(what: String) { self.what = what }
     public var description: String { "timeout: \(what)" }
 }
 

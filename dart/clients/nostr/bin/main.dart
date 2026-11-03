@@ -53,10 +53,10 @@ class NostrDartIo extends BenchClient {
         ctx.reject();
         return;
       }
-      if (m.type == MessageType.event) {
+      if (m.messageType == MessageType.event) {
         final e = m.message as Event;
         if (e.subscriptionId == sid) ctx.event(e.id);
-      } else if (m.type == MessageType.eose) {
+      } else if (m.messageType == MessageType.eose) {
         if ((m.message as Eose).subscriptionId == sid) ctx.eose();
       }
     }, onError: (Object e) => ctx.fail(e));
