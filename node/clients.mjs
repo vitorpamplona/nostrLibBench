@@ -378,10 +378,10 @@ const welshman = {
 const welshmanNoDelay = {
   ...welshman,
   id: 'welshman-nodelay',
-  variant: true,
+  variant: false,
   api: 'Socket.recvBatchDelay = 0, then request({relays: [url], filters: [filter], context: {pool}, onEvent, onEose})',
   notes:
-    'Diagnostic: welshman with its receive throttle off. By default every Socket hands inbound messages to subscribers through a TaskQueue of recvBatchSize 20 per recvBatchDelay 100 ms (a setTimeout between batches), so a socket delivers at most ~200 messages per second whatever the CPU; here the public static Socket.recvBatchDelay is set to 0 (the queue then drains on a microtask), which shows the cost of the parsing, verification and bookkeeping alone. Otherwise as the welshman row.',
+    'Welshman with its receive throttle off (its public static setting; ranked as the library at its fastest configuration, the `welshman` row is the default). By default every Socket hands inbound messages to subscribers through a TaskQueue of recvBatchSize 20 per recvBatchDelay 100 ms (a setTimeout between batches), so a socket delivers at most ~200 messages per second whatever the CPU; here the public static Socket.recvBatchDelay is set to 0 (the queue then drains on a microtask), which shows the cost of the parsing, verification and bookkeeping alone. Otherwise as the welshman row.',
   async load(opts) {
     const m = await welshman.load(opts);
     m.net.Socket.recvBatchDelay = 0;

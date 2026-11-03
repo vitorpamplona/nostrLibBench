@@ -64,7 +64,13 @@ a build tag, a native verifier plugin) is a client entry of its own, not a varia
 ranking shows each library at its fastest documented configuration, and the
 default-configuration row is listed next to it. A row may not use a patched copy of a
 library; a library that only works with a patch gets an `error` row and the patch is
-described in the harness README.
+described in the harness README. A loader shim that only lets the runtime load the
+unmodified package (a module-resolution hook for a package published with broken import
+paths) is not a patch; name it in `notes`.
+
+**Delivery is the library's.** An event the library keeps to itself (a store or feed that
+skips an older replaceable version, a `created_at` filter, a dedup rule) counts as not
+delivered: the row is wrong for that workload, and its `notes` say why.
 
 **Threads.** A library may verify on as many threads as it uses by default (that is its
 design), but the harness never adds threads. The ranking is by wall time, `cpu_ms` sits
@@ -174,7 +180,8 @@ secp256k1 implementation that actually ran (e.g. `libsecp256k1 0.6 (C, via secp2
 
 Per client and workload: `--warmup-runs` runs (default 2) that are timed but not
 ranked, so JITs, connection pools and allocators are warm; then measured runs until at
-least `--min-runs` (default 5) runs **and** `--min-time-ms` (default 10 000) have passed,
+least `--min-runs` (default 5) runs are done **and** their timed parts add up to
+`--min-time-ms` (default 10 000),
 stopping at `--max-runs` (default 30). The first warm-up run is also reported alone as
 `first_run_ms`: a cold library, as on app startup.
 
