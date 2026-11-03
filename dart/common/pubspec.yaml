@@ -1,0 +1,5 @@
+name: bench_common
+description: nostrLibBench Dart harness, shared driver (not published).
+publish_to: none
+environment:
+  sdk: ^3.9.0

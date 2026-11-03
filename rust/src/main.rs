@@ -249,6 +249,7 @@ fn run_child(a: &Args, id: &str) {
             errors += 1;
             break;
         };
+        sink.dump();
         let set = (sink.accepted, sink.xor);
         match first {
             None => {

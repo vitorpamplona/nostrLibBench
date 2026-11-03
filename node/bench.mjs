@@ -10,7 +10,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { CLIENTS, RT, pkgMeta, runtimeInfo } from './clients.mjs';
@@ -184,7 +184,7 @@ async function oneRun(C, ctx, url, w, special, opts) {
   try {
     await withTimeout(Promise.resolve(C.teardown?.(inst)), 10000, 'teardown timed out');
   } catch (e) {
-    process.stderr.write(`    teardown: ${e?.message ?? e}\n`);
+    process.stderr.write(`    ! teardown: ${e?.message ?? e}\n`);
   }
 
   if (res.how === 'error') throw new Error(`error during the run: ${res.error?.message ?? res.error}`);
@@ -276,7 +276,9 @@ async function runChild(opts, workloads) {
     const row = baseRow(C, meta, w);
     rows.push(row);
     if (loadError) {
+      row.errors = 1;
       row.error = loadError;
+      process.stderr.write(`  ${RT} ${C.id.padEnd(28)} ${w.name.padEnd(9)} ERROR ${loadError.split('\n')[0]}\n`);
       continue;
     }
     const url = `${opts.relay}/${w.name}`;
@@ -317,7 +319,7 @@ async function runChild(opts, workloads) {
     } catch (e) {
       row.errors++;
       row.error = e?.message ?? String(e);
-      process.stderr.write(`    ${row.error}\n`);
+      process.stderr.write(`    ! ${row.error}\n`);
     }
     if (ref) {
       row.accepted = ref.accepted;
@@ -371,6 +373,46 @@ function childCommand(args) {
   return [process.execPath, [...process.execArgv, SCRIPT, ...args]];
 }
 
+// Runs a child, streaming its stderr: the harness's own lines pass through; library output
+// (some libraries log a warning, with a stack, for every invalid event) is shown for the
+// first 12 lines, then only counted.
+const HARNESS_LINE = /^(    (warmup|run |! )|  (node|bun|deno) )/;
+function runProcess(cmd, args, capMs) {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, args, { cwd: HERE, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let buf = '';
+    let noise = 0;
+    const line = (l) => {
+      if (HARNESS_LINE.test(l)) process.stderr.write(l + '\n');
+      else if (++noise <= 12) process.stderr.write(`    | ${l}\n`);
+    };
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (d) => (stdout += d));
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (d) => {
+      buf += d;
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        line(buf.slice(0, i));
+        buf = buf.slice(i + 1);
+      }
+    });
+    let error = null;
+    const cap = setTimeout(() => {
+      error = new Error(`killed after ${capMs} ms`);
+      child.kill('SIGKILL');
+    }, capMs);
+    child.on('error', (e) => (error = e));
+    child.on('close', (status, signal) => {
+      clearTimeout(cap);
+      if (buf) line(buf);
+      if (noise > 12) process.stderr.write(`    | (${noise - 12} more lines of library output not shown)\n`);
+      resolve({ stdout, status, signal, error });
+    });
+  });
+}
+
 function hostInfo() {
   let cpu = os.cpus()[0]?.model ?? 'unknown';
   try {
@@ -416,14 +458,7 @@ async function main() {
   for (const c of clients) {
     process.stderr.write(`[${RT}] ${c.id}\n`);
     const [cmd, args] = childCommand([...passArgs, '--child', c.id]);
-    const r = spawnSync(cmd, args, {
-      cwd: HERE,
-      stdio: ['ignore', 'pipe', 'inherit'],
-      maxBuffer: 64 << 20,
-      encoding: 'utf8',
-      timeout: childCap,
-      killSignal: 'SIGKILL',
-    });
+    const r = await runProcess(cmd, args, childCap);
     const line = (r.stdout ?? '').split('\n').find((l) => l.startsWith('@@ROWS '));
     if (line) {
       results.push(...JSON.parse(line.slice(7)));

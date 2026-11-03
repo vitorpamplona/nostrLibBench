@@ -4,7 +4,7 @@ using NostrNet.Relay;
 
 public static class Program
 {
-    public static Task<int> Main(string[] args) => ChildMain.Main(args, [new NostrNetPool(), new NostrNetRelayClient()]);
+    public static Task<int> Main(string[] args) => ChildMain.Run(args, [new NostrNetPool(), new NostrNetRelayClient()]);
 }
 
 public abstract class NostrNetBase : BenchClient

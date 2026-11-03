@@ -26,6 +26,8 @@ import java.time.Duration
  */
 class NostrSdkClient(
     private val stream: Boolean,
+    /** ClientBuilder.notificationChannelSize; null keeps the default (4096). */
+    private val channelSize: Long? = null,
 ) : BenchClient {
     private lateinit var client: Client
     private lateinit var relay: RelayUrl
@@ -35,7 +37,10 @@ class NostrSdkClient(
     @Volatile private var sink: EventSink? = null
 
     override fun setup(url: String) {
-        client = ClientBuilder().build()
+        client =
+            ClientBuilder()
+                .let { b -> channelSize?.let { b.notificationChannelSize(it.toULong()) } ?: b }
+                .build()
         relay = RelayUrl.parse(url)
         runBlocking {
             client.addRelay(relay)

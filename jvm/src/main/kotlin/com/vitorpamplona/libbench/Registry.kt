@@ -59,8 +59,25 @@ val CLIENTS: List<ClientSpec> =
                 "All client work runs in Rust: id (verify_id) + signature checked by the relay task before the event is " +
                     "saved to the default in-memory events tracker and announced; a per-client LRU caches verified " +
                     "(id, sig) pairs, so every run builds a new Client. Drops expired (NIP-40) events by design. The " +
-                    "notification channel also carries every relay message, so two notifications cross JNA per event.",
+                    "notification channel also carries every relay message, so two notifications cross JNA per event. " +
+                    "ClientBuilder.notificationChannelSize(65536) (default 4096): the broadcast channel drops what a " +
+                    "slower reader has not taken yet, and the JNA reader falls behind (see nostr-sdk-subscribe-defaultchannel).",
             variant = false,
+            create = { NostrSdkClient(stream = false, channelSize = 65_536) },
+        ),
+        ClientSpec(
+            id = "nostr-sdk-subscribe-defaultchannel",
+            library = "rust-nostr nostr-sdk (Kotlin/JVM bindings)",
+            version = "${V["org.nostrdevkit:nostr-sdk-jvm"]} (nostr-sdk 0.45.2)",
+            license = "MIT",
+            api = "Client.subscribe(ReqTarget.single) + Client.notifications().next(), default ClientBuilder",
+            websocket = "tokio-tungstenite 0.28 (Rust, via async-wsocket 0.17)",
+            crypto = "libsecp256k1 (C, via rust secp256k1 0.30 / secp256k1-sys 0.10)",
+            verify = "library",
+            notes =
+                "nostr-sdk-subscribe with the default notification channel (4096): when the Kotlin reader falls " +
+                    "behind, the tokio broadcast channel drops notifications (events and the EOSE alike).",
+            variant = true,
             create = { NostrSdkClient(stream = false) },
         ),
         ClientSpec(
@@ -72,7 +89,10 @@ val CLIENTS: List<ClientSpec> =
             websocket = "tokio-tungstenite 0.28 (Rust, via async-wsocket 0.17)",
             crypto = "libsecp256k1 (C, via rust secp256k1 0.30 / secp256k1-sys 0.10)",
             verify = "library",
-            notes = "The short-lived stream API (default exit policy ExitOnEOSE); EOSE = the stream's end. Otherwise as nostr-sdk-subscribe.",
+            notes =
+                "The short-lived stream API (default exit policy ExitOnEOSE); EOSE = the stream's end. The stream is " +
+                    "fed from the relay's own notification broadcast (2048, not settable from the bindings) through a " +
+                    "512-slot channel, so a reader slower than the relay loses events. Otherwise as nostr-sdk-subscribe.",
             variant = true,
             create = { NostrSdkClient(stream = true) },
         ),

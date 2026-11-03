@@ -241,7 +241,7 @@ public static class ChildMain
         ["variant"] = c.Variant,
     };
 
-    public static async Task<int> Main(string[] args, IReadOnlyList<BenchClient> clients)
+    public static async Task<int> Run(string[] args, IReadOnlyList<BenchClient> clients)
     {
         if (args.Contains("--list-json"))
         {

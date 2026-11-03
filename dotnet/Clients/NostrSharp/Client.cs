@@ -8,7 +8,7 @@ using NostrSharp.Relay.Models.Messagges;
 
 public static class Program
 {
-    public static Task<int> Main(string[] args) => ChildMain.Main(args, [new NostrSharpClient()]);
+    public static Task<int> Main(string[] args) => ChildMain.Run(args, [new NostrSharpClient()]);
 }
 
 public sealed class NostrSharpClient : BenchClient
@@ -26,7 +26,7 @@ public sealed class NostrSharpClient : BenchClient
         "it recomputes with Newtonsoft.Json) and, because IsVerified never compares that id with the event's Id, also the " +
         "library's own id function (the private NEvent.GetId, called by reflection) against Id. " +
         "NSRelay queues frames and its dispatch loop sleeps 200 ms whenever the queue is empty; it splits every frame on ',' " +
-        "to find the message type. TryConnect also fetches NIP-11 over HTTP (untimed).";
+        "to find the message type. Its id function re-serializes the event with an empty tag list (`[0,pubkey,created_at,kind,[],content]` for an event that has tags), so only tagless events pass. SendFilter replaces the REQ's subscription id with the relay object's own SubscriptionId (a Guid). TryConnect also fetches NIP-11 over HTTP (untimed).";
 
     static readonly MethodInfo GetId = typeof(NEvent).GetMethod("GetId", BindingFlags.NonPublic | BindingFlags.Instance)
         ?? throw new MissingMethodException("NEvent.GetId");
@@ -40,14 +40,14 @@ public sealed class NostrSharpClient : BenchClient
         _relay = new NSRelay(new NSRelayConfig(url));
         _relay.OnEvent += (_, resp) =>
         {
-            if (resp.SubscriptionId != _sub) return;
+            if (resp.SubscriptionId != _relay!.SubscriptionId.ToString()) return;
             var ev = resp.Event;
             bool ok;
             try { ok = ev?.Id != null && ev.IsVerified() && (string?)GetId.Invoke(ev, null) == ev.Id; }
             catch { ok = false; }
             if (ok) ctx.Event(ev!.Id!); else ctx.Reject();
         };
-        _relay.OnEose += (_, resp) => { if (resp.SubscriptionId == _sub) ctx.Eose(); };
+        _relay.OnEose += (_, resp) => { if (resp.SubscriptionId == _relay!.SubscriptionId.ToString()) ctx.Eose(); };
         if (!await _relay.TryConnect()) throw new Exception("NSRelay.TryConnect failed");
     }
 

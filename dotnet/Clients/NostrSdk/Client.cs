@@ -4,7 +4,7 @@ using Nostr.Sdk;
 
 public static class Program
 {
-    public static Task<int> Main(string[] args) => ChildMain.Main(args, [new SdkStream()]);
+    public static Task<int> Main(string[] args) => ChildMain.Run(args, [new SdkStream()]);
 }
 
 public sealed class SdkStream : BenchClient

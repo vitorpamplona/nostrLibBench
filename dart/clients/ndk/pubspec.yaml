@@ -1,0 +1,9 @@
+name: bench_ndk
+description: nostrLibBench Dart harness, client for package:ndk (not published).
+publish_to: none
+environment:
+  sdk: ^3.9.0
+dependencies:
+  bench_common:
+    path: ../../common
+  ndk: 0.10.1

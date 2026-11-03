@@ -33,6 +33,9 @@ pub struct Sink {
     /// The client calls [`Sink::batch_done`] after each batch of events, so the CPU snapshot
     /// for an event after EOSE is taken once per batch instead of once per event.
     pub batching: bool,
+    /// Diagnostics: with `LIBBENCH_DUMP_IDS=<file>` set, the accepted ids of the run are
+    /// written there (hex, one per line) by [`Sink::dump`].
+    dump: Option<Vec<[u8; 32]>>,
 }
 
 impl Sink {
@@ -51,6 +54,7 @@ impl Sink {
             last_after_eose: None,
             last_event: Instant::now(),
             batching: false,
+            dump: std::env::var_os("LIBBENCH_DUMP_IDS").map(|_| Vec::new()),
         }
     }
 
@@ -65,6 +69,9 @@ impl Sink {
     #[inline]
     pub fn event(&mut self, id: &[u8; 32]) {
         self.accepted += 1;
+        if let Some(d) = self.dump.as_mut() {
+            d.push(*id);
+        }
         for (x, b) in self.xor.iter_mut().zip(id) {
             *x ^= b;
         }
@@ -101,6 +108,13 @@ impl Sink {
                 true
             }
             None => false,
+        }
+    }
+
+    pub fn dump(&self) {
+        if let (Some(d), Some(path)) = (&self.dump, std::env::var_os("LIBBENCH_DUMP_IDS")) {
+            let s: String = d.iter().map(|id| crate::hex(id) + "\n").collect();
+            let _ = std::fs::write(path, s);
         }
     }
 

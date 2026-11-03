@@ -95,6 +95,7 @@ object Child {
                     client.subscribe(w.events, sink)
                 }
             val outcome = sink.await(idleMs = 1000, deadlineNanos = started + args.timeoutMs * 1_000_000L)
+            sink.close()
             if (outcome == EventSink.Outcome.TIMEOUT) {
                 throw RunFailure(
                     "timeout: no EOSE within ${args.timeoutMs} ms (${sink.accepted} events accepted)",
@@ -108,6 +109,7 @@ object Child {
                 throw RunFailure("subscribe threw ${c.javaClass.name}: ${c.message?.take(300)}", fatal = false)
             }
         } finally {
+            sink.close()
             try {
                 onWorker(30_000, "teardown") { client.teardown() }
             } catch (e: RunFailure) {
@@ -119,6 +121,7 @@ object Child {
             val dir = File(System.getenv("LIBBENCH_DUMP_IDS")).apply { mkdirs() }
             File(dir, "${spec.id}-${w.name}-${System.nanoTime()}.ids").writeText(ids.joinToString("\n"))
         }
+        if (sink.late > 0) System.err.println("   ${sink.late} events were delivered after the run had ended (not counted)")
         if (sink.badIds > 0) System.err.println("   ${sink.badIds} delivered events had an id that is not 64 hex chars (not counted)")
         val end = sink.endNanos()
         return RunResult(

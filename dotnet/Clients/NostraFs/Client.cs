@@ -6,7 +6,7 @@ using NClient = Nostra.Client;
 
 public static class Program
 {
-    public static Task<int> Main(string[] args) => ChildMain.Main(args, [new NostraClient()]);
+    public static Task<int> Main(string[] args) => ChildMain.Run(args, [new NostraClient()]);
 }
 
 public sealed class NostraClient : BenchClient

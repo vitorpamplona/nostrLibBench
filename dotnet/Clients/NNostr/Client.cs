@@ -5,7 +5,7 @@ using NNostr.Client;
 public static class Program
 {
     public static Task<int> Main(string[] args) =>
-        ChildMain.Main(args, [new NNostrEvents(), new NNostrAsyncEnumerable()]);
+        ChildMain.Run(args, [new NNostrEvents(), new NNostrAsyncEnumerable()]);
 }
 
 public abstract class NNostrBase : BenchClient

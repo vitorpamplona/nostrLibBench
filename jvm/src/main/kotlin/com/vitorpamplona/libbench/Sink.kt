@@ -51,9 +51,20 @@ class EventSink(
     /** Every accepted id, in delivery order, when LIBBENCH_DUMP_IDS names a directory (debugging). */
     val dumped: MutableList<String>? = if (System.getenv("LIBBENCH_DUMP_IDS") != null) ArrayList() else null
 
+    /** Set when the run ended: later deliveries are counted here, not in the run. */
+    var late = 0
+        private set
+    private var closed = false
+
+    fun close() = synchronized(lock) { closed = true }
+
     fun event(idHex: String) {
         val now = System.nanoTime()
         synchronized(lock) {
+            if (closed) {
+                late++
+                return
+            }
             if (!xorHex(idHex, xor)) {
                 badIds++
                 return
@@ -80,7 +91,7 @@ class EventSink(
         val now = System.nanoTime()
         val cpu = Cpu.nanos()
         synchronized(lock) {
-            if (eoseSeen) return
+            if (eoseSeen || closed) return
             eoseSeen = true
             eoseNanos = now
             eoseCpu = cpu

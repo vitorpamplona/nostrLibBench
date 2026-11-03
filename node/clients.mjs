@@ -307,6 +307,7 @@ const welshman = {
   },
   verify: 'library',
   notes:
+    'Library defaults, including the Socket receive throttle: inbound messages reach subscribers through a TaskQueue of recvBatchSize 20 per recvBatchDelay 100 ms, i.e. at most ~200 messages/s per socket, so this row is bound by the timer, not the CPU (see welshman-nodelay). ' +
     '@welshman/util verifyEvent: nostr-tools/pure until nostr-wasm finishes loading (it imports it dynamically at module load), then nostr-tools/wasm (id + signature); load() waits for the switch before any run. Every event also goes through the request Tracker (dedup), matchFilters, and is kept in the request\'s result array (request() resolves with the deduplicated list). A new Pool per run (context.pool), socket opened in setup.',
   async load() {
     const [net, util] = await Promise.all([import('@welshman/net'), import('@welshman/util')]);
@@ -339,6 +340,20 @@ const welshman = {
     inst.ac?.abort();
     inst.pool.clear?.();
     for (const s of inst.pool._data?.values?.() ?? []) s.cleanup?.() ?? s.close?.();
+  },
+};
+
+const welshmanNoDelay = {
+  ...welshman,
+  id: 'welshman-nodelay',
+  variant: true,
+  api: 'Socket.recvBatchDelay = 0, then request({relays: [url], filters: [filter], context: {pool}, onEvent, onEose})',
+  notes:
+    'Diagnostic: welshman with its receive throttle off. By default every Socket hands inbound messages to subscribers through a TaskQueue of recvBatchSize 20 per recvBatchDelay 100 ms (a setTimeout between batches), so a socket delivers at most ~200 messages per second whatever the CPU; here the public static Socket.recvBatchDelay is set to 0 (the queue then drains on a microtask), which shows the cost of the parsing, verification and bookkeeping alone. Otherwise as the welshman row.',
+  async load(opts) {
+    const m = await welshman.load(opts);
+    m.net.Socket.recvBatchDelay = 0;
+    return m;
   },
 };
 
@@ -506,6 +521,16 @@ const snortCommon = {
   },
 };
 
+// @snort/system's dist has extensionless relative ESM imports: Bun resolves them, Node needs
+// a bundler-like resolve hook, Deno has no such hook (its row reports the load error).
+async function importSnort() {
+  if (RT === 'node') {
+    const { register } = await import('node:module');
+    register('./snort-resolve.mjs', import.meta.url);
+  }
+  return import('@snort/system');
+}
+
 const SNORT_NOTES =
   'NostrSystem does not verify by default (checkSigs: false); the harness turns checkSigs on. The connection pool batches the events of one microtask turn into one optimizer.batchVerify call; verification checks the signature against an id it recomputes (EventExt.createId) but never compares it to event.id, so the harness also calls EventExt.createId(event) and drops events whose id differs (a second serialization + sha256 per event). The Query feeds a NoteCollection; "event" handlers receive arrays of new events. Outbox model and follow graph off. A new NostrSystem per run.';
 
@@ -517,7 +542,7 @@ const snort = {
   },
   notes: SNORT_NOTES,
   async load() {
-    return { sys: await import('@snort/system') };
+    return { sys: await importSnort() };
   },
 };
 
@@ -532,7 +557,7 @@ const snortWasm = {
     SNORT_NOTES +
     ' Optimizer: the WebAssembly one the snort app wires in (@snort/system-wasm: expand_filter/get_diff/flat_merge/compress, schnorr_verify_event, schnorr_verify_batch, which recompute the id in Rust and check the signature, again without comparing to event.id).',
   async load() {
-    const sys = await import('@snort/system');
+    const sys = await importSnort();
     const w = await import('@snort/system-wasm/pkg/system_wasm.js');
     const bytes = readFileSync(path.join(HERE, 'node_modules/@snort/system-wasm/pkg/system_wasm_bg.wasm'));
     w.initSync({ module: bytes });
@@ -560,8 +585,10 @@ const nostrFetch = {
     return `@noble/curves ${short(nestedVer('@nostr-fetch/kernel', '@noble/curves'))} (pure JS) via @nostr-fetch/kernel verifyEventSig`;
   },
   verify: 'library',
+  variant: true,
   notes:
-    'A fetcher of past events: its filter excludes limit/since/until, it pages with limitPerReq (set to the workload size, so one REQ covers it). Default verifier (id compared to the recomputed sha256, then schnorr.verify) and filter matching on. There is no EOSE callback: the iterator ending (after the relay\'s EOSE closes the last page) is the EOSE. The default relay pool connects lazily inside the iterator, so the connect is in the timed run. abortSubBeforeEoseTimeoutMs raised to --timeout-ms (default 10 s). A new NostrFetcher per run.',
+    'A fetcher of past events, the only JS library here with no live subscription: allEventsIterator pages backwards in time, each page a REQ with until = the oldest created_at seen so far and limit = min(limitPerReq, 5000), until a page brings no new event. The relay ignores filters, so the second page receives the whole workload again (all duplicates, each one still verified before the dedup) and the iterator ends after that second EOSE: this row measures two full streams, hence variant (diagnostic, not ranked); against a relay that honors until the second page would be nearly empty. ' +
+    'Default verifier (@nostr-fetch/kernel verifyEventSig: id compared to the recomputed sha256, then schnorr.verify), awaited once per event, and filter matching on; every event also re-arms a setTimeout (abortSubBeforeEoseTimeoutMs, raised to --timeout-ms from 10 s). There is no EOSE callback: the iterator ending is the EOSE. The default relay pool connects lazily inside the iterator, so the connect is in the timed run. A new NostrFetcher per run.',
   async load() {
     return import('nostr-fetch');
   },
@@ -687,6 +714,7 @@ export const CLIENTS = [
   nostrifyRelay,
   nostrifyPool,
   welshman,
+  welshmanNoDelay,
   applesauce,
   applesauceStore,
   rxNostr,

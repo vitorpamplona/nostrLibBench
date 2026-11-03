@@ -33,7 +33,7 @@ const (
 	btcecCrypto  = "btcec/v2 {github.com/btcsuite/btcd/btcec/v2} on dcrd secp256k1/v4 {github.com/decred/dcrd/dcrec/secp256k1/v4} (pure Go)"
 	coderWS      = "coder/websocket {github.com/coder/websocket}"
 	gorillaWS    = "gorilla/websocket {github.com/gorilla/websocket}"
-	secpVendored = "libsecp256k1 (C sources vendored in the module, compiled in with cgo; build tag libsecp256k1)"
+	secpVendored = "libsecp256k1 (C, 0.5-era sources vendored in the module, compiled in with cgo; build tag libsecp256k1)"
 
 	gonostrIDNote = "Verification is the library's default (Relay.AssumeValid=false): CheckSignature hashes the event body and verifies the signature, but never compares that hash with the id field, so the harness also calls the library's Event.CheckID() on every delivered event. JSON: gjson envelope split + easyjson event decoder"
 	fiatjafNote   = "Verification is the library's default (RelayOptions.AssumeValid=false): VerifySignature recomputes the id into a copy of the event and verifies the signature against it, never comparing it with the id field, so the harness also calls the library's Event.CheckID() on every delivered event. SubscriptionOptions.MaxWaitForEOSE is disabled (math.MaxInt64): its 7 s default dispatches a fake EOSE and drops the stored events still queued. InfoLogger (stderr by default, one line per rejected event) is sent to io.Discard. JSON: gjson envelope split + easyjson event decoder"

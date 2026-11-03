@@ -8,12 +8,12 @@ using Nostr.Client.Requests;
 #if BLOCKCORE
 public static class Program
 {
-    public static Task<int> Main(string[] args) => ChildMain.Main(args, [new MarfusiosClient()]);
+    public static Task<int> Main(string[] args) => ChildMain.Run(args, [new MarfusiosClient()]);
 }
 #else
 public static class Program
 {
-    public static Task<int> Main(string[] args) => ChildMain.Main(args, [new MarfusiosClient()]);
+    public static Task<int> Main(string[] args) => ChildMain.Run(args, [new MarfusiosClient()]);
 }
 #endif
 

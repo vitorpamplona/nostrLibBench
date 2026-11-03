@@ -15,7 +15,7 @@ static class Program
     // Library projects, in the order their rows are written.
     static readonly string[] Projects =
     [
-        "NostrClient", "NNostr", "NostrNet", "NostrSdk", "Blockcore", "Nostra", "NostrSharp",
+        "NostrClient", "NNostr", "NostrNet", "NostrSdk", "Blockcore", "NostraFs", "NostrSharpBench",
     ];
 
     static async Task<int> Main(string[] args)

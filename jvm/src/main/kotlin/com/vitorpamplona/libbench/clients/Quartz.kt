@@ -35,6 +35,8 @@ class QuartzClient(
     private val parallel: Boolean,
 ) : BenchClient {
     companion object {
+        const val SETTLE_MS = 1000L
+
         /** One OkHttpClient per process, as an app holds one; the same socket factory as amy. */
         private val okHttp: OkHttpClient by lazy {
             OkHttpClient.Builder().socketFactory(TcpNoDelaySocketFactory).build()
@@ -54,6 +56,11 @@ class QuartzClient(
         // Opens the socket ahead of the subscription (the app keeps its relays connected).
         client.keepConnected(relay)
         runBlocking { withTimeout(30_000) { client.connectedRelaysFlow().first { relay in it } } }
+        // connectedRelaysFlow flips before the connection's filter replay and before the
+        // debounced reconnect pass run; a REQ registered inside that window can go out twice
+        // (seen here: the relay got the REQ twice on one socket). An app's relays are connected
+        // long before a feed opens, so let the client settle first.
+        Thread.sleep(SETTLE_MS)
     }
 
     override fun subscribe(
