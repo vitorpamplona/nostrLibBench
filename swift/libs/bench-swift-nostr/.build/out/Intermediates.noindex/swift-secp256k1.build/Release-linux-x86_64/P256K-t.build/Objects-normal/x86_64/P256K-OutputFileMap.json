@@ -1,0 +1,326 @@
+{
+  "" : {
+    "const-values" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/P256K-primary.swiftconstvalues",
+    "dependencies" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/P256K-primary.d",
+    "diagnostics" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/P256K-primary.dia",
+    "emit-module-dependencies" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/P256K-primary-emit-module.d",
+    "emit-module-diagnostics" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/P256K-primary-emit-module.dia",
+    "pch" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/P256K-primary-Bridging-header.pch",
+    "swift-dependencies" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/P256K-primary.swiftdeps"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/ASN1/Basic ASN1 Types/ObjectIdentifier.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ObjectIdentifier.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ObjectIdentifier.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ObjectIdentifier.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/ASN1/SEC1PrivateKey.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/SEC1PrivateKey.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/SEC1PrivateKey.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/SEC1PrivateKey.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/ASN1/SubjectPublicKeyInfo.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/SubjectPublicKeyInfo.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/SubjectPublicKeyInfo.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/SubjectPublicKeyInfo.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Combine.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Combine.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Combine.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Combine.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Context.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Context.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Context.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Context.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/DH.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/DH.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/DH.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/DH.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/ECDH.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDH.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDH.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDH.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/ECDSA/ECDSA+PrivateKey.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDSA+PrivateKey.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDSA+PrivateKey.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDSA+PrivateKey.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/ECDSA/ECDSA+PublicKey.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDSA+PublicKey.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDSA+PublicKey.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDSA+PublicKey.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/ECDSA/ECDSA+Signature.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDSA+Signature.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDSA+Signature.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDSA+Signature.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/ECDSA/ECDSA+Tweak.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDSA+Tweak.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDSA+Tweak.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDSA+Tweak.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/ECDSA/ECDSA+XonlyKey.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDSA+XonlyKey.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDSA+XonlyKey.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDSA+XonlyKey.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/ECDSA/ECDSA.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDSA.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDSA.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDSA.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/EdDSA.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/EdDSA.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/EdDSA.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/EdDSA.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Errors.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Errors.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Errors.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Errors.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/HashDigest.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/HashDigest.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/HashDigest.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/HashDigest.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Keys/P256K.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/P256K.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/P256K.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/P256K.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Keys/PrivateKeyImplementation.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/PrivateKeyImplementation.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/PrivateKeyImplementation.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/PrivateKeyImplementation.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Keys/PublicKeyImplementation.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/PublicKeyImplementation.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/PublicKeyImplementation.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/PublicKeyImplementation.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Keys/XonlyKeyImplementation.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/XonlyKeyImplementation.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/XonlyKeyImplementation.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/XonlyKeyImplementation.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/MuSig/MuSig+Aggregate.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/MuSig+Aggregate.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/MuSig+Aggregate.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/MuSig+Aggregate.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/MuSig/MuSig+Nonces.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/MuSig+Nonces.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/MuSig+Nonces.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/MuSig+Nonces.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/MuSig/MuSig+Signing.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/MuSig+Signing.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/MuSig+Signing.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/MuSig+Signing.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/MuSig/MuSig+Tweak.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/MuSig+Tweak.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/MuSig+Tweak.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/MuSig+Tweak.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/MuSig/MuSig.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/MuSig.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/MuSig.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/MuSig.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Recovery/Recovery+Signature.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Recovery+Signature.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Recovery+Signature.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Recovery+Signature.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Recovery/Recovery.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Recovery.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Recovery.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Recovery.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/SHA256.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/SHA256.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/SHA256.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/SHA256.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/SafeCompare.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/SafeCompare.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/SafeCompare.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/SafeCompare.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Schnorr/Schnorr+Nonces.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Schnorr+Nonces.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Schnorr+Nonces.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Schnorr+Nonces.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Schnorr/Schnorr+PrivateKey.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Schnorr+PrivateKey.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Schnorr+PrivateKey.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Schnorr+PrivateKey.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Schnorr/Schnorr+PublicKey.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Schnorr+PublicKey.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Schnorr+PublicKey.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Schnorr+PublicKey.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Schnorr/Schnorr+Signature.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Schnorr+Signature.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Schnorr+Signature.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Schnorr+Signature.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Schnorr/Schnorr+Tweak.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Schnorr+Tweak.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Schnorr+Tweak.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Schnorr+Tweak.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Schnorr/Schnorr+XonlyKey.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Schnorr+XonlyKey.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Schnorr+XonlyKey.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Schnorr+XonlyKey.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Schnorr/Schnorr.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Schnorr.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Schnorr.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Schnorr.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/UInt256/UInt256+Arithmetic.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/UInt256+Arithmetic.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/UInt256+Arithmetic.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/UInt256+Arithmetic.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/UInt256/UInt256+FixedWidthInteger.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/UInt256+FixedWidthInteger.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/UInt256+FixedWidthInteger.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/UInt256+FixedWidthInteger.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/UInt256/UInt256+Modular.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/UInt256+Modular.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/UInt256+Modular.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/UInt256+Modular.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/UInt256/UInt256+Representation.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/UInt256+Representation.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/UInt256+Representation.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/UInt256+Representation.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/UInt256/UInt256.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/UInt256.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/UInt256.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/UInt256.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Utility.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Utility.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Utility.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Utility.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Zeroization.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Zeroization.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Zeroization.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Zeroization.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/ASN1.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/Basic ASN1 Types/ASN1Any.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1Any.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1Any.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1Any.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/Basic ASN1 Types/ASN1BitString.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1BitString.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1BitString.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1BitString.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/Basic ASN1 Types/ASN1Boolean.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1Boolean.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1Boolean.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1Boolean.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/Basic ASN1 Types/ASN1Identifier.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1Identifier.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1Identifier.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1Identifier.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/Basic ASN1 Types/ASN1Integer.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1Integer.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1Integer.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1Integer.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/Basic ASN1 Types/ASN1Null.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1Null.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1Null.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1Null.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/Basic ASN1 Types/ASN1OctetString.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1OctetString.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1OctetString.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1OctetString.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/Basic ASN1 Types/ASN1Strings.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1Strings.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1Strings.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ASN1Strings.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/Basic ASN1 Types/ArraySliceBigint.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ArraySliceBigint.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ArraySliceBigint.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ArraySliceBigint.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/Basic ASN1 Types/GeneralizedTime.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/GeneralizedTime.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/GeneralizedTime.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/GeneralizedTime.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/ECDSASignature.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDSASignature.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDSASignature.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/ECDSASignature.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/PEMDocument.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/PEMDocument.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/PEMDocument.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/PEMDocument.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/PKCS8PrivateKey.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/PKCS8PrivateKey.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/PKCS8PrivateKey.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/PKCS8PrivateKey.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/CryptoKitErrors.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/CryptoKitErrors.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/CryptoKitErrors.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/CryptoKitErrors.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/Digests/Digest.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Digest.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Digest.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Digest.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/Signatures/Signature.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Signature.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Signature.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/Signature.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/Util/BoringSSL/RNG_boring.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/RNG_boring.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/RNG_boring.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/RNG_boring.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/Util/PrettyBytes.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/PrettyBytes.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/PrettyBytes.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/PrettyBytes.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/Util/SecureBytes.swift" : {
+    "index-unit-output-path" : "/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/SecureBytes.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/SecureBytes.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-secp256k1.build/Release-linux-x86_64/P256K-t.build/Objects-normal/x86_64/SecureBytes.o"
+  }
+}

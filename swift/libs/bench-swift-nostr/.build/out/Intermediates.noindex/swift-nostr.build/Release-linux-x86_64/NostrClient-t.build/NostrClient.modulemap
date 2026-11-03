@@ -1,0 +1,4 @@
+module NostrClient {
+header "NostrClient-Swift.h"
+export *
+}

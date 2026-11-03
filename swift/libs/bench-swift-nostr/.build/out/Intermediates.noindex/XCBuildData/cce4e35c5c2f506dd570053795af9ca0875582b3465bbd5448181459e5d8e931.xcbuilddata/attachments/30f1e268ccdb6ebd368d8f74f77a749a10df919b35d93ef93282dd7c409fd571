@@ -1,0 +1,63 @@
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/ASN1/Basic\ ASN1\ Types/ObjectIdentifier.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/ASN1/SEC1PrivateKey.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/ASN1/SubjectPublicKeyInfo.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Combine.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Context.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/DH.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/ECDH.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/ECDSA/ECDSA+PrivateKey.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/ECDSA/ECDSA+PublicKey.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/ECDSA/ECDSA+Signature.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/ECDSA/ECDSA+Tweak.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/ECDSA/ECDSA+XonlyKey.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/ECDSA/ECDSA.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/EdDSA.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Errors.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/HashDigest.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Keys/P256K.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Keys/PrivateKeyImplementation.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Keys/PublicKeyImplementation.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Keys/XonlyKeyImplementation.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/MuSig/MuSig+Aggregate.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/MuSig/MuSig+Nonces.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/MuSig/MuSig+Signing.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/MuSig/MuSig+Tweak.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/MuSig/MuSig.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Recovery/Recovery+Signature.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Recovery/Recovery.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/SHA256.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/SafeCompare.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Schnorr/Schnorr+Nonces.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Schnorr/Schnorr+PrivateKey.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Schnorr/Schnorr+PublicKey.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Schnorr/Schnorr+Signature.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Schnorr/Schnorr+Tweak.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Schnorr/Schnorr+XonlyKey.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Schnorr/Schnorr.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/UInt256/UInt256+Arithmetic.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/UInt256/UInt256+FixedWidthInteger.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/UInt256/UInt256+Modular.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/UInt256/UInt256+Representation.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/UInt256/UInt256.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Utility.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/Zeroization.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/ASN1.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/Basic\ ASN1\ Types/ASN1Any.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/Basic\ ASN1\ Types/ASN1BitString.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/Basic\ ASN1\ Types/ASN1Boolean.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/Basic\ ASN1\ Types/ASN1Identifier.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/Basic\ ASN1\ Types/ASN1Integer.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/Basic\ ASN1\ Types/ASN1Null.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/Basic\ ASN1\ Types/ASN1OctetString.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/Basic\ ASN1\ Types/ASN1Strings.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/Basic\ ASN1\ Types/ArraySliceBigint.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/Basic\ ASN1\ Types/GeneralizedTime.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/ECDSASignature.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/PEMDocument.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/ASN1/PKCS8PrivateKey.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/CryptoKitErrors.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/Digests/Digest.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/Signatures/Signature.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/Util/BoringSSL/RNG_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/Util/PrettyBytes.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/P256K/swift-crypto/Sources/Crypto/Util/SecureBytes.swift

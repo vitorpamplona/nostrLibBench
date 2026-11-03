@@ -1,0 +1,95 @@
+{
+  "object" : {
+    "artifacts" : [
+
+    ],
+    "dependencies" : [
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "benchcore",
+          "kind" : "fileSystem",
+          "location" : "/home/user/nostrLibBench/swift/BenchCore",
+          "name" : "BenchCore"
+        },
+        "state" : {
+          "name" : "fileSystem",
+          "path" : "/home/user/nostrLibBench/swift/BenchCore"
+        },
+        "subpath" : "benchcore"
+      },
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "swift-asn1",
+          "kind" : "remoteSourceControl",
+          "location" : "https://github.com/apple/swift-asn1.git",
+          "name" : "swift-asn1"
+        },
+        "state" : {
+          "checkoutState" : {
+            "revision" : "917b472dbe53ba699cbb0495f9a95a084bc6364d",
+            "version" : "1.7.4"
+          },
+          "name" : "sourceControlCheckout"
+        },
+        "subpath" : "swift-asn1"
+      },
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "swift-crypto",
+          "kind" : "remoteSourceControl",
+          "location" : "https://github.com/apple/swift-crypto.git",
+          "name" : "swift-crypto"
+        },
+        "state" : {
+          "checkoutState" : {
+            "revision" : "f8fad2f95ad67b45f6340c0960e2396094d67e07",
+            "version" : "5.1.1"
+          },
+          "name" : "sourceControlCheckout"
+        },
+        "subpath" : "swift-crypto"
+      },
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "swift-nostr",
+          "kind" : "remoteSourceControl",
+          "location" : "https://github.com/yysskk/swift-nostr",
+          "name" : "swift-nostr"
+        },
+        "state" : {
+          "checkoutState" : {
+            "revision" : "6ad6154128960803d81aaad09e722f0dda3aac07",
+            "version" : "0.9.0"
+          },
+          "name" : "sourceControlCheckout"
+        },
+        "subpath" : "swift-nostr"
+      },
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "swift-secp256k1",
+          "kind" : "remoteSourceControl",
+          "location" : "https://github.com/21-DOT-DEV/swift-secp256k1",
+          "name" : "swift-secp256k1"
+        },
+        "state" : {
+          "checkoutState" : {
+            "revision" : "bcd6dd8e615ce243eab7097f213c8c4b39305a2e",
+            "version" : "0.24.0"
+          },
+          "name" : "sourceControlCheckout"
+        },
+        "subpath" : "swift-secp256k1"
+      }
+    ],
+    "prebuilts" : [
+
+    ]
+  },
+  "version" : 7
+}

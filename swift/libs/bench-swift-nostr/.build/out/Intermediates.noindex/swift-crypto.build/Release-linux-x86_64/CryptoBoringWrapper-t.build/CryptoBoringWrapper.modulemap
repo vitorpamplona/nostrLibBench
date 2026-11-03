@@ -1,0 +1,4 @@
+module CryptoBoringWrapper {
+header "CryptoBoringWrapper-Swift.h"
+export *
+}

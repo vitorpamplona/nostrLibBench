@@ -1,0 +1,98 @@
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/AEADs/AES/GCM/AES-GCM.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/AEADs/AES/GCM/BoringSSL/AES-GCM_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/AEADs/ChachaPoly/BoringSSL/ChaChaPoly_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/AEADs/ChachaPoly/ChaChaPoly.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/AEADs/Cipher.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/AEADs/Nonces.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/ASN1/ASN1.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/ASN1/Basic\ ASN1\ Types/ASN1Any.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/ASN1/Basic\ ASN1\ Types/ASN1BitString.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/ASN1/Basic\ ASN1\ Types/ASN1Boolean.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/ASN1/Basic\ ASN1\ Types/ASN1Identifier.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/ASN1/Basic\ ASN1\ Types/ASN1Integer.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/ASN1/Basic\ ASN1\ Types/ASN1Null.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/ASN1/Basic\ ASN1\ Types/ASN1OctetString.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/ASN1/Basic\ ASN1\ Types/ASN1Strings.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/ASN1/Basic\ ASN1\ Types/ArraySliceBigint.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/ASN1/Basic\ ASN1\ Types/GeneralizedTime.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/ASN1/Basic\ ASN1\ Types/ObjectIdentifier.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/ASN1/ECDSASignature.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/ASN1/PEMDocument.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/ASN1/PKCS8PrivateKey.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/ASN1/SEC1PrivateKey.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/ASN1/SubjectPublicKeyInfo.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/CryptoError_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/CryptoKitErrors.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Digests/BoringSSL/Digest_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Digests/Digest.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Digests/Digests.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Digests/HashFunctions.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Digests/HashFunctions_SHA2.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Digests/HashFunctions_SHA3.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Digests/XKCP/Digest_xkcp.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/HPKE/Ciphersuite/HPKE-AEAD.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/HPKE/Ciphersuite/HPKE-Ciphersuite.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/HPKE/Ciphersuite/HPKE-KDF.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/HPKE/Ciphersuite/HPKE-KexKeyDerivation.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/HPKE/Ciphersuite/HPKE-LabeledExtract.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/HPKE/Ciphersuite/HPKE-Utils.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/HPKE/Ciphersuite/KEM/Conformances/DHKEM.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/HPKE/Ciphersuite/KEM/Conformances/HPKE-KEM-Curve25519.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/HPKE/Ciphersuite/KEM/Conformances/HPKE-NIST-EC-KEMs.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/HPKE/Ciphersuite/KEM/HPKE-KEM.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/HPKE/HPKE-Errors.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/HPKE/HPKE.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/HPKE/Key\ Schedule/HPKE-Context.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/HPKE/Key\ Schedule/HPKE-KeySchedule.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/HPKE/Modes/HPKE-Modes.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Insecure/Insecure.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Insecure/Insecure_HashFunctions.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/KEM/BoringSSL/MLKEM_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/KEM/BoringSSL/MLKEM_wrapper.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/KEM/BoringSSL/XWing_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/KEM/KEM-Errors.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/KEM/KEM.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/KEM/MLKEM.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/KEM/XWing.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Key\ Agreement/BoringSSL/ECDH_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Key\ Agreement/DH.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Key\ Agreement/ECDH.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Key\ Derivation/ANSIx963.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Key\ Derivation/HKDF.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Key\ Wrapping/AESWrap.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Key\ Wrapping/BoringSSL/AESWrap_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Keys/EC/BoringSSL/Ed25519_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Keys/EC/BoringSSL/NISTCurvesKeys_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Keys/EC/BoringSSL/X25519Keys_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Keys/EC/Curve25519.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Keys/EC/Ed25519Keys.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Keys/EC/NISTCurvesKeys.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Keys/EC/X25519Keys.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Keys/Symmetric/SymmetricKeys.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Message\ Authentication\ Codes/HMAC/HMAC.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Message\ Authentication\ Codes/MACFunctions.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Message\ Authentication\ Codes/MessageAuthenticationCode.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/PRF/AES.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Signatures/BoringSSL/ECDSASignature_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Signatures/BoringSSL/ECDSA_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Signatures/BoringSSL/EdDSA_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Signatures/BoringSSL/MLDSA_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Signatures/BoringSSL/MLDSA_wrapper.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Signatures/ECDSA.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Signatures/Ed25519.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Signatures/MLDSA.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Signatures/Signature.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Util/ArraySpanHelpers.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Util/Backports.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Util/BoringSSL/CryptoKitErrors_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Util/BoringSSL/InlineArray+withBytes_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Util/BoringSSL/Optional+withUnsafeBytes_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Util/BoringSSL/RNG_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Util/BoringSSL/SafeCompare_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Util/BoringSSL/Zeroization_boring.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Util/BoringSSL/_CryptoModuleAnchor.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Util/Data+ArraySpan.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Util/PrettyBytes.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Util/SafeCompare.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Util/SecureBytes.swift
+/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/Crypto/Util/Zeroization.swift

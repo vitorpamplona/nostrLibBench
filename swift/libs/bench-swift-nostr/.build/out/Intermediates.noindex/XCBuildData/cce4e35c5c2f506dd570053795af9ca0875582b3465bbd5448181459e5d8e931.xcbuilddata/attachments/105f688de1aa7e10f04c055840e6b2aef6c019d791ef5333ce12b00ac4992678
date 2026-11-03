@@ -1,0 +1,4 @@
+module _CryptoExtras {
+header "_CryptoExtras-Swift.h"
+export *
+}

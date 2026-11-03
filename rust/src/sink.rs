@@ -36,6 +36,9 @@ pub struct Sink {
     /// Diagnostics: with `LIBBENCH_DUMP_IDS=<file>` set, the accepted ids of the run are
     /// written there (hex, one per line) by [`Sink::dump`].
     dump: Option<Vec<[u8; 32]>>,
+    /// Diagnostics: `LIBBENCH_CONSUMER_DELAY_US=<n>` makes the app spin n µs per delivered
+    /// event, a slow consumer, to probe a library's back-pressure. Off (0) in every real run.
+    delay: Duration,
 }
 
 impl Sink {
@@ -55,6 +58,9 @@ impl Sink {
             last_event: Instant::now(),
             batching: false,
             dump: std::env::var_os("LIBBENCH_DUMP_IDS").map(|_| Vec::new()),
+            delay: Duration::from_micros(
+                std::env::var("LIBBENCH_CONSUMER_DELAY_US").ok().and_then(|v| v.parse().ok()).unwrap_or(0),
+            ),
         }
     }
 
@@ -69,6 +75,12 @@ impl Sink {
     #[inline]
     pub fn event(&mut self, id: &[u8; 32]) {
         self.accepted += 1;
+        if !self.delay.is_zero() {
+            let t = Instant::now();
+            while t.elapsed() < self.delay {
+                std::hint::spin_loop();
+            }
+        }
         if let Some(d) = self.dump.as_mut() {
             d.push(*id);
         }

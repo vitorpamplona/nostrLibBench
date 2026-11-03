@@ -1,0 +1,101 @@
+{
+  "" : {
+    "const-values" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/SwiftASN1-primary.swiftconstvalues",
+    "dependencies" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/SwiftASN1-primary.d",
+    "diagnostics" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/SwiftASN1-primary.dia",
+    "emit-module-dependencies" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/SwiftASN1-primary-emit-module.d",
+    "emit-module-diagnostics" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/SwiftASN1-primary-emit-module.dia",
+    "pch" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/SwiftASN1-primary-Bridging-header.pch",
+    "swift-dependencies" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/SwiftASN1-primary.swiftdeps"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-asn1/Sources/SwiftASN1/ASN1.swift" : {
+    "index-unit-output-path" : "/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-asn1/Sources/SwiftASN1/BER.swift" : {
+    "index-unit-output-path" : "/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/BER.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/BER.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/BER.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-asn1/Sources/SwiftASN1/Basic ASN1 Types/ASN1Any.swift" : {
+    "index-unit-output-path" : "/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1Any.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1Any.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1Any.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-asn1/Sources/SwiftASN1/Basic ASN1 Types/ASN1BitString.swift" : {
+    "index-unit-output-path" : "/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1BitString.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1BitString.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1BitString.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-asn1/Sources/SwiftASN1/Basic ASN1 Types/ASN1Boolean.swift" : {
+    "index-unit-output-path" : "/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1Boolean.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1Boolean.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1Boolean.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-asn1/Sources/SwiftASN1/Basic ASN1 Types/ASN1Identifier.swift" : {
+    "index-unit-output-path" : "/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1Identifier.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1Identifier.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1Identifier.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-asn1/Sources/SwiftASN1/Basic ASN1 Types/ASN1Integer.swift" : {
+    "index-unit-output-path" : "/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1Integer.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1Integer.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1Integer.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-asn1/Sources/SwiftASN1/Basic ASN1 Types/ASN1Null.swift" : {
+    "index-unit-output-path" : "/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1Null.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1Null.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1Null.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-asn1/Sources/SwiftASN1/Basic ASN1 Types/ASN1OctetString.swift" : {
+    "index-unit-output-path" : "/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1OctetString.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1OctetString.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1OctetString.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-asn1/Sources/SwiftASN1/Basic ASN1 Types/ASN1Strings.swift" : {
+    "index-unit-output-path" : "/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1Strings.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1Strings.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ASN1Strings.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-asn1/Sources/SwiftASN1/Basic ASN1 Types/ArraySliceBigint.swift" : {
+    "index-unit-output-path" : "/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ArraySliceBigint.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ArraySliceBigint.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ArraySliceBigint.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-asn1/Sources/SwiftASN1/Basic ASN1 Types/GeneralizedTime.swift" : {
+    "index-unit-output-path" : "/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/GeneralizedTime.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/GeneralizedTime.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/GeneralizedTime.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-asn1/Sources/SwiftASN1/Basic ASN1 Types/ObjectIdentifier.swift" : {
+    "index-unit-output-path" : "/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ObjectIdentifier.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ObjectIdentifier.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/ObjectIdentifier.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-asn1/Sources/SwiftASN1/Basic ASN1 Types/PEMDocument.swift" : {
+    "index-unit-output-path" : "/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/PEMDocument.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/PEMDocument.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/PEMDocument.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-asn1/Sources/SwiftASN1/Basic ASN1 Types/TimeUtilities.swift" : {
+    "index-unit-output-path" : "/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/TimeUtilities.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/TimeUtilities.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/TimeUtilities.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-asn1/Sources/SwiftASN1/Basic ASN1 Types/UTCTime.swift" : {
+    "index-unit-output-path" : "/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/UTCTime.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/UTCTime.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/UTCTime.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-asn1/Sources/SwiftASN1/DER.swift" : {
+    "index-unit-output-path" : "/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/DER.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/DER.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/DER.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-asn1/Sources/SwiftASN1/Errors.swift" : {
+    "index-unit-output-path" : "/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/Errors.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/Errors.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-asn1.build/Release-linux-x86_64/SwiftASN1-t.build/Objects-normal/x86_64/Errors.o"
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "" : {
+    "const-values" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/CryptoBoringWrapper-primary.swiftconstvalues",
+    "dependencies" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/CryptoBoringWrapper-primary.d",
+    "diagnostics" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/CryptoBoringWrapper-primary.dia",
+    "emit-module-dependencies" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/CryptoBoringWrapper-primary-emit-module.d",
+    "emit-module-diagnostics" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/CryptoBoringWrapper-primary-emit-module.dia",
+    "pch" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/CryptoBoringWrapper-primary-Bridging-header.pch",
+    "swift-dependencies" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/CryptoBoringWrapper-primary.swiftdeps"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/CryptoBoringWrapper/AEAD/BoringSSLAEAD.swift" : {
+    "index-unit-output-path" : "/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/BoringSSLAEAD.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/BoringSSLAEAD.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/BoringSSLAEAD.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/CryptoBoringWrapper/CryptoKitErrors_boring.swift" : {
+    "index-unit-output-path" : "/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/CryptoKitErrors_boring.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/CryptoKitErrors_boring.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/CryptoKitErrors_boring.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/CryptoBoringWrapper/EC/EllipticCurve.swift" : {
+    "index-unit-output-path" : "/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/EllipticCurve.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/EllipticCurve.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/EllipticCurve.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/CryptoBoringWrapper/EC/EllipticCurvePoint.swift" : {
+    "index-unit-output-path" : "/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/EllipticCurvePoint.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/EllipticCurvePoint.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/EllipticCurvePoint.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/CryptoBoringWrapper/Util/ArbitraryPrecisionInteger.swift" : {
+    "index-unit-output-path" : "/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/ArbitraryPrecisionInteger.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/ArbitraryPrecisionInteger.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/ArbitraryPrecisionInteger.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/CryptoBoringWrapper/Util/Data+Span.swift" : {
+    "index-unit-output-path" : "/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/Data+Span.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/Data+Span.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/Data+Span.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/CryptoBoringWrapper/Util/FiniteFieldArithmeticContext.swift" : {
+    "index-unit-output-path" : "/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/FiniteFieldArithmeticContext.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/FiniteFieldArithmeticContext.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/FiniteFieldArithmeticContext.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/CryptoBoringWrapper/Util/RandomBytes.swift" : {
+    "index-unit-output-path" : "/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/RandomBytes.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/RandomBytes.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/CryptoBoringWrapper-t.build/Objects-normal/x86_64/RandomBytes.o"
+  }
+}

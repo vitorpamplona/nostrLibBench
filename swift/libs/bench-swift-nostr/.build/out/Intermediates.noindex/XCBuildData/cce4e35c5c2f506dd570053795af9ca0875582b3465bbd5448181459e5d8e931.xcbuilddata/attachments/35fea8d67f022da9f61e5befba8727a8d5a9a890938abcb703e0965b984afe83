@@ -1,0 +1,16 @@
+{
+  "" : {
+    "const-values" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/_CryptoExtras-t.build/Objects-normal/x86_64/_CryptoExtras-primary.swiftconstvalues",
+    "dependencies" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/_CryptoExtras-t.build/Objects-normal/x86_64/_CryptoExtras-primary.d",
+    "diagnostics" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/_CryptoExtras-t.build/Objects-normal/x86_64/_CryptoExtras-primary.dia",
+    "emit-module-dependencies" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/_CryptoExtras-t.build/Objects-normal/x86_64/_CryptoExtras-primary-emit-module.d",
+    "emit-module-diagnostics" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/_CryptoExtras-t.build/Objects-normal/x86_64/_CryptoExtras-primary-emit-module.dia",
+    "pch" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/_CryptoExtras-t.build/Objects-normal/x86_64/_CryptoExtras-primary-Bridging-header.pch",
+    "swift-dependencies" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/_CryptoExtras-t.build/Objects-normal/x86_64/_CryptoExtras-primary.swiftdeps"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-crypto/Sources/_CryptoExtras/Exports.swift" : {
+    "index-unit-output-path" : "/swift-crypto.build/Release-linux-x86_64/_CryptoExtras-t.build/Objects-normal/x86_64/Exports.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/_CryptoExtras-t.build/Objects-normal/x86_64/Exports.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-crypto.build/Release-linux-x86_64/_CryptoExtras-t.build/Objects-normal/x86_64/Exports.o"
+  }
+}

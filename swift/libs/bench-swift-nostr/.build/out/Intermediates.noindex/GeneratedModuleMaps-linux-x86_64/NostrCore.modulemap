@@ -1,0 +1,4 @@
+module NostrCore {
+header "NostrCore-Swift.h"
+export *
+}

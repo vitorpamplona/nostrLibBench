@@ -1,0 +1,411 @@
+{
+  "" : {
+    "const-values" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient-primary.swiftconstvalues",
+    "dependencies" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient-primary.d",
+    "diagnostics" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient-primary.dia",
+    "emit-module-dependencies" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient-primary-emit-module.d",
+    "emit-module-diagnostics" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient-primary-emit-module.dia",
+    "pch" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient-primary-Bridging-header.pch",
+    "swift-dependencies" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient-primary.swiftdeps"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/API/Capabilities+EventFetching.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+EventFetching.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+EventFetching.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+EventFetching.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/API/Capabilities+EventPublishing.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+EventPublishing.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+EventPublishing.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+EventPublishing.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/API/Capabilities+GroupManaging.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+GroupManaging.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+GroupManaging.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+GroupManaging.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/API/Capabilities+IdentityProviding.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+IdentityProviding.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+IdentityProviding.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+IdentityProviding.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/API/Capabilities+ListManaging.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+ListManaging.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+ListManaging.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+ListManaging.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/API/Capabilities+Messaging.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+Messaging.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+Messaging.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+Messaging.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/API/Capabilities+RelayManaging.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+RelayManaging.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+RelayManaging.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+RelayManaging.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/API/Capabilities+RelayRouting.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+RelayRouting.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+RelayRouting.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+RelayRouting.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/API/Capabilities+Subscribing.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+Subscribing.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+Subscribing.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities+Subscribing.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/API/Capabilities.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Capabilities.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/API/NostrClient+Namespaces.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient+Namespaces.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient+Namespaces.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient+Namespaces.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/API/NostrEventsAPI.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrEventsAPI.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrEventsAPI.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrEventsAPI.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/API/NostrGroupsAPI.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrGroupsAPI.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrGroupsAPI.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrGroupsAPI.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/API/NostrIdentityAPI.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrIdentityAPI.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrIdentityAPI.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrIdentityAPI.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/API/NostrListsAPI.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrListsAPI.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrListsAPI.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrListsAPI.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/API/NostrMessagesAPI.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrMessagesAPI.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrMessagesAPI.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrMessagesAPI.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/API/NostrRelaysAPI.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrRelaysAPI.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrRelaysAPI.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrRelaysAPI.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/API/NostrRoutingAPI.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrRoutingAPI.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrRoutingAPI.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrRoutingAPI.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/API/NostrSubscriptionsAPI.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrSubscriptionsAPI.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrSubscriptionsAPI.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrSubscriptionsAPI.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Crypto/EncryptedFile.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EncryptedFile.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EncryptedFile.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EncryptedFile.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Crypto/GiftWrap.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/GiftWrap.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/GiftWrap.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/GiftWrap.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/DirectMessagePayloadSequence.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessagePayloadSequence.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessagePayloadSequence.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessagePayloadSequence.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/DirectMessageSequence.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessageSequence.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessageSequence.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessageSequence.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/EOSETracker.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EOSETracker.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EOSETracker.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EOSETracker.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/Bolt11Invoice.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Bolt11Invoice.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Bolt11Invoice.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Bolt11Invoice.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/Contact.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Contact.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Contact.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/Contact.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/DirectMessage.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessage.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessage.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessage.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/DirectMessageBuilder.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessageBuilder.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessageBuilder.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessageBuilder.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/DirectMessageFile.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessageFile.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessageFile.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessageFile.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/DirectMessageParser.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessageParser.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessageParser.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessageParser.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/DirectMessagePayload.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessagePayload.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessagePayload.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessagePayload.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/DirectMessageReaction.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessageReaction.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessageReaction.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessageReaction.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/DirectMessageRelayList.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessageRelayList.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessageRelayList.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessageRelayList.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/EventTemplate+DirectMessages.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EventTemplate+DirectMessages.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EventTemplate+DirectMessages.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EventTemplate+DirectMessages.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/EventTemplate+Lists.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EventTemplate+Lists.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EventTemplate+Lists.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EventTemplate+Lists.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/EventTemplate+LongFormContent.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EventTemplate+LongFormContent.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EventTemplate+LongFormContent.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EventTemplate+LongFormContent.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/EventTemplate+Moderation.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EventTemplate+Moderation.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EventTemplate+Moderation.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EventTemplate+Moderation.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/EventTemplate+Profiles.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EventTemplate+Profiles.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EventTemplate+Profiles.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EventTemplate+Profiles.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/EventTemplate+RelayLists.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EventTemplate+RelayLists.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EventTemplate+RelayLists.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EventTemplate+RelayLists.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/GroupReference.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/GroupReference.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/GroupReference.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/GroupReference.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/GroupState.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/GroupState.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/GroupState.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/GroupState.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/InternetIdentifier.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/InternetIdentifier.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/InternetIdentifier.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/InternetIdentifier.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/LongFormContent.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/LongFormContent.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/LongFormContent.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/LongFormContent.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/NAddr.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NAddr.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NAddr.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NAddr.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/NEvent.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NEvent.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NEvent.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NEvent.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/NIP19Entity+NostrURI.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NIP19Entity+NostrURI.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NIP19Entity+NostrURI.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NIP19Entity+NostrURI.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/NIP19Entity.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NIP19Entity.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NIP19Entity.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NIP19Entity.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/NProfile.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NProfile.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NProfile.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NProfile.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/NostrContentReference.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrContentReference.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrContentReference.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrContentReference.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/NostrList.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrList.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrList.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrList.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/NostrListSet.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrListSet.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrListSet.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrListSet.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/OpenTimestamps.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/OpenTimestamps.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/OpenTimestamps.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/OpenTimestamps.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/RelayListEntry.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayListEntry.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayListEntry.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayListEntry.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/RelayListMetadata.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayListMetadata.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayListMetadata.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayListMetadata.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/RelayRoute.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayRoute.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayRoute.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayRoute.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/RelayUsage.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayUsage.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayUsage.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayUsage.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/ReportType.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/ReportType.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/ReportType.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/ReportType.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/SendDirectMessageResult.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/SendDirectMessageResult.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/SendDirectMessageResult.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/SendDirectMessageResult.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/SimpleGroupList.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/SimpleGroupList.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/SimpleGroupList.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/SimpleGroupList.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/SubscriptionEvent.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/SubscriptionEvent.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/SubscriptionEvent.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/SubscriptionEvent.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/TLV.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/TLV.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/TLV.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/TLV.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/UserMetadata.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/UserMetadata.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/UserMetadata.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/UserMetadata.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Models/ZapReceipt.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/ZapReceipt.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/ZapReceipt.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/ZapReceipt.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/NostrClient+Authentication.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient+Authentication.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient+Authentication.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient+Authentication.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/NostrClient+Exports.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient+Exports.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient+Exports.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient+Exports.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/NostrClient+Fetch.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient+Fetch.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient+Fetch.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient+Fetch.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/NostrClient+Subscriptions.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient+Subscriptions.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient+Subscriptions.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient+Subscriptions.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/NostrClient.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/NostrClient.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Relay/DirectMessageRelayListStore.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessageRelayListStore.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessageRelayListStore.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/DirectMessageRelayListStore.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Relay/EventDeduplicationCache.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EventDeduplicationCache.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EventDeduplicationCache.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/EventDeduplicationCache.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Relay/PublishResult.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/PublishResult.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/PublishResult.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/PublishResult.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Relay/PublishStrategy.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/PublishStrategy.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/PublishStrategy.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/PublishStrategy.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Relay/PublishedEvent.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/PublishedEvent.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/PublishedEvent.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/PublishedEvent.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Relay/RelayConnector.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayConnector.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayConnector.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayConnector.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Relay/RelayListStore.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayListStore.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayListStore.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayListStore.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Relay/RelayPool.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayPool.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayPool.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayPool.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Relay/RelayPoolConfig.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayPoolConfig.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayPoolConfig.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/RelayPoolConfig.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Relay/ReplaceableCache.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/ReplaceableCache.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/ReplaceableCache.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/ReplaceableCache.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/Relay/VerifiedEventSelection.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/VerifiedEventSelection.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/VerifiedEventSelection.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/VerifiedEventSelection.o"
+  },
+  "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-nostr/Sources/NostrClient/SubscriptionSequence.swift" : {
+    "index-unit-output-path" : "/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/SubscriptionSequence.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/SubscriptionSequence.bc",
+    "object" : "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/out/Intermediates.noindex/swift-nostr.build/Release-linux-x86_64/NostrClient-t.build/Objects-normal/x86_64/SubscriptionSequence.o"
+  }
+}
