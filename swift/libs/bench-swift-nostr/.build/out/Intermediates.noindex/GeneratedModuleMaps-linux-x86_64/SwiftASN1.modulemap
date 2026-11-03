@@ -1,4 +1,0 @@
-module SwiftASN1 {
-header "SwiftASN1-Swift.h"
-export *
-}

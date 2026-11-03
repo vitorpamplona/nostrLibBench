@@ -1,4 +1,0 @@
-module libsecp256k1 {
-umbrella "/home/user/nostrLibBench/swift/libs/bench-swift-nostr/.build/checkouts/swift-secp256k1/Sources/libsecp256k1/include"
-export *
-}

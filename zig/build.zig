@@ -7,7 +7,7 @@ const std = @import("std");
 // Each library brings its own libsecp256k1, so they live in separate binaries.
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseFast });
+    const optimize = b.standardOptimizeOption(.{});
 
     const common = b.createModule(.{
         .root_source_file = b.path("src/common.zig"),

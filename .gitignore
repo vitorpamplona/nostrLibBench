@@ -29,5 +29,5 @@ hs_err_pid*
 zig/zig-pkg/
 zig/.zig-cache/
 zig/zig-out/
-swift/.build/
-swift/.swiftpm/
+swift/**/.build/
+swift/**/.swiftpm/
