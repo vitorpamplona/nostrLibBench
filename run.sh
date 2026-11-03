@@ -14,7 +14,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ALL_HARNESSES="rust go jvm node bun deno python ruby php dotnet dart"
+ALL_HARNESSES="rust go jvm node bun deno python ruby php dotnet dart swift zig"
 PORT="${RELAY_PORT:-7777}"
 
 ONLY=""
@@ -56,15 +56,18 @@ for h in $HARNESSES; do
         python) need=python3; launcher=("$HERE/python/run.sh") ;;
         ruby) need=ruby; launcher=("$HERE/ruby/run.sh") ;;
         php) need=php; launcher=("$HERE/php/run.sh") ;;
-        dotnet) need=dotnet; launcher=("$HERE/dotnet/run.sh") ;;
-        dart) need=dart; launcher=("$HERE/dart/run.sh") ;;
+        # These launchers install their pinned toolchain into .tools/ when it is missing.
+        dotnet) need=; launcher=("$HERE/dotnet/run.sh") ;;
+        dart) need=; launcher=("$HERE/dart/run.sh") ;;
+        swift) need=; launcher=("$HERE/swift/run.sh") ;;
+        zig) need=; launcher=("$HERE/zig/run.sh") ;;
         *) echo "unknown harness: $h (known: $ALL_HARNESSES)" >&2; exit 2 ;;
     esac
     if [[ ! -x "${launcher[0]}" ]]; then
         echo "== $h: skipped, no harness yet" >&2
         continue
     fi
-    if ! have "$need" && [[ ! -x "$HERE/.tools/$need/$need" ]]; then
+    if [[ -n "$need" ]] && ! have "$need"; then
         echo "== $h: skipped, '$need' not installed" >&2
         continue
     fi
