@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "NNostr.Client": {
+        "type": "Direct",
+        "requested": "[0.0.55, )",
+        "resolved": "0.0.55",
+        "contentHash": "Vd6qx0FoYWt54e9HLqUXbJq3iEphRYYLB3PJnp+y+3wyvdg5bi0G5qd+DTTx/mlglKAWvDT9H+GFhRvubwLbMQ==",
+        "dependencies": {
+          "LibChaCha20": "1.0.1",
+          "LinqKit.Core": "1.2.5",
+          "NBitcoin.Secp256k1": "3.1.6",
+          "System.Interactive.Async": "6.0.1"
+        }
+      },
+      "LibChaCha20": {
+        "type": "Transitive",
+        "resolved": "1.0.1",
+        "contentHash": "pLKTZWVPKf5vd1MthOCph/p7iR3DM8PQOeBLe7e5VGXVqju4GOWT+JAgKReQ+7sWU4HDC+hJF/Thrj08YFkugg=="
+      },
+      "LinqKit.Core": {
+        "type": "Transitive",
+        "resolved": "1.2.5",
+        "contentHash": "+5UKyagtVX33TSeOGorYzDXus/ypAISfM7HFfrix4BEmuuGF+nhSjf8P9csejLQ79ny5ms33M5/lQ2SkwC0Jxw=="
+      },
+      "Microsoft.Bcl.AsyncInterfaces": {
+        "type": "Transitive",
+        "resolved": "6.0.0",
+        "contentHash": "UcSjPsst+DfAdJGVDsu346FX0ci0ah+lw3WRtn18NUwEqRt70HaOQ7lI72vy3+1LxtqI3T5GWwV39rQSrCzAeg=="
+      },
+      "NBitcoin.Secp256k1": {
+        "type": "Transitive",
+        "resolved": "3.1.6",
+        "contentHash": "Ao9jN/16lhQoI0aMdUxgiEfuyFdg2nd2SdinqqEFuCyYl1NH6upa++Tp0wbXHTr6jf7klXh3wjmsX+ArzliZRQ=="
+      },
+      "System.Interactive.Async": {
+        "type": "Transitive",
+        "resolved": "6.0.1",
+        "contentHash": "f8H1O4ZWDQo344y5NQU76G4SIjWMuKDVXL9OM1dg6K5YZnLkc8iCdQDybBvMcC6ufk61jzXGVAX6UCDu0qDSjA==",
+        "dependencies": {
+          "System.Linq.Async": "6.0.1"
+        }
+      },
+      "System.Linq.Async": {
+        "type": "Transitive",
+        "resolved": "6.0.1",
+        "contentHash": "0YhHcaroWpQ9UCot3Pizah7ryAzQhNvobLMSxeDIGmnXfkQn8u5owvpOH0K6EVB+z9L7u6Cc4W17Br/+jyttEQ==",
+        "dependencies": {
+          "Microsoft.Bcl.AsyncInterfaces": "6.0.0"
+        }
+      }
+    }
+  }
+}

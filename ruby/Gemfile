@@ -1,0 +1,29 @@
+# frozen_string_literal: true
+
+# nostrLibBench Ruby harness. Versions are pinned in Gemfile.lock; ruby/run.sh installs
+# them into ruby/vendor (git-ignored). Each client runs in its own process, which only
+# requires that client's library (nostr and nostr_ruby both define Nostr::Client).
+source 'https://rubygems.org'
+
+# One group per library: a client process calls Bundler.setup(:default, <its groups>), so
+# only its own gems are on the load path (nostr_ruby ships a top-level lib/bech32.rb that
+# shadows the bech32 gem the nostr gem requires).
+group :nostr do
+  gem 'nostr', '0.7.0'          # wilsonsilva/nostr
+end
+
+group :nostr_ruby do
+  gem 'nostr_ruby', '0.3.1'     # dtonon/nostr-ruby
+end
+
+group :nostrb do
+  gem 'nostrb', '0.2.0.1'       # rickhull/nostrb
+  gem 'async-websocket'         # nostrb's Client requires it but the gem does not declare it
+end
+
+# Only on the load path of the nostrb-rbsecp256k1 variant: schnorr_sig switches to
+# libsecp256k1 whenever rbsecp256k1 can be required. Builds against the system
+# libsecp256k1 (Debian/Ubuntu: libsecp256k1-dev); run.sh skips the group when it can't.
+group :fast do
+  gem 'rbsecp256k1'
+end

@@ -6,7 +6,6 @@
   "license": "MIT",
   "dependencies": {
     "@nostr-dev-kit/ndk": "3.0.3",
-    "@nostr/gadgets": "npm:@jsr/nostr__gadgets@0.21.1",
     "@nostrdevkit/nostr-sdk-node": "0.45.1",
     "@nostrify/nostrify": "0.55.1",
     "@qntx/nostr": "0.15.3",

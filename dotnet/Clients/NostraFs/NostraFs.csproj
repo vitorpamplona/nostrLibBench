@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsBenchClient>true</IsBenchClient>
+    <AssemblyName>NostraFs</AssemblyName>
+    <RootNamespace>NostraBench</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Nostra" Version="0.0.5" />
+  </ItemGroup>
+</Project>

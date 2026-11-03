@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsBenchClient>true</IsBenchClient>
+    <AssemblyName>NostrClient</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Nostr.Client" Version="2.1.0" />
+  </ItemGroup>
+</Project>

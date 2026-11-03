@@ -1,0 +1,14 @@
+{
+    "name": "nostrlibbench/php-harness",
+    "description": "nostrLibBench PHP harness: Nostr client libraries, end to end",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.3",
+        "swentel/nostr-php": "1.9.4"
+    },
+    "config": {
+        "allow-plugins": false,
+        "sort-packages": true
+    }
+}

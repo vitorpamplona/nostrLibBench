@@ -9,19 +9,31 @@ quartz = "2.13.0"
 nostrSdkJvm = "0.45.1"
 # NostrGameEngine's pure-Java library.
 nostr4j = "0.4.1"
+# nostr4j's platform layer (WebSocket transport, crypto, JSON); its README asks for it.
+ngePlatform = "0.2.6"
 # tcheeric's nostr-java (Spring WebSocket client).
 nostrJava = "2.4.2"
 # KotlinGeekDev's Kotlin Multiplatform library (Ktor client).
 rhodium = "1.0-rc"
 kotlinxCoroutines = "1.11.0"
+# Compile-time only: the harness builds the same OkHttp / Ktor clients the libraries build
+# (Quartz's OkHttpClient, Rhodium's HttpClient(OkHttp) + WebSockets) at the versions they resolve to.
+okhttp = "5.5.1"
+ktor = "3.5.0"
+kotlinxSerialization = "1.12.0"
 
 [libraries]
 quartz = { group = "com.vitorpamplona.quartz", name = "quartz", version.ref = "quartz" }
 nostr-sdk-jvm = { group = "org.nostrdevkit", name = "nostr-sdk-jvm", version.ref = "nostrSdkJvm" }
 nostr4j = { group = "org.ngengine", name = "nostr4j", version.ref = "nostr4j" }
+nge-platform-jvm = { group = "org.ngengine", name = "nge-platform-jvm", version.ref = "ngePlatform" }
 nostr-java-api = { group = "xyz.tcheeric", name = "nostr-java-api", version.ref = "nostrJava" }
 nostr-java-client = { group = "xyz.tcheeric", name = "nostr-java-client", version.ref = "nostrJava" }
 rhodium = { group = "io.github.kotlingeekdev.rhodium", name = "rhodium", version.ref = "rhodium" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+ktor-client-okhttp = { group = "io.ktor", name = "ktor-client-okhttp", version.ref = "ktor" }
+ktor-client-websockets = { group = "io.ktor", name = "ktor-client-websockets", version.ref = "ktor" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 
 [plugins]

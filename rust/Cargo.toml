@@ -4,13 +4,30 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 license = "MIT"
+description = "nostrLibBench Rust harness: which Rust Nostr client library gets a relay's events through its WebSocket client, parser and verification fastest"
 
 [dependencies]
-nostr-sdk = "0.45.6"
-nostr-relay-pool = "0.44.3"
-nostro2-relay = "0.10.0"
-nostr_rust = "0.20.3"
-nostrdb = "0.9.0"
+# The libraries under test (latest releases; nostr-types from git, see README).
+nostr-sdk = "=0.45.6"
+nostro2-relay = "=0.10.0"
+nostro2 = "=0.9.0"
+nostr_rust = "=0.20.3"
+nostr-types = { git = "https://github.com/mikedilger/nostr-types", rev = "0ada3e403cac2fad15a90c1558d35c2d4fae51c7", features = ["client"] }
+nostrdb = "=0.9.0"
+# nostrdb has no WebSocket client: notedeck's enostr pairs it with tokio-tungstenite.
+tokio-tungstenite = "0.28"
+
+# Harness plumbing.
 tokio = { version = "1", features = ["full"] }
+futures = "0.3"
 serde_json = "1"
 libc = "0.2"
+
+[build-dependencies]
+serde_json = "1"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+debug = false

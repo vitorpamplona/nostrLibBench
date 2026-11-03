@@ -1,0 +1,24 @@
+<Project>
+  <!-- Shared by the orchestrator (Bench/) and every client project (Clients/*/). Each client
+       library is its own project with its own packages.lock.json, so each library resolves its
+       dependencies (NBitcoin.Secp256k1, Newtonsoft.Json, ...) the way an app using only it would. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
+    <Optimize>true</Optimize>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS1591;NU1603;NU1701;CS0618;CS8618;CS8600;CS8602;CS8604;CS4014</NoWarn>
+    <!-- Runtime defaults are kept (Workstation GC, concurrent GC on, tiered compilation and
+         dynamic PGO on); the `runtime` string in the results records them. -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(IsBenchClient)' == 'true'">
+    <Compile Include="$(MSBuildThisFileDirectory)Common/*.cs" Link="Common/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="packages.lock.json" LogicalName="packages.lock.json" Condition="Exists('packages.lock.json')" />
+  </ItemGroup>
+</Project>

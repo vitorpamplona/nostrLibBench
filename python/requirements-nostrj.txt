@@ -1,0 +1,5 @@
+# nostrj installs a top-level `nostr` package, like python-nostr (`nostr` in requirements.txt),
+# so run.sh installs it with --no-deps into its own overlay (.venv/overlays/nostrj), put first on
+# sys.path only in the nostrj client's process. Its dependencies (cffi, cryptography, pycparser,
+# python-socks, secp256k1, websocket-client) are pinned in requirements.txt.
+nostrj==0.1.2
