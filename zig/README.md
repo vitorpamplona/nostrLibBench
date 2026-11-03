@@ -116,7 +116,7 @@ github.com/privkeyio/libnostr-z, by PrivKey LLC, v0.5.0 (2026-10-06), pinned at 
 - **Bug: valid events rejected.** `Event.validate` does not re-serialize: it hashes the raw
   JSON text of the `tags` and `content` values exactly as the relay sent them. Any event whose
   JSON uses escapes the canonical serialization does not (`🇺` surrogate pairs,
-  `’`, `\/`) gets `IdMismatch`: 82 of the 993 valid events of `smoke` are dropped, so its
+  `’`, `\/`) gets `IdMismatch`: 82 of the 994 valid events of `smoke` are dropped, so its
   rows are `accepted_ok: false`. The same shortcut makes it accept the ambiguous U+0000 event
   (the relay's bytes contain `\u0000`).
 - **Event model:** lazy. `Event` keeps the raw JSON plus parsed id/pubkey/sig/created_at/kind
