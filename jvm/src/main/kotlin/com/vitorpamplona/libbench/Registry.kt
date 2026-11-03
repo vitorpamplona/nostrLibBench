@@ -9,6 +9,9 @@ import com.vitorpamplona.libbench.clients.RhodiumClient
 private val V = Versions
 
 private val OKHTTP = "OkHttp ${V["com.squareup.okhttp3:okhttp"]}"
+private val NGE_CRYPTO =
+    "Bouncy Castle ${V["org.bouncycastle:bcprov-jdk18on"]} secp256k1 (pure Java, ECAlgorithms.sumOfTwoMultiplies) " +
+        "via nge-platform-jvm's Schnorr; JDK SHA-256"
 private val SECP_KMP = "libsecp256k1 (C, JNI via ACINQ secp256k1-kmp-jni-jvm ${V["fr.acinq.secp256k1:secp256k1-kmp-jni-jvm"]})"
 
 /** Every client of the JVM harness, in report order. Versions come from the resolved classpath. */
@@ -101,16 +104,34 @@ val CLIENTS: List<ClientSpec> =
             library = "nostr4j",
             version = "${V["org.ngengine:nostr4j"]} (nge-platform-jvm ${V["org.ngengine:nge-platform-jvm"]})",
             license = "BSD-3-Clause",
-            api = "NostrPool.connectRelay + pool.subscribe(NostrFilter) with event/EOSE listeners, sub.open()",
+            api = "NostrPool.connectRelay + pool.subscribe(NostrFilter, NaiveEventTracker::new) with event/EOSE listeners, sub.open()",
             websocket = "JDK java.net.http.WebSocket (nge-platform-jvm JVMWebsocketTransport)",
-            crypto = "pure-Java BIP-340 on BigInteger (nge-platform-jvm Schnorr, from nostr-java's), JDK SHA-256",
+            crypto = NGE_CRYPTO,
             verify = "library",
             notes =
                 "NostrRelay verifies every EVENT (id + signature) before listeners see it (verifyEvents, default on), " +
-                    "on the common ForkJoinPool (parallelEvents, default on). Parser: Gson (nge-platform). Needs " +
-                    "-Dnge-platforms.allowLoopbackInURIs=true for a loopback relay (set by the harness).",
+                    "on the common ForkJoinPool (parallelEvents, default on). Subscribes with NaiveEventTracker (dedup by " +
+                    "id): the pool's default ForwardSlidingWindowEventTracker treats every event older than ~30 min as " +
+                    "already seen once 21 events arrived, so a history sync gets ~22 events (nostr4j-pool-defaulttracker). " +
+                    "Parser: Gson (nge-platform). Needs -Dnge-platforms.allowLoopbackInURIs=true for a loopback relay " +
+                    "(set by the harness).",
             variant = false,
-            create = { Nostr4jClient() },
+            create = { Nostr4jClient(naiveTracker = true) },
+        ),
+        ClientSpec(
+            id = "nostr4j-pool-defaulttracker",
+            library = "nostr4j",
+            version = "${V["org.ngengine:nostr4j"]} (nge-platform-jvm ${V["org.ngengine:nge-platform-jvm"]})",
+            license = "BSD-3-Clause",
+            api = "NostrPool.connectRelay + pool.subscribe(NostrFilter) (default ForwardSlidingWindowEventTracker)",
+            websocket = "JDK java.net.http.WebSocket (nge-platform-jvm JVMWebsocketTransport)",
+            crypto = NGE_CRYPTO,
+            verify = "library",
+            notes =
+                "nostr4j-pool with the pool's default event tracker, built for live feeds: after 21 events it moves " +
+                    "its cut-off to now - 30 min and drops everything older (and every expired event) as already seen.",
+            variant = true,
+            create = { Nostr4jClient(naiveTracker = false) },
         ),
         ClientSpec(
             id = "nostr-java-relaypool",

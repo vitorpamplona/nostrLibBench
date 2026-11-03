@@ -1,0 +1,47 @@
+# Primary root-level build folders
+/build*/
+
+# Yes, everyone loves keeping this file in the history.
+# But with a very minimalistic binding and just a couple of dependencies
+# it brings 7000 lines of text polluting the entire repo.
+package-lock.json
+uv.lock
+
+# Temporary files
+.DS_Store
+.swiftpm/
+.build/
+tmp/
+target/
+__pycache__
+.pytest_cache
+.conda
+Makefile
+CMakeCache.txt
+cmake_install.cmake
+CMakeFiles
+*.so
+*.egg-info
+*.whl
+*.pyd
+.venv/*
+node_modules/
+.vs/
+*.tar.gz
+.tmp/
+
+# Recommended datasets
+utf8.txt
+leipzig1M.txt
+enwik9.txt
+xlsum.csv
+acgt_100.txt
+acgt_100k.txt
+acgt_10k.txt
+acgt_10m.txt
+acgt_1k.txt
+acgt_1m.txt
+
+# StringZilla-specific log files
+/failed_sz_*
+/.cache/

@@ -1,0 +1,13 @@
+import { CLIENTS } from './clients.mjs';
+import { readFileSync } from 'node:fs';
+const C = CLIENTS.find(c => c.id === process.argv[2]);
+const wl = process.argv[3] ?? 'notes';
+const lines = readFileSync(`../.corpus/${wl}.ndjson`, 'utf8').trim().split('\n').map(l => JSON.parse(l).id);
+const ctx = await C.load({});
+const inst = await C.setup(ctx, `ws://127.0.0.1:7804/${wl}`, {}, { timeoutMs: 60000 });
+const got = new Set(); let eoseIdx = -1;
+C.start(inst, { limit: lines.length }, { event: id => got.add(id), eose: () => { eoseIdx = got.size; console.log('eose at', got.size) }, error: e => console.log('err', e) }, { timeoutMs: 60000 });
+await new Promise(r => setTimeout(r, Number(process.argv[4] ?? 8000)));
+const missing = lines.map((id, i) => [i, id]).filter(([i, id]) => !got.has(id));
+console.log('got', got.size, 'missing', missing.length, 'indices', missing.map(m => m[0]).join(','));
+process.exit(0);

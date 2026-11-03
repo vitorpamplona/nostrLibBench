@@ -1,0 +1,2762 @@
+//! Nostr relay client: a websocket connection to a relay that publishes
+//! events and drives subscriptions using the NIP-01 wire messages.
+//!
+//! The connection state machine (`Connection`) is generic over its byte
+//! stream so it can be exercised end-to-end in CI against an in-memory fake
+//! stream — handshake, framing, control-frame handling and message
+//! reassembly are all proven hermetically. The concrete TCP/TLS dialer that
+//! wires a real socket into a `Connection` lives in a later part; a real relay
+//! cannot be reached from CI, so keeping the logic transport-agnostic is what
+//! makes it testable.
+
+const std = @import("std");
+const builtin = @import("builtin");
+const websocket = @import("websocket.zig");
+const message = @import("message.zig");
+const event_mod = @import("event.zig");
+const filter_mod = @import("filter.zig");
+
+const Event = event_mod.Event;
+const Filter = filter_mod.Filter;
+
+/// A relay never sends a single logical message larger than this; we refuse to
+/// buffer past it so a hostile relay cannot exhaust memory.
+pub const max_message_len = 1 << 20; // 1 MiB
+
+// ---------------------------------------------------------------------------
+// Relay URL parsing
+// ---------------------------------------------------------------------------
+
+pub const Url = struct {
+    /// True for `wss://` (TLS), false for `ws://`.
+    secure: bool,
+    /// Borrows from the input string.
+    host: []const u8,
+    port: u16,
+    /// Borrows from the input string; defaults to "/".
+    path: []const u8,
+
+    /// The HTTP `Host` header value: the host, plus `:port` when the port is
+    /// non-default for the scheme (RFC 9110 §7.2 — 80 for `ws`, 443 for `wss`).
+    /// Sending the port matters for relays that derive their own canonical URL
+    /// from `Host`: a NIP-42 auth event's `relay` tag (the full dialed URL) must
+    /// match it, or the relay rejects the authentication. `buf` needs room for
+    /// the host plus `:65535`; falls back to the bare host if it doesn't fit.
+    pub fn hostHeader(self: Url, buf: []u8) []const u8 {
+        const default_port: u16 = if (self.secure) 443 else 80;
+        if (self.port == default_port) return self.host;
+        return std.fmt.bufPrint(buf, "{s}:{d}", .{ self.host, self.port }) catch self.host;
+    }
+};
+
+pub const UrlError = error{ InvalidUrl, UnsupportedScheme };
+
+/// Parses a relay URL (`ws://host[:port][/path]` or `wss://...`). The default
+/// port is 80 for `ws` and 443 for `wss`; the default path is "/". Host and
+/// path borrow from `url`.
+pub fn parseUrl(url: []const u8) UrlError!Url {
+    var rest = url;
+    const secure = if (std.mem.startsWith(u8, rest, "wss://")) blk: {
+        rest = rest["wss://".len..];
+        break :blk true;
+    } else if (std.mem.startsWith(u8, rest, "ws://")) blk: {
+        rest = rest["ws://".len..];
+        break :blk false;
+    } else return UrlError.UnsupportedScheme;
+
+    if (rest.len == 0) return UrlError.InvalidUrl;
+
+    const slash = std.mem.indexOfScalar(u8, rest, '/');
+    const authority = if (slash) |i| rest[0..i] else rest;
+    const path = if (slash) |i| rest[i..] else "/";
+    if (authority.len == 0) return UrlError.InvalidUrl;
+
+    var host = authority;
+    var port: u16 = if (secure) 443 else 80;
+
+    if (authority[0] == '[') {
+        // IPv6 literal: [addr] or [addr]:port
+        const close = std.mem.indexOfScalar(u8, authority, ']') orelse return UrlError.InvalidUrl;
+        host = authority[1..close];
+        if (host.len == 0) return UrlError.InvalidUrl;
+        const after = authority[close + 1 ..];
+        if (after.len > 0) {
+            if (after[0] != ':') return UrlError.InvalidUrl;
+            port = std.fmt.parseInt(u16, after[1..], 10) catch return UrlError.InvalidUrl;
+        }
+    } else if (std.mem.lastIndexOfScalar(u8, authority, ':')) |ci| {
+        host = authority[0..ci];
+        if (host.len == 0) return UrlError.InvalidUrl;
+        port = std.fmt.parseInt(u16, authority[ci + 1 ..], 10) catch return UrlError.InvalidUrl;
+    }
+
+    return .{ .secure = secure, .host = host, .port = port, .path = path };
+}
+
+// ---------------------------------------------------------------------------
+// Connection state machine (generic over the byte stream)
+// ---------------------------------------------------------------------------
+
+pub const ConnectionError = error{
+    HandshakeFailed,
+    MessageTooLarge,
+    /// The relay sent a frame we don't accept mid-stream (e.g. a reserved
+    /// opcode, or a continuation with no started message).
+    UnexpectedFrame,
+    RandomFailed,
+    /// A bounded write gave up partway through a frame, so the stream holds
+    /// part of one and nothing written after it can be read by the relay.
+    /// Every later write fails with this. Close the connection and dial again.
+    Broken,
+};
+
+/// A websocket connection to a relay over `Stream`. `Stream` must provide:
+///   * `fn read(self, buffer: []u8, deadline: ?std.Io.Clock.Timestamp) !usize`
+///     — 0 means the peer closed. A null deadline waits forever, which is what
+///     every caller did before `receiveTimeout` existed.
+///   * `fn writeAll(self, bytes: []const u8) !void`
+///   * optionally `fn writableBy(self, deadline: std.Io.Clock.Timestamp) bool`,
+///     whether a small write would go through before the deadline. A stream
+///     without it is taken to always have room.
+///
+/// The connection owns two growable buffers (raw receive bytes and the
+/// reassembled message) but not the stream; call `deinit` to free them.
+pub fn Connection(comptime Stream: type) type {
+    return struct {
+        const Self = @This();
+
+        stream: Stream,
+        io: std.Io,
+        allocator: std.mem.Allocator,
+        /// Raw bytes received but not yet decoded into whole frames.
+        recv: std.ArrayList(u8),
+        /// Payload of the in-progress (possibly fragmented) message.
+        msg: std.ArrayList(u8),
+        /// Serializes whole frames onto the stream.
+        ///
+        /// A relay connection has two users on two threads the moment anything
+        /// keeps it alive: the one blocked reading it, and whoever sends the
+        /// keepalive. Over TLS, half a record from one and half from the other
+        /// is not an interleaved message, it is a session that cannot be
+        /// decrypted again, so the lock covers building the frame AND flushing
+        /// it all the way to the socket rather than just the append.
+        ///
+        /// Uncontended it is one atomic compare-exchange, which is what it
+        /// costs on the single-threaded path.
+        write_lock: std.Io.Mutex,
+        /// Milliseconds on the awake clock at the last inbound byte, pongs
+        /// included. Zero before the first one.
+        ///
+        /// Atomic because the whole point of it is to be read by a thread that
+        /// is NOT the one blocked on the socket. A thread waiting on a dead peer
+        /// cannot notice anything, least of all that it is waiting.
+        last_rx_ms: std.atomic.Value(i64),
+        /// Messages that arrived whole but that the parser could not read, so
+        /// `receive` skipped them. A relay can send anything; one message this
+        /// library cannot read costs that message and nothing after it.
+        ///
+        /// Read it on the thread that calls `receive`, which is the only one
+        /// that writes it.
+        unreadable: u64,
+        /// The HTTP status the relay answered the opening handshake with, or
+        /// zero when no status line has been read. Set by `handshake` whether
+        /// it succeeds or not, so after a `HandshakeFailed` it says why: 503
+        /// when the relay is busy, 401 or 403 when it wants something first,
+        /// 429 when it is rate limiting.
+        handshake_status: u16,
+        /// Set when a bounded write gave up after it may have written part of
+        /// a frame. See `ConnectionError.Broken`.
+        broken: std.atomic.Value(bool),
+
+        pub fn init(allocator: std.mem.Allocator, io: std.Io, stream: Stream) Self {
+            return .{
+                .stream = stream,
+                .io = io,
+                .allocator = allocator,
+                .recv = .empty,
+                .msg = .empty,
+                .write_lock = .init,
+                .last_rx_ms = .init(0),
+                .unreadable = 0,
+                .handshake_status = 0,
+                .broken = .init(false),
+            };
+        }
+
+        pub fn deinit(self: *Self) void {
+            self.recv.deinit(self.allocator);
+            self.msg.deinit(self.allocator);
+            self.* = undefined;
+        }
+
+        /// Performs the RFC 6455 opening handshake for `host`/`path`. Any bytes
+        /// the relay sent after the response head are retained for `receive`.
+        ///
+        /// A relay that answers with anything but 101 fails with
+        /// `HandshakeFailed`, and the status it answered with is left in
+        /// `handshake_status`.
+        pub fn handshake(self: *Self, host: []const u8, path: []const u8) !void {
+            const key = websocket.generateKey(self.io) catch |err| switch (err) {
+                error.Canceled => |e| return e,
+                error.RandomFailed => return ConnectionError.RandomFailed,
+            };
+
+            var req: std.ArrayList(u8) = .empty;
+            defer req.deinit(self.allocator);
+            try websocket.appendHandshakeRequest(&req, self.allocator, host, path, &key);
+            try self.stream.writeAll(req.items);
+
+            const accept = websocket.acceptKey(&key);
+
+            // Read until the blank line terminating the response head.
+            while (std.mem.indexOf(u8, self.recv.items, "\r\n\r\n") == null) {
+                // A relay that sends a status line and then closes, or never
+                // finishes the head, still said what it answered.
+                self.handshake_status = websocket.statusCode(self.recv.items) orelse 0;
+                if (self.recv.items.len > 16 * 1024) return ConnectionError.HandshakeFailed;
+                if (!try self.fill(null)) return ConnectionError.HandshakeFailed;
+            }
+            const idx = std.mem.indexOf(u8, self.recv.items, "\r\n\r\n").?;
+            const head_len = idx + 4;
+            self.handshake_status = websocket.statusCode(self.recv.items[0..head_len]) orelse 0;
+            websocket.checkHandshakeResponse(self.recv.items[0..head_len], &accept) catch
+                return ConnectionError.HandshakeFailed;
+            self.consume(head_len);
+        }
+
+        /// Publishes an event: sends `["EVENT", <event>]`.
+        pub fn publish(self: *Self, ev: Event) !void {
+            const text = try message.encodeEvent(self.allocator, ev);
+            defer self.allocator.free(text);
+            try self.sendText(text);
+        }
+
+        /// `publish` that gives up at `timeout` and returns `error.Timeout`.
+        ///
+        /// A relay that has stopped reading fills the socket, and a write into
+        /// a full socket waits for room that never comes. `publish` waits with
+        /// it, holding the write lock, so every other write on the connection
+        /// waits too. This one runs the write as a task of its own with
+        /// `io.concurrent`, waits for it until the deadline, and cancels it
+        /// when the deadline passes, so it needs an `io` that can run a task
+        /// concurrently (`std.Io.Threaded` can).
+        ///
+        /// What a timeout leaves behind depends on how far the write got. If
+        /// it was still waiting for another write to finish, nothing was sent
+        /// and the connection is as it was. If it had started, the relay may
+        /// hold part of a frame, so the connection is marked broken and every
+        /// later write fails with `error.Broken`: close it and dial again. A
+        /// relay that did not drain a frame before the deadline is usually gone
+        /// anyway.
+        ///
+        /// Cancelling the caller cancels the write the same way and returns
+        /// `error.Canceled`.
+        pub fn publishTimeout(self: *Self, ev: Event, timeout: std.Io.Timeout) !void {
+            const text = try message.encodeEvent(self.allocator, ev);
+            defer self.allocator.free(text);
+            try self.sendFrameTimeout(.text, text, timeout);
+        }
+
+        /// Opens a subscription: sends `["REQ", <id>, <filters>...]`.
+        pub fn subscribe(self: *Self, subscription_id: []const u8, filters: []const Filter) !void {
+            const text = try message.encodeReq(self.allocator, subscription_id, filters);
+            defer self.allocator.free(text);
+            try self.sendText(text);
+        }
+
+        /// Cancels a subscription: sends `["CLOSE", <id>]`.
+        pub fn unsubscribe(self: *Self, subscription_id: []const u8) !void {
+            const text = try message.encodeClose(self.allocator, subscription_id);
+            defer self.allocator.free(text);
+            try self.sendText(text);
+        }
+
+        /// Asks how many events match (NIP-45): sends
+        /// `["COUNT", <id>, <filters>...]`. The relay answers with a `count`
+        /// message for the same id.
+        pub fn count(self: *Self, subscription_id: []const u8, filters: []const Filter) !void {
+            const text = try message.encodeCount(self.allocator, subscription_id, filters);
+            defer self.allocator.free(text);
+            try self.sendText(text);
+        }
+
+        /// Opens a negentropy session (NIP-77): sends
+        /// `["NEG-OPEN", <id>, <filter>, <initial_hex>]`. `initial_hex` is the
+        /// hex of the first message, as `nip77.Initiator` produces it.
+        pub fn negOpen(self: *Self, subscription_id: []const u8, filter: Filter, initial_hex: []const u8) !void {
+            const text = try message.encodeNegOpen(self.allocator, subscription_id, filter, initial_hex);
+            defer self.allocator.free(text);
+            try self.sendText(text);
+        }
+
+        /// Continues a negentropy session: sends `["NEG-MSG", <id>, <hex>]`.
+        pub fn negMsg(self: *Self, subscription_id: []const u8, msg_hex: []const u8) !void {
+            const text = try message.encodeNegMsg(self.allocator, subscription_id, msg_hex);
+            defer self.allocator.free(text);
+            try self.sendText(text);
+        }
+
+        /// Ends a negentropy session: sends `["NEG-CLOSE", <id>]`.
+        pub fn negClose(self: *Self, subscription_id: []const u8) !void {
+            const text = try message.encodeNegClose(self.allocator, subscription_id);
+            defer self.allocator.free(text);
+            try self.sendText(text);
+        }
+
+        /// Answers a NIP-42 challenge: sends `["AUTH", <event>]`. `ev` is a
+        /// signed `kind:22242` event (build it with `nip42.authEvent`).
+        pub fn authenticate(self: *Self, ev: Event) !void {
+            const text = try message.encodeAuth(self.allocator, ev);
+            defer self.allocator.free(text);
+            try self.sendText(text);
+        }
+
+        /// Sends a websocket close control frame.
+        pub fn close(self: *Self) !void {
+            try self.sendFrame(self.io, .close, &.{});
+        }
+
+        /// Sends a websocket ping. Safe to call from a thread other than the one
+        /// blocked in `receive`, which is the only way it is useful: `io` is that
+        /// caller's own.
+        ///
+        /// Answering the relay's pings is not a substitute for sending our own,
+        /// and this is the part that is easy to get backwards. A relay's idle
+        /// timer counts what it RECEIVES from us, and a pong we send in reply to
+        /// its ping does not reset it: Amethyst measured exactly that against a
+        /// live relay, an idle connection whose own ping was answered and which
+        /// was closed anyway two minutes later.
+        pub fn ping(self: *Self, io: std.Io) !void {
+            try self.sendFrame(io, .ping, &.{});
+        }
+
+        /// Milliseconds since the last inbound byte, or null before the first
+        /// one has arrived. `io` is the calling thread's.
+        pub fn idleMs(self: *const Self, io: std.Io) ?i64 {
+            const last = self.last_rx_ms.load(.monotonic);
+            if (last == 0) return null;
+            const now = std.Io.Timestamp.now(io, .awake).toMilliseconds();
+            return if (now > last) now - last else 0;
+        }
+
+        /// Reads the next relay message, transparently answering pings, skipping
+        /// pongs, and reassembling fragmented frames. Returns `null` when the
+        /// relay closes the connection (a close frame or EOF). The caller owns
+        /// the returned message and must `deinit` it.
+        ///
+        /// A message the parser cannot read (not JSON, a type it has no case
+        /// for, or the wrong shape) is skipped and counted in `unreadable`,
+        /// and the read carries on to the next one.
+        ///
+        /// Waits forever. `receiveTimeout` is the one with a deadline.
+        pub fn receive(self: *Self) !?message.ParsedRelayMessage {
+            return self.receiveUntil(null);
+        }
+
+        /// Like `receive`, but gives up when `timeout` passes.
+        ///
+        /// Returns `error.Timeout` when the deadline arrives with no complete
+        /// message. NOT `null`: `null` still means the relay is gone, which is
+        /// what every existing caller already reads it as, and a timeout that
+        /// arrived as null would silently turn a quiet second into a
+        /// disconnect at a dozen call sites.
+        ///
+        /// Safe to call again. The wait consumes nothing: it is a readiness
+        /// check on the socket, not a read, so `recv`, `msg`, the TLS record
+        /// state and the kernel buffer are exactly as they were. That is the
+        /// whole reason it is shaped this way rather than as a read timeout,
+        /// which cannot be done here at all (see `Relay.shutdown`).
+        ///
+        /// Best effort. A deadline can only be noticed between reads, so a peer
+        /// dribbling a frame one byte at a time is bounded by the frame, not by
+        /// the deadline.
+        ///
+        /// Note that `receive`'s inferred error set gains `error.Timeout` even
+        /// though `.none` can never produce one, because Zig infers statically.
+        pub fn receiveTimeout(self: *Self, timeout: std.Io.Timeout) !?message.ParsedRelayMessage {
+            // Normalized ONCE, to an absolute instant. This is mandatory rather
+            // than stylistic: a TLS read legitimately returns zero bytes many
+            // times per message while a record arrives, so a per-read duration
+            // would restart on each partial record and bound nothing.
+            const deadline = timeout.toTimestamp(self.io);
+            return self.receiveUntil(deadline);
+        }
+
+        fn receiveUntil(self: *Self, deadline: ?std.Io.Clock.Timestamp) !?message.ParsedRelayMessage {
+            while (true) {
+                if (try websocket.decodeFrame(self.recv.items)) |frame| {
+                    switch (frame.opcode) {
+                        .text, .binary, .continuation => {
+                            if (self.msg.items.len + frame.payload.len > max_message_len)
+                                return ConnectionError.MessageTooLarge;
+                            try self.msg.appendSlice(self.allocator, frame.payload);
+                            const fin = frame.fin;
+                            self.consume(frame.frame_len);
+                            if (fin) {
+                                // Cleared on every way out, errors included. A
+                                // message left here would be glued onto the
+                                // front of the next one, and every message after
+                                // it on this connection would fail to parse too.
+                                defer self.msg.clearRetainingCapacity();
+                                return message.parseRelayMessage(self.allocator, self.msg.items) catch |err| switch (err) {
+                                    // Skipped, as the other clients skip it: a
+                                    // type this parser has no case for, or a
+                                    // malformed one, is not a broken connection.
+                                    error.InvalidMessage => {
+                                        self.unreadable += 1;
+                                        if (self.passed(deadline)) return error.Timeout;
+                                        continue;
+                                    },
+                                    error.OutOfMemory => |e| return e,
+                                };
+                            }
+                        },
+                        .ping => {
+                            // Control payloads are <=125 bytes and unfragmented.
+                            var echo: [125]u8 = undefined;
+                            const n = @min(frame.payload.len, echo.len);
+                            @memcpy(echo[0..n], frame.payload[0..n]);
+                            self.consume(frame.frame_len);
+                            try self.answerPing(echo[0..n], deadline);
+                            if (self.passed(deadline)) return error.Timeout;
+                        },
+                        .pong => {
+                            self.consume(frame.frame_len);
+                            if (self.passed(deadline)) return error.Timeout;
+                        },
+                        .close => {
+                            self.consume(frame.frame_len);
+                            self.close() catch {};
+                            return null;
+                        },
+                        _ => {
+                            self.consume(frame.frame_len);
+                            return ConnectionError.UnexpectedFrame;
+                        },
+                    }
+                    continue;
+                }
+                // Need more bytes before a full frame is available.
+                //
+                // Bound the RAW buffer too, not only the assembled message. The
+                // cap above is inside the branch where a frame already decoded,
+                // and `decodeFrame` returns null for any frame whose declared
+                // payload has not fully arrived. So a peer that sends a header
+                // declaring a multi-gigabyte payload and then dribbles filler
+                // never completes a frame, never reaches that check, and grows
+                // `recv` by 4 KiB per read until the allocator gives up. The
+                // process holding the key is the one that dies.
+                //
+                // One frame's worth is all this ever legitimately holds: a
+                // completed frame is consumed immediately, and a fragmented
+                // message accumulates in `msg`, which the cap above guards.
+                if (self.recv.items.len > max_message_len + websocket.max_frame_header_len)
+                    return ConnectionError.MessageTooLarge;
+                if (!try self.fill(deadline)) return null; // EOF
+            }
+        }
+
+        /// Whether `deadline` has passed.
+        ///
+        /// Checked after every frame the caller never sees: a ping, a pong, or
+        /// a message the parser could not read. The deadline is otherwise
+        /// noticed only when the socket runs dry, and a relay sending those
+        /// back to back never lets it run dry. What they cost was already
+        /// consumed, so returning here still consumes nothing the caller would
+        /// have seen.
+        fn passed(self: *const Self, deadline: ?std.Io.Clock.Timestamp) bool {
+            const d = deadline orelse return false;
+            const now = std.Io.Clock.Timestamp.now(self.io, d.clock);
+            return now.raw.nanoseconds >= d.raw.nanoseconds;
+        }
+
+        fn sendText(self: *Self, text: []const u8) !void {
+            try self.sendFrame(self.io, .text, text);
+        }
+
+        fn sendFrame(self: *Self, io: std.Io, opcode: websocket.Opcode, payload: []const u8) !void {
+            var frame: std.ArrayList(u8) = .empty;
+            defer frame.deinit(self.allocator);
+            try self.buildFrame(io, &frame, opcode, payload);
+
+            // Uncancelable: a half-written frame is a broken stream, and the
+            // only thing to do after being cancelled here would be to finish
+            // anyway.
+            self.write_lock.lockUncancelable(io);
+            defer self.write_lock.unlock(io);
+            if (self.broken.load(.acquire)) return ConnectionError.Broken;
+            try self.stream.writeAll(frame.items);
+        }
+
+        const WriteOutcome = enum { written, failed, broken, canceled };
+
+        /// `sendFrame` bounded by `timeout`: the write runs as its own task,
+        /// and the caller waits for it until the deadline and cancels it after.
+        /// A cancel is never swallowed: the caller's comes back as
+        /// `error.Canceled`, and the task's own ends the write it was in.
+        fn sendFrameTimeout(self: *Self, opcode: websocket.Opcode, payload: []const u8, timeout: std.Io.Timeout) !void {
+            const io = self.io;
+            const deadline = timeout.toTimestamp(io) orelse return self.sendFrame(io, opcode, payload);
+            var frame: std.ArrayList(u8) = .empty;
+            defer frame.deinit(self.allocator);
+            try self.buildFrame(io, &frame, opcode, payload);
+
+            var done: std.atomic.Value(u32) = .init(0);
+            var task = try io.concurrent(writeFrameTask, .{ self, frame.items, &done });
+            while (done.load(.acquire) == 0) {
+                io.futexWaitTimeout(u32, &done.raw, 0, .{ .deadline = deadline }) catch |err| {
+                    _ = task.cancel(io);
+                    return err;
+                };
+                if (done.load(.acquire) == 0 and self.passed(deadline)) {
+                    return switch (task.cancel(io)) {
+                        // Finished in the moment between the check and the cancel.
+                        .written => {},
+                        .broken => ConnectionError.Broken,
+                        .failed, .canceled => error.Timeout,
+                    };
+                }
+            }
+            return switch (task.await(io)) {
+                .written => {},
+                .broken => ConnectionError.Broken,
+                .failed, .canceled => error.WriteFailed,
+            };
+        }
+
+        /// The write `sendFrameTimeout` runs as a task. Takes the lock in a way
+        /// a cancel can end, so a write queued behind a stuck one can be given
+        /// up without having sent anything. Once it has started writing, any
+        /// failure, a cancel included, may have left part of the frame on the
+        /// wire, so it marks the connection broken.
+        fn writeFrameTask(self: *Self, frame: []const u8, done: *std.atomic.Value(u32)) WriteOutcome {
+            defer {
+                done.store(1, .release);
+                self.io.futexWake(u32, &done.raw, 1);
+            }
+            self.write_lock.lock(self.io) catch return .canceled;
+            defer self.write_lock.unlock(self.io);
+            if (self.broken.load(.acquire)) return .broken;
+            self.stream.writeAll(frame) catch {
+                self.broken.store(true, .release);
+                return .failed;
+            };
+            return .written;
+        }
+
+        fn buildFrame(self: *Self, io: std.Io, frame: *std.ArrayList(u8), opcode: websocket.Opcode, payload: []const u8) !void {
+            var mask: [4]u8 = undefined;
+            // A cancel is not a failure to find entropy. On Linux the read of
+            // entropy is a point where a cancel lands, and reported as
+            // RandomFailed it would reach a cancelled caller as a write error.
+            io.randomSecure(&mask) catch |err| switch (err) {
+                error.Canceled => |e| return e,
+                error.EntropyUnavailable => return ConnectionError.RandomFailed,
+            };
+            try websocket.appendClientFrame(frame, self.allocator, opcode, payload, mask);
+        }
+
+        /// Answers a ping with a pong.
+        ///
+        /// With no deadline this is an ordinary write. With one, the pong must
+        /// not become the thing that holds the call past it. A relay that has
+        /// stopped reading fills the socket, and a pong written into a full
+        /// socket waits for room that never comes, holding the write lock the
+        /// whole time. So the pong is skipped when another write holds the
+        /// lock, or when the socket has no room before the deadline. Skipping
+        /// one is harmless: a peer that is not reading would not read it, and
+        /// RFC 6455 lets an endpoint answer only the latest of several pings.
+        fn answerPing(self: *Self, payload: []const u8, deadline: ?std.Io.Clock.Timestamp) !void {
+            const d = deadline orelse return self.sendFrame(self.io, .pong, payload);
+            var frame: std.ArrayList(u8) = .empty;
+            defer frame.deinit(self.allocator);
+            try self.buildFrame(self.io, &frame, .pong, payload);
+            if (!self.write_lock.tryLock()) return;
+            defer self.write_lock.unlock(self.io);
+            if (self.broken.load(.acquire)) return;
+            const StreamType = switch (@typeInfo(Stream)) {
+                .pointer => |ptr| ptr.child,
+                else => Stream,
+            };
+            if (comptime @hasDecl(StreamType, "writableBy")) {
+                if (!self.stream.writableBy(d)) return;
+            }
+            try self.stream.writeAll(frame.items);
+        }
+
+        /// Reads more bytes into `recv`. Returns false on EOF.
+        fn fill(self: *Self, deadline: ?std.Io.Clock.Timestamp) !bool {
+            var tmp: [4096]u8 = undefined;
+            const n = try self.stream.read(&tmp, deadline);
+            if (n == 0) return false;
+            // Every inbound byte, not every message: a pong carries no message
+            // and is exactly the evidence a keepalive is looking for.
+            self.last_rx_ms.store(std.Io.Timestamp.now(self.io, .awake).toMilliseconds(), .monotonic);
+            try self.recv.appendSlice(self.allocator, tmp[0..n]);
+            return true;
+        }
+
+        /// Drops the first `n` bytes of `recv`, keeping the remainder.
+        fn consume(self: *Self, n: usize) void {
+            const remaining = self.recv.items.len - n;
+            std.mem.copyForwards(u8, self.recv.items[0..remaining], self.recv.items[n..]);
+            self.recv.shrinkRetainingCapacity(remaining);
+        }
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Live transport: dialing a real relay over TCP (ws://) or TLS (wss://).
+// ---------------------------------------------------------------------------
+
+const net = std.Io.net;
+const tls = std.crypto.tls;
+const posix = std.posix;
+
+/// Adapts a pair of std `Io.Reader`/`Io.Writer` to the two-method stream
+/// interface `Connection` expects. This is the exact bridge the live dialer
+/// wires a socket (or a TLS session) into, and it is exercised hermetically in
+/// tests by pointing it at in-memory `Io.Reader.fixed` / `Io.Writer.Allocating`.
+pub const IoStream = struct {
+    reader: *std.Io.Reader,
+    writer: *std.Io.Writer,
+    /// For the deadline in `Connection.receiveTimeout`. Null in the hermetic
+    /// tests, which point `reader` at a fixed buffer and never block, so a
+    /// deadline there is simply ignored.
+    io: ?std.Io = null,
+    socket: ?std.Io.net.Socket = null,
+    /// The RAW transport reader under TLS, whose buffer must also be consulted
+    /// before waiting. Null for plain `ws://`, where `reader` already is it.
+    transport_reader: ?*std.Io.Reader = null,
+    /// For TLS, `writer` is the TLS session writer, whose flush only drains
+    /// ciphertext into the *underlying* transport writer's buffer — that
+    /// transport writer must then be flushed too for the bytes to reach the
+    /// socket. Null for plain `ws://`, where `writer` already is the transport.
+    transport_writer: ?*std.Io.Writer = null,
+
+    pub const ReadError = std.Io.Reader.ShortError || error{Timeout};
+
+    pub fn read(self: IoStream, buffer: []u8, deadline: ?std.Io.Clock.Timestamp) ReadError!usize {
+        // Return whatever is already buffered, else exactly ONE underlying
+        // read's worth — like a POSIX `read`, never blocking for more once some
+        // bytes are available.
+        //
+        // This is subtle over TLS and is what stalled `wss://` delivery. The std
+        // reader decrypts one record at a time into its *own* buffer; the greedy
+        // primitives (`readSliceShort`, and `readVec` into a large destination)
+        // keep pulling until that destination is full. So after a full relay
+        // message was received and buffered, `readVec` would drain it into our
+        // buffer and then block on `fillMore` for the *next* record to fill the
+        // rest — withholding the message we already had until unrelated later
+        // traffic (a retry, a ping) happened to arrive. Every NIP-46 request to
+        // a signer stalled behind the following record. (`readSliceShort`, the
+        // original primitive here, was even worse: it blocked the opening
+        // handshake outright.)
+        //
+        // `fillMore` does exactly one underlying read and may add zero bytes
+        // without being end of stream (a partial record, or a TLS record with no
+        // application data), so loop only while nothing is buffered; then hand
+        // back what one read produced. Each message surfaces the moment its
+        // record lands, on both `ws://` and `wss://`.
+        const r = self.reader;
+        while (r.bufferedLen() == 0) {
+            // The deadline, as a READINESS check rather than a read timeout.
+            //
+            // A read timeout cannot be done here at all: `SO_RCVTIMEO` makes the
+            // read return EAGAIN, and this io model treats EAGAIN as a
+            // programmer bug and panics in Debug (and returns a meaningless
+            // `error.Unexpected` in ReleaseFast). See `Relay.shutdown`.
+            //
+            // So peek instead. `MSG_PEEK` consumes nothing, which is what makes
+            // this safe: a deadline that fires leaves the socket, the kernel
+            // buffer, `recv`, `msg` and the TLS record state exactly as they
+            // were, so calling again resumes rather than resyncs. Neither of the
+            // hazards a read timeout would raise, a half-consumed frame or a
+            // half-consumed TLS record, can arise from a wait that reads nothing.
+            //
+            // Gated on BOTH buffers being empty, and that is load-bearing. The
+            // raw fd says nothing about bytes already decrypted into the TLS
+            // reader or already sitting in the transport reader, so peeking
+            // without this check can time out with a complete message in hand.
+            // That is the same class of bug the comment above records.
+            if (deadline) |d| {
+                if (self.io) |io| if (self.socket) |sock| {
+                    const raw_empty = if (self.transport_reader) |tr| tr.bufferedLen() == 0 else true;
+                    if (raw_empty) {
+                        if (comptime builtin.os.tag == .windows) {
+                            // std's Windows receive is a blocking call that never
+                            // looks at the deadline, so the peek below would wait
+                            // for a byte forever. The driver's poll carries its own
+                            // timeout and reads nothing, which keeps the same
+                            // promise. Anything but a timeout falls through to the
+                            // real read, as below, a cancel included.
+                            if (!afd.ready(io, sock.handle, afd.read_events, msUntil(io, d))) return error.Timeout;
+                        } else {
+                            var msgs: [1]std.Io.net.IncomingMessage = .{.init};
+                            var one: [1]u8 = undefined;
+                            const maybe_err, _ = sock.receiveManyTimeout(io, &msgs, &one, .{ .peek = true }, .{ .deadline = d });
+                            // Its own error, never `ReadFailed`. A caller has to be
+                            // able to tell "nothing yet, ask again" from "this
+                            // socket is finished", and they are the same value if
+                            // this collapses them.
+                            //
+                            // Only Timeout is acted on. Every other outcome falls
+                            // through to the real read below, which is the one
+                            // allowed to decide the socket is finished: a readiness
+                            // probe has no business ending a connection.
+                            //
+                            // A cancel falls through too, but re-armed first. The
+                            // peek has taken it, and a task that has taken its
+                            // cancel runs every later call uncancelable, so the
+                            // read below would wait for the relay's next byte and
+                            // the cancel would never land. Re-armed, the read sees
+                            // it at once and fails.
+                            if (maybe_err) |err| switch (err) {
+                                error.Timeout => return error.Timeout,
+                                error.Canceled => io.recancel(),
+                                else => {},
+                            };
+                        }
+                    }
+                };
+            }
+            r.fillMore() catch |err| switch (err) {
+                error.EndOfStream => return 0,
+                error.ReadFailed => return error.ReadFailed,
+            };
+        }
+        const available = r.buffered();
+        const n = @min(available.len, buffer.len);
+        @memcpy(buffer[0..n], available[0..n]);
+        r.toss(n);
+        return n;
+    }
+
+    /// Whether the socket has room for a small write before `deadline`.
+    ///
+    /// A wait for room, not a write, so it changes nothing when it gives up.
+    /// A control frame is far smaller than the kernel's low-water mark, so a
+    /// socket that reports room takes the whole frame without blocking. With
+    /// no socket to ask (the hermetic tests) the answer is yes.
+    pub fn writableBy(self: IoStream, deadline: std.Io.Clock.Timestamp) bool {
+        const io = self.io orelse return true;
+        const sock = self.socket orelse return true;
+        return socketWritable(io, sock.handle, msUntil(io, deadline));
+    }
+
+    pub fn writeAll(self: IoStream, bytes: []const u8) std.Io.Writer.Error!void {
+        try self.writer.writeAll(bytes);
+        try self.writer.flush();
+        if (self.transport_writer) |tw| try tw.flush();
+    }
+};
+
+/// Milliseconds left until `deadline`, rounded up, and 0 once it has passed.
+fn msUntil(io: std.Io, deadline: std.Io.Clock.Timestamp) i32 {
+    const left = deadline.raw.nanoseconds - std.Io.Clock.Timestamp.now(io, deadline.clock).raw.nanoseconds;
+    return if (left <= 0) 0 else @intCast(@min(@divFloor(left + std.time.ns_per_ms - 1, std.time.ns_per_ms), std.math.maxInt(i32)));
+}
+
+/// Whether `handle` can take a write within `ms` milliseconds. A failed wait
+/// answers yes: the write that follows reports the real error.
+fn socketWritable(io: std.Io, handle: net.Socket.Handle, ms: i32) bool {
+    if (comptime builtin.os.tag == .windows) return afd.ready(io, handle, afd.write_events, ms);
+    var fds = [_]posix.pollfd{.{ .fd = handle, .events = posix.POLL.OUT, .revents = 0 }};
+    const ready = posix.poll(&fds, ms) catch return true;
+    return ready > 0;
+}
+
+/// The waits for bytes and for write room on Windows. Only referenced on
+/// Windows targets.
+///
+/// std's Windows io opens a socket as an endpoint of the AFD driver itself and
+/// never registers it with Winsock, so a Winsock call such as `WSAPoll` would be
+/// handed a handle Winsock has no record of. The driver's own poll request is
+/// what Winsock's `select` is built on, and it takes the handle std holds. It
+/// goes through `io` the same way std sends its writes, so a cancel reaches it.
+const afd = struct {
+    const windows = std.os.windows;
+
+    // AFD_POLL_* event bits. RECEIVE is bytes to read and SEND is room to
+    // write; the rest end the connection, and the read or write that follows
+    // reports them.
+    const poll_receive: u32 = 0x0001;
+    const poll_send: u32 = 0x0004;
+    const poll_disconnect: u32 = 0x0008;
+    const poll_abort: u32 = 0x0010;
+    const poll_local_close: u32 = 0x0020;
+    const poll_connect_fail: u32 = 0x0100;
+
+    const ending = poll_disconnect | poll_abort | poll_local_close | poll_connect_fail;
+    const read_events = poll_receive | ending;
+    const write_events = poll_send | ending;
+
+    const HandleInfo = extern struct {
+        handle: windows.HANDLE,
+        events: u32,
+        status: windows.NTSTATUS,
+    };
+
+    /// AFD_POLL_INFO with room for one handle. The driver reads it as the
+    /// request and writes it back with the handles that fired.
+    const PollInfo = extern struct {
+        /// In 100 ns units; negative is relative to now.
+        timeout: i64,
+        count: u32,
+        exclusive: u32,
+        handles: [1]HandleInfo,
+    };
+
+    /// Whether one of `events` fires on `handle` within `ms` milliseconds. A
+    /// failed or cancelled wait answers yes: the read or write that follows
+    /// reports the real error, or the cancel.
+    fn ready(io: std.Io, handle: net.Socket.Handle, events: u32, ms: i32) bool {
+        comptime std.debug.assert(@as(u32, @bitCast(windows.IOCTL.AFD.POLL)) == 0x12024);
+        var info: PollInfo = .{
+            .timeout = -@as(i64, ms) * 10_000,
+            .count = 1,
+            .exclusive = 0,
+            .handles = .{.{
+                .handle = handle,
+                .events = events,
+                .status = .SUCCESS,
+            }},
+        };
+        const bytes = std.mem.asBytes(&info);
+        const result = io.operate(.{ .device_io_control = .{
+            .file = .{ .handle = handle, .flags = .{ .nonblocking = true } },
+            .code = windows.IOCTL.AFD.POLL,
+            .in = bytes,
+            .out = bytes,
+        } }) catch |err| switch (err) {
+            // Re-armed, and answered yes, so the read or write that follows is
+            // the call that sees the cancel and fails. Answering no turned a
+            // cancelled read into `error.Timeout`, and a reader that asks again
+            // on a timeout came straight back here, where the re-armed cancel
+            // ended the wait at once: a loop at full CPU that the cancel never
+            // got out of. A write sees it the same way, so a pong never waits
+            // for room once its caller is cancelled.
+            error.Canceled => {
+                io.recancel();
+                return true;
+            },
+        };
+        return switch (result.device_io_control.u.Status) {
+            .SUCCESS, .TIMEOUT => info.count != 0,
+            else => true,
+        };
+    }
+};
+
+/// A `Connection` over a live socket/TLS stream.
+pub const LiveConnection = Connection(IoStream);
+
+const TlsState = struct {
+    client: tls.Client,
+    read_buffer: []u8,
+    write_buffer: []u8,
+};
+
+/// Owns the byte-stream plumbing behind a live relay connection. The std
+/// `Io.Reader`/`Io.Writer` chain is pointer-linked (its vtables recover their
+/// parent with `@fieldParentPtr`), so this is heap-allocated by `dial` and
+/// never moved: `Connection`'s `IoStream` holds pointers into these fields.
+const Transport = struct {
+    tcp: net.Stream,
+    tcp_reader: net.Stream.Reader,
+    tcp_writer: net.Stream.Writer,
+    tcp_read_buffer: []u8,
+    tcp_write_buffer: []u8,
+    tls_state: ?*TlsState,
+
+    fn deinit(self: *Transport, gpa: std.mem.Allocator, io: std.Io) void {
+        if (self.tls_state) |ts| {
+            gpa.free(ts.read_buffer);
+            gpa.free(ts.write_buffer);
+            gpa.destroy(ts);
+        }
+        self.tcp.close(io);
+        gpa.free(self.tcp_read_buffer);
+        gpa.free(self.tcp_write_buffer);
+    }
+};
+
+/// A live connection to a Nostr relay. Create with `dial`; free with `deinit`.
+/// The publish/subscribe/receive methods forward to the underlying
+/// `Connection` (see its docs for semantics).
+pub const Relay = struct {
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    transport: *Transport,
+    conn: LiveConnection,
+
+    pub fn publish(self: *Relay, ev: Event) !void {
+        return self.conn.publish(ev);
+    }
+    /// `publish` with a deadline. See `Connection.publishTimeout`.
+    pub fn publishTimeout(self: *Relay, ev: Event, timeout: std.Io.Timeout) !void {
+        return self.conn.publishTimeout(ev, timeout);
+    }
+    pub fn subscribe(self: *Relay, subscription_id: []const u8, filters: []const Filter) !void {
+        return self.conn.subscribe(subscription_id, filters);
+    }
+    pub fn unsubscribe(self: *Relay, subscription_id: []const u8) !void {
+        return self.conn.unsubscribe(subscription_id);
+    }
+    pub fn authenticate(self: *Relay, ev: Event) !void {
+        return self.conn.authenticate(ev);
+    }
+    pub fn count(self: *Relay, subscription_id: []const u8, filters: []const Filter) !void {
+        return self.conn.count(subscription_id, filters);
+    }
+    pub fn negOpen(self: *Relay, subscription_id: []const u8, filter: Filter, initial_hex: []const u8) !void {
+        return self.conn.negOpen(subscription_id, filter, initial_hex);
+    }
+    pub fn negMsg(self: *Relay, subscription_id: []const u8, msg_hex: []const u8) !void {
+        return self.conn.negMsg(subscription_id, msg_hex);
+    }
+    pub fn negClose(self: *Relay, subscription_id: []const u8) !void {
+        return self.conn.negClose(subscription_id);
+    }
+    pub fn receive(self: *Relay) !?message.ParsedRelayMessage {
+        return self.conn.receive();
+    }
+
+    /// How many messages this connection skipped because the parser could not
+    /// read them. See `Connection.unreadable`.
+    pub fn unreadable(self: *const Relay) u64 {
+        return self.conn.unreadable;
+    }
+
+    /// `receive` with a deadline. See `Connection.receiveTimeout`: returns
+    /// `error.Timeout` rather than null, and consumes nothing when it does, so
+    /// the caller can do its housekeeping and ask again on the same socket.
+    ///
+    /// This is what a reader needs in order to notice that the pool changed
+    /// under it. Without it the only lever over a blocked reader is
+    /// `shutdown`, which is a teardown: over TLS it leaves the session
+    /// poisoned with `TlsConnectionTruncated`, so it cannot be used to pause
+    /// one subscription on a socket that is still serving others.
+    pub fn receiveTimeout(self: *Relay, timeout: std.Io.Timeout) !?message.ParsedRelayMessage {
+        return self.conn.receiveTimeout(timeout);
+    }
+
+    /// Sends a keepalive ping. See `Connection.ping`; `io` is the calling
+    /// thread's, because the caller is not the thread inside `receive`.
+    pub fn ping(self: *Relay, io: std.Io) !void {
+        return self.conn.ping(io);
+    }
+
+    /// Milliseconds since this connection last had a byte from the relay, or
+    /// null before the first one.
+    pub fn idleMs(self: *const Relay, io: std.Io) ?i64 {
+        return self.conn.idleMs(io);
+    }
+
+    /// Half-closes the socket, so a `receive` blocked on another thread returns
+    /// instead of waiting on a peer that is never going to answer.
+    ///
+    /// Deliberately NOT `deinit`. The reader still owns this `Relay` and has to
+    /// unwind through its own error path; freeing the transport from a second
+    /// thread would pull the buffers out from under a blocked read.
+    ///
+    /// Deliberately not a socket receive timeout either. `SO_RCVTIMEO` makes the
+    /// read return EAGAIN, and this io model treats EAGAIN as a programmer bug
+    /// and panics, so a stalled relay would become a crash. That was tried, in
+    /// the signer, and it passed every test before failing on the first real
+    /// wedged connection.
+    pub fn shutdown(self: *Relay, io: std.Io) void {
+        self.transport.tcp.shutdown(io, .both) catch {};
+    }
+
+    /// Frees everything `dial` allocated, INCLUDING this `Relay`. The pointer
+    /// is invalid afterwards.
+    ///
+    /// It did not free the `Relay` itself, so every dial leaked the struct and
+    /// no caller could tell: `dial` hands back a pointer and says "free with
+    /// `deinit`", so nobody was destroying it either. A client that reconnects
+    /// on every dropped socket leaked one per reconnect, forever.
+    pub fn deinit(self: *Relay) void {
+        self.conn.close() catch {};
+        self.conn.deinit();
+        self.transport.deinit(self.gpa, self.io);
+        const gpa = self.gpa;
+        const transport = self.transport;
+        self.* = undefined;
+        gpa.destroy(transport);
+        gpa.destroy(self);
+    }
+};
+
+/// Resolves `host` with the system resolver and connects a TCP stream to
+/// `port`, trying each returned address until one connects.
+///
+/// On POSIX this is libc `getaddrinfo`, and we deliberately bypass std's
+/// built-in DNS resolver (`net.HostName.connect`): it reads nameservers from
+/// `/etc/resolv.conf`, but on macOS that file is empty (name resolution is
+/// handled by the system configuration framework, not resolv.conf), so std
+/// falls back to querying `127.0.0.1:53`, where nothing is listening, and a
+/// hostname lookup hangs indefinitely. `getaddrinfo` uses the OS resolver and
+/// works on both macOS and Linux. It needs libc, which the library already
+/// links for libsecp256k1 and LMDB. A numeric host (an IP literal) resolves
+/// through the same path.
+///
+/// Windows has no `getaddrinfo` in std's declarations, and std's own resolver
+/// there asks the OS (DnsQueryEx) rather than a resolv.conf, so the macOS
+/// problem does not exist and `net.HostName.connect` is used. An IP literal is
+/// parsed first, since a host name must be a valid DNS name and `::1` is not.
+fn resolveAndConnect(gpa: std.mem.Allocator, io: std.Io, host: []const u8, port: u16) !net.Stream {
+    if (comptime builtin.os.tag == .windows) {
+        if (net.IpAddress.parse(host, port)) |address| {
+            return address.connect(io, .{ .mode = .stream });
+        } else |_| {}
+        const name = net.HostName.init(host) catch return error.NameResolutionFailed;
+        return name.connect(io, port, .{ .mode = .stream }) catch |err| switch (err) {
+            error.UnknownHostName, error.NameServerFailure, error.NoAddressReturned => error.NameResolutionFailed,
+            else => err,
+        };
+    }
+    return resolveAndConnectLibc(gpa, io, host, port);
+}
+
+fn resolveAndConnectLibc(gpa: std.mem.Allocator, io: std.Io, host: []const u8, port: u16) !net.Stream {
+    const host_z = try gpa.dupeZ(u8, host);
+    defer gpa.free(host_z);
+
+    // Stream sockets only. With no hints the resolver lists every address once
+    // per socket type, so each address was tried twice, and a connect that hung
+    // hung twice.
+    var hints = std.mem.zeroes(std.c.addrinfo);
+    hints.socktype = posix.SOCK.STREAM;
+    var res: ?*std.c.addrinfo = null;
+    if (@intFromEnum(std.c.getaddrinfo(host_z.ptr, null, &hints, &res)) != 0)
+        return error.NameResolutionFailed;
+    const list = res orelse return error.NameResolutionFailed;
+    defer std.c.freeaddrinfo(list);
+
+    var last_err: anyerror = error.NameResolutionFailed;
+    var node: ?*std.c.addrinfo = list;
+    while (node) |ai| : (node = ai.next) {
+        const raw = ai.addr orelse continue;
+        const address: net.IpAddress = switch (@as(posix.sa_family_t, @intCast(ai.family))) {
+            posix.AF.INET => .{ .ip4 = .{
+                .port = port,
+                .bytes = @bitCast(@as(*const posix.sockaddr.in, @ptrCast(@alignCast(raw))).addr),
+            } },
+            posix.AF.INET6 => .{ .ip6 = .{
+                .port = port,
+                .bytes = @as(*const posix.sockaddr.in6, @ptrCast(@alignCast(raw))).addr,
+            } },
+            else => continue,
+        };
+        return address.connect(io, .{ .mode = .stream }) catch |err| switch (err) {
+            // A caller that gave up on this dial meant all of it. Trying the
+            // next address would start a connect the cancellation can no
+            // longer reach, and it would run to its own timeout.
+            error.Canceled => return error.Canceled,
+            else => {
+                last_err = err;
+                continue;
+            },
+        };
+    }
+    return last_err;
+}
+
+/// Connects to the relay at `url` (`ws://` or `wss://`), performing the TCP
+/// connect, the TLS handshake for `wss://` (verifying the server certificate
+/// against the system CA bundle), and the websocket opening handshake. Returns
+/// a ready `Relay`. The caller owns it and must `deinit`.
+///
+/// Takes no deadline. To bound it, run it with `io.concurrent` and cancel it
+/// when the deadline passes: a cancelled dial stops where it is and frees what
+/// it allocated. The name lookup is the one step a cancel cannot cut short. On
+/// POSIX it is a plain libc call, and on Windows std waits for the OS query to
+/// finish before it reports the cancel.
+///
+/// Not covered by CI against a public relay (none is reachable there); the
+/// transport-agnostic `Connection` and the `IoStream` adapter it uses are what
+/// the tests exercise, along with a loopback server for the upgrade.
+///
+/// A relay that answers the upgrade with anything but 101 fails with
+/// `ConnectionError.HandshakeFailed`. Use `dialDiagnosed` to learn the status.
+pub fn dial(gpa: std.mem.Allocator, io: std.Io, url: []const u8) !*Relay {
+    var diagnostic: DialDiagnostic = .{};
+    return dialDiagnosed(gpa, io, url, &diagnostic);
+}
+
+/// What a failed `dial` can say beyond its error.
+pub const DialDiagnostic = struct {
+    /// The HTTP status the relay answered the websocket upgrade with, or zero
+    /// when it never got that far (a name that did not resolve, a refused
+    /// connection, a TLS failure) or sent no readable status line. Meaningful
+    /// after `HandshakeFailed`: 503 when the relay is busy, 401 or 403 when it
+    /// requires authentication, 429 when it is rate limiting.
+    status: u16 = 0,
+};
+
+/// `dial`, which also records in `diagnostic` what the relay answered the
+/// upgrade with. The error set is the same, so a caller that only wants "relay
+/// answered 503" for a `HandshakeFailed` reads `diagnostic.status`.
+pub fn dialDiagnosed(gpa: std.mem.Allocator, io: std.Io, url: []const u8, diagnostic: *DialDiagnostic) !*Relay {
+    diagnostic.* = .{};
+    const parsed = try parseUrl(url);
+    const tcp = try resolveAndConnect(gpa, io, parsed.host, parsed.port);
+    return upgrade(gpa, io, parsed, tcp, diagnostic);
+}
+
+/// `dial` over a TCP stream the caller already connected, for example one
+/// tunnelled through an HTTP CONNECT or SOCKS5 proxy to the relay's host and
+/// port. Everything after the connect is the same as `dial`: the TLS handshake
+/// for `wss://`, using the host in `url` for SNI and to verify the
+/// certificate, then the websocket upgrade. `ws://` skips TLS.
+///
+/// Takes ownership of `tcp`. It is closed on every error, including a `url`
+/// that does not parse, and by `Relay.deinit` after a success.
+///
+/// Like `dial`, it takes no deadline. To bound it, run it with `io.concurrent`
+/// and cancel it: the cancel ends a TLS handshake or an upgrade the peer never
+/// answers, closes `tcp` and frees what the dial allocated. There is no name
+/// lookup here, so nothing in it outlasts a cancel.
+pub fn dialOver(gpa: std.mem.Allocator, io: std.Io, url: []const u8, tcp: net.Stream) !*Relay {
+    var diagnostic: DialDiagnostic = .{};
+    return dialOverDiagnosed(gpa, io, url, tcp, &diagnostic);
+}
+
+/// `dialOver`, which also records in `diagnostic` what the relay answered the
+/// upgrade with, as `dialDiagnosed` does.
+pub fn dialOverDiagnosed(gpa: std.mem.Allocator, io: std.Io, url: []const u8, tcp: net.Stream, diagnostic: *DialDiagnostic) !*Relay {
+    diagnostic.* = .{};
+    const parsed = parseUrl(url) catch |err| {
+        tcp.close(io);
+        return err;
+    };
+    return upgrade(gpa, io, parsed, tcp, diagnostic);
+}
+
+/// Everything a dial does once it has a connected stream: TLS for `wss://`,
+/// then the websocket upgrade. Owns `tcp` from the first line, so every error
+/// closes it.
+fn upgrade(gpa: std.mem.Allocator, io: std.Io, parsed: Url, tcp: net.Stream, diagnostic: *DialDiagnostic) !*Relay {
+    errdefer tcp.close(io);
+
+    const transport = try gpa.create(Transport);
+    errdefer gpa.destroy(transport);
+    transport.tls_state = null;
+    transport.tcp = tcp;
+
+    transport.tcp_read_buffer = try gpa.alloc(u8, 64 * 1024);
+    errdefer gpa.free(transport.tcp_read_buffer);
+    transport.tcp_write_buffer = try gpa.alloc(u8, 64 * 1024);
+    errdefer gpa.free(transport.tcp_write_buffer);
+
+    transport.tcp_reader = transport.tcp.reader(io, transport.tcp_read_buffer);
+    transport.tcp_writer = transport.tcp.writer(io, transport.tcp_write_buffer);
+
+    const stream: IoStream = if (parsed.secure) blk: {
+        const ts = try gpa.create(TlsState);
+        errdefer gpa.destroy(ts);
+        ts.read_buffer = try gpa.alloc(u8, 64 * 1024);
+        errdefer gpa.free(ts.read_buffer);
+        ts.write_buffer = try gpa.alloc(u8, 64 * 1024);
+        errdefer gpa.free(ts.write_buffer);
+
+        var ca_bundle: std.crypto.Certificate.Bundle = .empty;
+        defer ca_bundle.deinit(gpa);
+        var ca_lock: std.Io.RwLock = .init;
+        try ca_bundle.rescan(gpa, io, std.Io.Timestamp.now(io, .real));
+
+        var entropy: [tls.Client.Options.entropy_len]u8 = undefined;
+        io.randomSecure(&entropy) catch |err| switch (err) {
+            error.Canceled => |e| return e,
+            error.EntropyUnavailable => return error.RandomFailed,
+        };
+
+        ts.client = try tls.Client.init(
+            &transport.tcp_reader.interface,
+            &transport.tcp_writer.interface,
+            .{
+                .host = .{ .explicit = parsed.host },
+                .ca = .{ .bundle = .{ .gpa = gpa, .io = io, .lock = &ca_lock, .bundle = &ca_bundle } },
+                .read_buffer = ts.read_buffer,
+                .write_buffer = ts.write_buffer,
+                .entropy = &entropy,
+                .realtime_now = std.Io.Timestamp.now(io, .real),
+            },
+        );
+        transport.tls_state = ts;
+        break :blk .{
+            .reader = &ts.client.reader,
+            .writer = &ts.client.writer,
+            .transport_writer = &transport.tcp_writer.interface,
+            // The deadline's readiness probe needs the raw socket, and needs to
+            // consult the RAW reader as well as the TLS one: bytes already
+            // decrypted, or already sitting in the transport buffer, are a
+            // message in hand that the fd knows nothing about.
+            .io = io,
+            .socket = transport.tcp.socket,
+            .transport_reader = &transport.tcp_reader.interface,
+        };
+    } else .{
+        .reader = &transport.tcp_reader.interface,
+        .writer = &transport.tcp_writer.interface,
+        .io = io,
+        .socket = transport.tcp.socket,
+        // No TLS layer, so `reader` already IS the transport reader and the
+        // loop's own `bufferedLen` check covers it.
+    };
+    // The TLS state outlives the block that made it, so its errdefers are gone
+    // by now. A wss dial that got through TLS and then failed the websocket
+    // upgrade, or was cancelled waiting for it, leaked all of it.
+    errdefer if (transport.tls_state) |ts| {
+        gpa.free(ts.read_buffer);
+        gpa.free(ts.write_buffer);
+        gpa.destroy(ts);
+    };
+
+    const relay = try gpa.create(Relay);
+    errdefer gpa.destroy(relay);
+    relay.* = .{
+        .gpa = gpa,
+        .io = io,
+        .transport = transport,
+        .conn = LiveConnection.init(gpa, io, stream),
+    };
+    errdefer relay.conn.deinit();
+
+    var host_buf: [263]u8 = undefined; // max host (253) + ":65535"
+    relay.conn.handshake(parsed.hostHeader(&host_buf), parsed.path) catch |err| {
+        diagnostic.status = relay.conn.handshake_status;
+        return err;
+    };
+    return relay;
+}
+
+// ---------------------------------------------------------------------------
+// Tests — an in-memory fake stream drives the connection end to end.
+// ---------------------------------------------------------------------------
+
+const FakeStream = struct {
+    /// Scripted server->client bytes.
+    to_read: []const u8,
+    read_pos: usize = 0,
+    /// Captured client->server bytes.
+    written: *std.ArrayList(u8),
+    allocator: std.mem.Allocator,
+    /// Whether the peer is taking what is written. False stands in for a
+    /// relay that has stopped reading.
+    room: bool = true,
+
+    fn read(self: *FakeStream, buffer: []u8, deadline: ?std.Io.Clock.Timestamp) error{}!usize {
+        // Never blocks, so a deadline is meaningless here.
+        _ = deadline;
+        const remaining = self.to_read[self.read_pos..];
+        const n = @min(buffer.len, remaining.len);
+        @memcpy(buffer[0..n], remaining[0..n]);
+        self.read_pos += n;
+        return n;
+    }
+
+    fn writableBy(self: *FakeStream, deadline: std.Io.Clock.Timestamp) bool {
+        _ = deadline;
+        return self.room;
+    }
+
+    fn writeAll(self: *FakeStream, bytes: []const u8) !void {
+        try self.written.appendSlice(self.allocator, bytes);
+    }
+};
+
+const TestConn = Connection(*FakeStream);
+
+/// Builds an unmasked server text frame (as a relay would send).
+fn serverText(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
+    var list: std.ArrayList(u8) = .empty;
+    errdefer list.deinit(allocator);
+    try list.append(allocator, 0x81); // FIN + text
+    std.debug.assert(text.len <= 125); // test payloads stay small
+    try list.append(allocator, @intCast(text.len));
+    try list.appendSlice(allocator, text);
+    return list.toOwnedSlice(allocator);
+}
+
+/// Decodes the single client frame the connection wrote, returning its
+/// (unmasked) text payload in `out`.
+fn onlyWrittenText(allocator: std.mem.Allocator, written: []u8) ![]u8 {
+    const frame = (try websocket.decodeFrame(written)).?;
+    return allocator.dupe(u8, frame.payload);
+}
+
+/// A fake stream that answers the client's handshake correctly: on the first
+/// read it inspects the request the client wrote, derives the matching
+/// `Sec-WebSocket-Accept` from the client's (random) key, and returns a 101
+/// response followed by `trailer` frames. This exercises the real success
+/// path without hardcoding the RNG-dependent key.
+const HandshakeStream = struct {
+    written: *std.ArrayList(u8),
+    allocator: std.mem.Allocator,
+    trailer: []const u8 = "",
+    /// If set, deliberately corrupt the accept value to force a failure.
+    break_accept: bool = false,
+    response: std.ArrayList(u8) = .empty,
+    pos: usize = 0,
+    built: bool = false,
+
+    fn deinit(self: *HandshakeStream) void {
+        self.response.deinit(self.allocator);
+    }
+
+    fn writeAll(self: *HandshakeStream, bytes: []const u8) !void {
+        try self.written.appendSlice(self.allocator, bytes);
+    }
+
+    fn read(self: *HandshakeStream, buffer: []u8, deadline: ?std.Io.Clock.Timestamp) !usize {
+        _ = deadline;
+        if (!self.built) {
+            const req = self.written.items;
+            const prefix = "Sec-WebSocket-Key: ";
+            const kstart = (std.mem.indexOf(u8, req, prefix) orelse return error.NoKey) + prefix.len;
+            const kend = std.mem.indexOfPos(u8, req, kstart, "\r\n") orelse return error.NoKey;
+            var accept = websocket.acceptKey(req[kstart..kend]);
+            if (self.break_accept) accept[0] = if (accept[0] == 'A') 'B' else 'A';
+            try self.response.appendSlice(self.allocator, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ");
+            try self.response.appendSlice(self.allocator, &accept);
+            try self.response.appendSlice(self.allocator, "\r\n\r\n");
+            try self.response.appendSlice(self.allocator, self.trailer);
+            self.built = true;
+        }
+        const remaining = self.response.items[self.pos..];
+        const n = @min(buffer.len, remaining.len);
+        @memcpy(buffer[0..n], remaining[0..n]);
+        self.pos += n;
+        return n;
+    }
+};
+
+test "handshake succeeds and leaves trailing frames for receive" {
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+
+    const notice = try serverText(allocator, "[\"NOTICE\",\"hi\"]");
+    defer allocator.free(notice);
+
+    var server = HandshakeStream{ .written = &written, .allocator = allocator, .trailer = notice };
+    defer server.deinit();
+    var conn = Connection(*HandshakeStream).init(allocator, std.testing.io, &server);
+    defer conn.deinit();
+
+    try conn.handshake("relay.example.com", "/");
+
+    // The request the client sent must be a well-formed upgrade.
+    try std.testing.expect(std.mem.startsWith(u8, written.items, "GET / HTTP/1.1\r\n"));
+    try std.testing.expect(std.mem.indexOf(u8, written.items, "Host: relay.example.com\r\n") != null);
+
+    // The frame that followed the response head must be readable.
+    var m = (try conn.receive()).?;
+    defer m.deinit();
+    try std.testing.expectEqualStrings("hi", m.value.notice.message);
+}
+
+test "handshake fails on a mismatched accept" {
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+    var server = HandshakeStream{ .written = &written, .allocator = allocator, .break_accept = true };
+    defer server.deinit();
+    var conn = Connection(*HandshakeStream).init(allocator, std.testing.io, &server);
+    defer conn.deinit();
+    try std.testing.expectError(ConnectionError.HandshakeFailed, conn.handshake("relay.example.com", "/"));
+}
+
+test "a handshake refused with a status says which one" {
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+    var server = FakeStream{
+        .to_read = "HTTP/1.1 503 Service Unavailable\r\nRetry-After: 5\r\nContent-Length: 0\r\n\r\n",
+        .written = &written,
+        .allocator = allocator,
+    };
+    var conn = TestConn.init(allocator, std.testing.io, &server);
+    defer conn.deinit();
+    try std.testing.expectError(ConnectionError.HandshakeFailed, conn.handshake("relay.example.com", "/"));
+    try std.testing.expectEqual(@as(u16, 503), conn.handshake_status);
+}
+
+test "a status line followed by a close still reports the status" {
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+    var server = FakeStream{ .to_read = "HTTP/1.1 429 Too Many Requests\r\n", .written = &written, .allocator = allocator };
+    var conn = TestConn.init(allocator, std.testing.io, &server);
+    defer conn.deinit();
+    try std.testing.expectError(ConnectionError.HandshakeFailed, conn.handshake("relay.example.com", "/"));
+    try std.testing.expectEqual(@as(u16, 429), conn.handshake_status);
+}
+
+test "a mismatched accept still reports the 101" {
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+    var server = HandshakeStream{ .written = &written, .allocator = allocator, .break_accept = true };
+    defer server.deinit();
+    var conn = Connection(*HandshakeStream).init(allocator, std.testing.io, &server);
+    defer conn.deinit();
+    try std.testing.expectError(ConnectionError.HandshakeFailed, conn.handshake("relay.example.com", "/"));
+    try std.testing.expectEqual(@as(u16, 101), conn.handshake_status);
+}
+
+test "publish/subscribe/unsubscribe write correct client frames" {
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+    var server = FakeStream{ .to_read = "", .written = &written, .allocator = allocator };
+    var conn = TestConn.init(allocator, std.testing.io, &server);
+    defer conn.deinit();
+
+    // subscribe
+    const authors = [_][32]u8{[_]u8{0xab} ** 32};
+    const kinds = [_]u16{1};
+    try conn.subscribe("s1", &[_]Filter{.{ .authors = &authors, .kinds = &kinds }});
+    {
+        const text = try onlyWrittenText(allocator, written.items);
+        defer allocator.free(text);
+        try std.testing.expect(std.mem.startsWith(u8, text, "[\"REQ\",\"s1\",{"));
+    }
+
+    // unsubscribe
+    written.clearRetainingCapacity();
+    try conn.unsubscribe("s1");
+    {
+        const text = try onlyWrittenText(allocator, written.items);
+        defer allocator.free(text);
+        try std.testing.expectEqualStrings("[\"CLOSE\",\"s1\"]", text);
+    }
+}
+
+test "count and the negentropy frames go out as one masked text frame each" {
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+    var server = FakeStream{ .to_read = "", .written = &written, .allocator = allocator };
+    var conn = newConn(allocator, &server);
+    defer conn.deinit();
+
+    const cases = .{
+        .{ "[\"COUNT\",\"c1\",{\"kinds\":[1]}]", "count" },
+        .{ "[\"NEG-OPEN\",\"n1\",{\"kinds\":[1]},\"6100\"]", "negOpen" },
+        .{ "[\"NEG-MSG\",\"n1\",\"6101\"]", "negMsg" },
+        .{ "[\"NEG-CLOSE\",\"n1\"]", "negClose" },
+    };
+    inline for (cases) |case| {
+        written.clearRetainingCapacity();
+        const kinds = [_]u16{1};
+        if (comptime std.mem.eql(u8, case[1], "count")) {
+            try conn.count("c1", &.{.{ .kinds = &kinds }});
+        } else if (comptime std.mem.eql(u8, case[1], "negOpen")) {
+            try conn.negOpen("n1", .{ .kinds = &kinds }, "6100");
+        } else if (comptime std.mem.eql(u8, case[1], "negMsg")) {
+            try conn.negMsg("n1", "6101");
+        } else {
+            try conn.negClose("n1");
+        }
+        const text = try onlyWrittenText(allocator, written.items);
+        defer allocator.free(text);
+        try std.testing.expectEqualStrings(case[0], text);
+    }
+
+    // They share the write path, so a broken connection refuses them too.
+    conn.broken.store(true, .release);
+    try std.testing.expectError(ConnectionError.Broken, conn.count("c2", &.{.{}}));
+    try std.testing.expectError(ConnectionError.Broken, conn.negClose("n1"));
+}
+
+fn newConn(
+    allocator: std.mem.Allocator,
+    server: *FakeStream,
+) TestConn {
+    return TestConn.init(allocator, std.testing.io, server);
+}
+
+test "receive parses a scripted EVENT then EOSE" {
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+
+    const ev_json =
+        "[\"EVENT\",\"s1\",{\"id\":\"" ++ "d0a1d13aff1d1725d80305f74a3f8419674d726342773b06ddc6988cc5be3a40" ++
+        "\",\"pubkey\":\"" ++ "f7234bd4c1394dda46d09f35bd384dd30cc552ad5541990f98844fb06676e9ca" ++
+        "\",\"created_at\":1700000000,\"kind\":1,\"tags\":[],\"content\":\"hi\",\"sig\":\"" ++ "ab" ** 64 ++ "\"}]";
+
+    var script: std.ArrayList(u8) = .empty;
+    defer script.deinit(allocator);
+    // Event frame is >125 bytes, so build it with the general encoder (masked
+    // is fine — the decoder unmasks; here we send it unmasked as a server).
+    try appendServerText(&script, allocator, ev_json);
+    try appendServerText(&script, allocator, "[\"EOSE\",\"s1\"]");
+
+    var server = FakeStream{ .to_read = script.items, .written = &written, .allocator = allocator };
+    var conn = newConn(allocator, &server);
+    defer conn.deinit();
+
+    var m1 = (try conn.receive()).?;
+    defer m1.deinit();
+    try std.testing.expectEqualStrings("s1", m1.value.event.subscription_id);
+    try std.testing.expectEqualStrings("hi", m1.value.event.event.content);
+
+    var m2 = (try conn.receive()).?;
+    defer m2.deinit();
+    try std.testing.expectEqualStrings("s1", m2.value.eose.subscription_id);
+
+    // No more data -> EOF.
+    try std.testing.expect((try conn.receive()) == null);
+}
+
+test "a message the parser cannot read costs that message and nothing after it" {
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+
+    var script: std.ArrayList(u8) = .empty;
+    defer script.deinit(allocator);
+    // Not JSON, then a type this parser has no case for, then an EVENT whose
+    // event is malformed, and only then something readable.
+    try appendServerText(&script, allocator, "not json at all");
+    try appendServerText(&script, allocator, "[\"BOGUS\",\"s1\",{\"count\":3}]");
+    try appendServerText(&script, allocator, "[\"EVENT\",\"s1\",{\"id\":\"zz\"}]");
+    try appendServerText(&script, allocator, "[\"NOTICE\",\"still here\"]");
+    try appendServerText(&script, allocator, "[\"EOSE\",\"s1\"]");
+
+    var server = FakeStream{ .to_read = script.items, .written = &written, .allocator = allocator };
+    var conn = newConn(allocator, &server);
+    defer conn.deinit();
+
+    var m1 = (try conn.receive()).?;
+    defer m1.deinit();
+    try std.testing.expectEqualStrings("still here", m1.value.notice.message);
+    try std.testing.expectEqual(@as(u64, 3), conn.unreadable);
+
+    // The skipped bytes are gone, not waiting in front of the next message.
+    var m2 = (try conn.receive()).?;
+    defer m2.deinit();
+    try std.testing.expectEqualStrings("s1", m2.value.eose.subscription_id);
+    try std.testing.expectEqual(@as(u64, 3), conn.unreadable);
+}
+
+test "skipping unreadable messages still stops at the deadline" {
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+
+    var script: std.ArrayList(u8) = .empty;
+    defer script.deinit(allocator);
+    try appendServerText(&script, allocator, "[\"BOGUS\",\"s1\",{\"count\":1}]");
+    try appendServerText(&script, allocator, "[\"BOGUS\",\"s1\",{\"count\":2}]");
+    try appendServerText(&script, allocator, "[\"NOTICE\",\"after\"]");
+
+    var server = FakeStream{ .to_read = script.items, .written = &written, .allocator = allocator };
+    var conn = newConn(allocator, &server);
+    defer conn.deinit();
+
+    // A deadline that has already passed. The socket here never runs dry, so
+    // this is the only place the deadline can be noticed.
+    const now: std.Io.Timeout = .{ .duration = .{ .raw = .fromMilliseconds(0), .clock = .awake } };
+    try std.testing.expectError(error.Timeout, conn.receiveTimeout(now));
+    try std.testing.expectEqual(@as(u64, 1), conn.unreadable);
+
+    // Nothing the caller would have seen was lost.
+    var m = (try conn.receive()).?;
+    defer m.deinit();
+    try std.testing.expectEqualStrings("after", m.value.notice.message);
+    try std.testing.expectEqual(@as(u64, 2), conn.unreadable);
+}
+
+test "pings and pongs arriving back to back still stop at the deadline" {
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+
+    var script: std.ArrayList(u8) = .empty;
+    defer script.deinit(allocator);
+    // Each control frame is directly followed by the frame after it, so a
+    // missing check after either one hands back the next frame instead.
+    try script.appendSlice(allocator, &[_]u8{ 0x8A, 0x00 }); // pong
+    try script.appendSlice(allocator, &[_]u8{ 0x89, 0x01, 'p' }); // ping
+    try appendServerText(&script, allocator, "[\"NOTICE\",\"after\"]");
+
+    var server = FakeStream{ .to_read = script.items, .written = &written, .allocator = allocator };
+    var conn = newConn(allocator, &server);
+    defer conn.deinit();
+
+    // A deadline that has already passed, on a socket that never runs dry.
+    const now: std.Io.Timeout = .{ .duration = .{ .raw = .fromMilliseconds(0), .clock = .awake } };
+    try std.testing.expectError(error.Timeout, conn.receiveTimeout(now)); // after the first pong
+    try std.testing.expectError(error.Timeout, conn.receiveTimeout(now)); // after the ping, answered
+    const pong = (try websocket.decodeFrame(written.items)).?;
+    try std.testing.expectEqual(websocket.Opcode.pong, pong.opcode);
+    try std.testing.expectEqualStrings("p", pong.payload);
+
+    var m = (try conn.receive()).?;
+    defer m.deinit();
+    try std.testing.expectEqualStrings("after", m.value.notice.message);
+}
+
+test "with a deadline, a pong is skipped rather than waited on when the peer has no room" {
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+    var script: std.ArrayList(u8) = .empty;
+    defer script.deinit(allocator);
+    try script.appendSlice(allocator, &[_]u8{ 0x89, 0x01, 'p' }); // ping
+    try appendServerText(&script, allocator, "[\"NOTICE\",\"after\"]");
+
+    // A peer that has stopped reading: a pong written to it would wait for
+    // room that never comes.
+    var server = FakeStream{ .to_read = script.items, .written = &written, .allocator = allocator, .room = false };
+    var conn = newConn(allocator, &server);
+    defer conn.deinit();
+
+    var m = (try conn.receiveTimeout(.{ .duration = .{ .raw = .fromMilliseconds(1000), .clock = .awake } })).?;
+    defer m.deinit();
+    try std.testing.expectEqualStrings("after", m.value.notice.message);
+    try std.testing.expectEqual(@as(usize, 0), written.items.len);
+}
+
+test "with a deadline, a pong is skipped rather than queued behind another write" {
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+    var script: std.ArrayList(u8) = .empty;
+    defer script.deinit(allocator);
+    try script.appendSlice(allocator, &[_]u8{ 0x89, 0x01, 'p' }); // ping
+    try appendServerText(&script, allocator, "[\"NOTICE\",\"after\"]");
+
+    var server = FakeStream{ .to_read = script.items, .written = &written, .allocator = allocator };
+    var conn = newConn(allocator, &server);
+    defer conn.deinit();
+
+    // Another writer holds the lock, as a send stuck on a full socket would.
+    try std.testing.expect(conn.write_lock.tryLock());
+    defer conn.write_lock.unlock(std.testing.io);
+
+    var m = (try conn.receiveTimeout(.{ .duration = .{ .raw = .fromMilliseconds(1000), .clock = .awake } })).?;
+    defer m.deinit();
+    try std.testing.expectEqualStrings("after", m.value.notice.message);
+    try std.testing.expectEqual(@as(usize, 0), written.items.len);
+}
+
+test "with a deadline and room to write, a ping is still answered" {
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+    var script: std.ArrayList(u8) = .empty;
+    defer script.deinit(allocator);
+    try script.appendSlice(allocator, &[_]u8{ 0x89, 0x02, 'p', 'q' }); // ping
+    try appendServerText(&script, allocator, "[\"NOTICE\",\"after\"]");
+
+    var server = FakeStream{ .to_read = script.items, .written = &written, .allocator = allocator };
+    var conn = newConn(allocator, &server);
+    defer conn.deinit();
+
+    var m = (try conn.receiveTimeout(.{ .duration = .{ .raw = .fromMilliseconds(1000), .clock = .awake } })).?;
+    defer m.deinit();
+    const pong = (try websocket.decodeFrame(written.items)).?;
+    try std.testing.expectEqual(websocket.Opcode.pong, pong.opcode);
+    try std.testing.expectEqualStrings("pq", pong.payload);
+}
+
+test "receive answers a ping with a pong and continues" {
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+
+    var script: std.ArrayList(u8) = .empty;
+    defer script.deinit(allocator);
+    // ping "pq" (unmasked server frame), then a NOTICE.
+    try script.appendSlice(allocator, &[_]u8{ 0x89, 0x02, 'p', 'q' });
+    try appendServerText(&script, allocator, "[\"NOTICE\",\"ok\"]");
+
+    var server = FakeStream{ .to_read = script.items, .written = &written, .allocator = allocator };
+    var conn = newConn(allocator, &server);
+    defer conn.deinit();
+
+    var m = (try conn.receive()).?;
+    defer m.deinit();
+    try std.testing.expectEqualStrings("ok", m.value.notice.message);
+
+    // The connection must have written a pong echoing "pq".
+    const pong = (try websocket.decodeFrame(written.items)).?;
+    try std.testing.expectEqual(websocket.Opcode.pong, pong.opcode);
+    try std.testing.expectEqualStrings("pq", pong.payload);
+}
+
+test "receive reassembles a fragmented text message" {
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+
+    // "[\"NOTICE\",\"ab\"]" split: first fragment text (FIN=0), then
+    // continuation (FIN=1).
+    const full = "[\"NOTICE\",\"ab\"]";
+    const cut = 6;
+    var script: std.ArrayList(u8) = .empty;
+    defer script.deinit(allocator);
+    // fragment 1: opcode text (0x01), FIN=0
+    try script.appendSlice(allocator, &[_]u8{ 0x01, @intCast(cut) });
+    try script.appendSlice(allocator, full[0..cut]);
+    // fragment 2: opcode continuation (0x00), FIN=1
+    try script.appendSlice(allocator, &[_]u8{ 0x80, @intCast(full.len - cut) });
+    try script.appendSlice(allocator, full[cut..]);
+
+    var server = FakeStream{ .to_read = script.items, .written = &written, .allocator = allocator };
+    var conn = newConn(allocator, &server);
+    defer conn.deinit();
+
+    var m = (try conn.receive()).?;
+    defer m.deinit();
+    try std.testing.expectEqualStrings("ab", m.value.notice.message);
+}
+
+test "receive returns null on a close frame" {
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+    var server = FakeStream{ .to_read = &[_]u8{ 0x88, 0x00 }, .written = &written, .allocator = allocator };
+    var conn = newConn(allocator, &server);
+    defer conn.deinit();
+    try std.testing.expect((try conn.receive()) == null);
+}
+
+test "NIP-42: receive an AUTH challenge, then authenticate writes the signed reply" {
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+
+    // The relay issues a NIP-42 challenge; this once failed to parse (dropping
+    // the connection) — now it surfaces as an `auth` message.
+    var script: std.ArrayList(u8) = .empty;
+    defer script.deinit(allocator);
+    try appendServerText(&script, allocator, "[\"AUTH\",\"chal-xyz\"]");
+
+    var server = FakeStream{ .to_read = script.items, .written = &written, .allocator = allocator };
+    var conn = newConn(allocator, &server);
+    defer conn.deinit();
+
+    var m = (try conn.receive()).?;
+    defer m.deinit();
+    try std.testing.expectEqualStrings("chal-xyz", m.value.auth.challenge);
+
+    // Sign the kind:22242 auth event for that challenge and send it back.
+    const nip42 = @import("nip42.zig");
+    const keys_mod = @import("keys.zig");
+    var signer = keys_mod.Signer.init();
+    defer signer.deinit();
+    const secret = try @import("hex.zig").decodeFixed(32, "b7e151628aed2a6abf7158809cf4f3c762e7160f38b4da56a784d9045190cfef");
+    const kp = try signer.keyPairFromSecretKey(secret);
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const ev = try nip42.authEvent(arena.allocator(), signer, kp, "wss://relay.example.com", m.value.auth.challenge, 1_700_000_000, null);
+    try conn.authenticate(ev);
+
+    // The written client frame is `["AUTH", {<kind:22242 event>}]`.
+    const frame = (try websocket.decodeFrame(written.items)).?;
+    try std.testing.expect(std.mem.startsWith(u8, frame.payload, "[\"AUTH\",{"));
+    try std.testing.expect(std.mem.indexOf(u8, frame.payload, "\"kind\":22242") != null);
+    try std.testing.expect(std.mem.indexOf(u8, frame.payload, "wss://relay.example.com") != null);
+    try std.testing.expect(std.mem.indexOf(u8, frame.payload, "chal-xyz") != null);
+}
+
+/// Appends an unmasked server text frame (supports arbitrary lengths).
+fn appendServerText(list: *std.ArrayList(u8), allocator: std.mem.Allocator, text: []const u8) !void {
+    try list.append(allocator, 0x81);
+    if (text.len <= 125) {
+        try list.append(allocator, @intCast(text.len));
+    } else if (text.len <= 0xffff) {
+        try list.append(allocator, 126);
+        var ext: [2]u8 = undefined;
+        std.mem.writeInt(u16, &ext, @intCast(text.len), .big);
+        try list.appendSlice(allocator, &ext);
+    } else {
+        try list.append(allocator, 127);
+        var ext: [8]u8 = undefined;
+        std.mem.writeInt(u64, &ext, text.len, .big);
+        try list.appendSlice(allocator, &ext);
+    }
+    try list.appendSlice(allocator, text);
+}
+
+test "parseUrl handles schemes, ports, paths, and IPv6" {
+    const a = try parseUrl("wss://relay.damus.io");
+    try std.testing.expect(a.secure);
+    try std.testing.expectEqualStrings("relay.damus.io", a.host);
+    try std.testing.expectEqual(@as(u16, 443), a.port);
+    try std.testing.expectEqualStrings("/", a.path);
+
+    const b = try parseUrl("ws://localhost:7777/nostr");
+    try std.testing.expect(!b.secure);
+    try std.testing.expectEqualStrings("localhost", b.host);
+    try std.testing.expectEqual(@as(u16, 7777), b.port);
+    try std.testing.expectEqualStrings("/nostr", b.path);
+
+    const c = try parseUrl("wss://example.com/");
+    try std.testing.expectEqualStrings("example.com", c.host);
+    try std.testing.expectEqualStrings("/", c.path);
+
+    const d = try parseUrl("ws://[::1]:8080/x");
+    try std.testing.expectEqualStrings("::1", d.host);
+    try std.testing.expectEqual(@as(u16, 8080), d.port);
+
+    try std.testing.expectError(UrlError.UnsupportedScheme, parseUrl("http://x"));
+    try std.testing.expectError(UrlError.InvalidUrl, parseUrl("wss://"));
+    try std.testing.expectError(UrlError.InvalidUrl, parseUrl("ws://host:notaport"));
+}
+
+test "hostHeader includes only non-default ports" {
+    var buf: [300]u8 = undefined;
+    // Default ports (443 for wss, 80 for ws) are omitted…
+    try std.testing.expectEqualStrings("relay.example.com", (try parseUrl("wss://relay.example.com")).hostHeader(&buf));
+    try std.testing.expectEqualStrings("relay.example.com", (try parseUrl("wss://relay.example.com:443")).hostHeader(&buf));
+    try std.testing.expectEqualStrings("relay.example.com", (try parseUrl("ws://relay.example.com:80")).hostHeader(&buf));
+    // …non-default ports are carried, so a relay deriving its URL from Host
+    // matches the NIP-42 auth event's `relay` tag.
+    try std.testing.expectEqualStrings("localhost:10547", (try parseUrl("ws://localhost:10547")).hostHeader(&buf));
+    try std.testing.expectEqualStrings("relay.example.com:8443", (try parseUrl("wss://relay.example.com:8443")).hostHeader(&buf));
+}
+
+test "IoStream drives a Connection over real std Io.Reader/Writer" {
+    // The live dialer feeds sockets through IoStream; here we point IoStream at
+    // in-memory std readers/writers so the exact adapter code path runs in CI.
+    const allocator = std.testing.allocator;
+
+    var server: std.ArrayList(u8) = .empty;
+    defer server.deinit(allocator);
+    try appendServerText(&server, allocator, "[\"NOTICE\",\"live\"]");
+
+    var reader = std.Io.Reader.fixed(server.items);
+    var out = std.Io.Writer.Allocating.init(allocator);
+    defer out.deinit();
+
+    var conn = LiveConnection.init(allocator, std.testing.io, .{ .reader = &reader, .writer = &out.writer });
+    defer conn.deinit();
+
+    // Reading a relay message flows through IoStream.read -> a single readVec.
+    var m = (try conn.receive()).?;
+    defer m.deinit();
+    try std.testing.expectEqualStrings("live", m.value.notice.message);
+
+    // Writing flows through IoStream.writeAll -> writeAll + flush; the captured
+    // bytes must decode back to the CLOSE frame we sent.
+    try conn.unsubscribe("s1");
+    var written = out.toArrayList();
+    defer written.deinit(allocator);
+    const frame = (try websocket.decodeFrame(written.items)).?;
+    try std.testing.expectEqualStrings("[\"CLOSE\",\"s1\"]", frame.payload);
+}
+
+test "IoStream.read returns one buffered record without pulling the next" {
+    // Regression (wss:// delivery stall): the std TLS reader decrypts one record
+    // at a time into its *own* buffer, and the generic `readVec` keeps pulling
+    // until the caller's buffer is full — so a relay message that had fully
+    // arrived was withheld until the *next* record showed up, stalling every
+    // NIP-46 request behind later traffic. `read` must hand back the first
+    // record's bytes after exactly ONE underlying read.
+    //
+    // This models that reader faithfully: each read fills the reader's own
+    // buffer with one "record" and returns 0 (as a TLS application_data record
+    // does), never touching the destination vector.
+    const Recorder = struct {
+        records: []const []const u8,
+        idx: usize = 0,
+        reads: usize = 0,
+        reader: std.Io.Reader,
+
+        fn readVec(r: *std.Io.Reader, dest: [][]u8) std.Io.Reader.Error!usize {
+            const self: *@This() = @fieldParentPtr("reader", r);
+            _ = dest; // TLS-style: fill our own buffer, ignore the destination
+            self.reads += 1;
+            if (self.idx >= self.records.len) return error.EndOfStream;
+            const rec = self.records[self.idx];
+            self.idx += 1;
+            @memcpy(r.buffer[r.end..][0..rec.len], rec);
+            r.end += rec.len;
+            return 0; // buffered, nothing "returned" — like a TLS record
+        }
+        fn noStream(_: *std.Io.Reader, _: *std.Io.Writer, _: std.Io.Limit) std.Io.Reader.StreamError!usize {
+            return error.ReadFailed;
+        }
+    };
+
+    const vtable: std.Io.Reader.VTable = .{ .stream = Recorder.noStream, .readVec = Recorder.readVec };
+    const records = [_][]const u8{ "first", "second" };
+    var buf: [64]u8 = undefined;
+    var rec = Recorder{ .records = &records, .reader = .{ .vtable = &vtable, .buffer = &buf, .seek = 0, .end = 0 } };
+
+    var write_scratch: [1]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&write_scratch);
+    const stream: IoStream = .{ .reader = &rec.reader, .writer = &writer };
+
+    var out: [4096]u8 = undefined;
+    const n = try stream.read(&out, null);
+    try std.testing.expectEqualStrings("first", out[0..n]);
+    // Crucially, it did NOT go on to pull "second" to fill the 4 KiB buffer.
+    try std.testing.expectEqual(@as(usize, 1), rec.reads);
+}
+
+test "IoStream.read loops past a read that buffers no bytes instead of reporting EOF" {
+    // One underlying read can legitimately add zero bytes without end of stream
+    // — a partial record, or a TLS record with no application data. `read` must
+    // retry rather than mistake that for EOF (which would fail the handshake and
+    // drop live connections).
+    const StallThenData = struct {
+        calls: usize = 0,
+        reader: std.Io.Reader,
+
+        fn readVec(r: *std.Io.Reader, dest: [][]u8) std.Io.Reader.Error!usize {
+            const self: *@This() = @fieldParentPtr("reader", r);
+            _ = dest;
+            self.calls += 1;
+            if (self.calls == 1) return 0; // buffered nothing, but NOT end of stream
+            const msg = "data";
+            @memcpy(r.buffer[r.end..][0..msg.len], msg);
+            r.end += msg.len;
+            return 0;
+        }
+        fn noStream(_: *std.Io.Reader, _: *std.Io.Writer, _: std.Io.Limit) std.Io.Reader.StreamError!usize {
+            return error.ReadFailed;
+        }
+    };
+
+    const vtable: std.Io.Reader.VTable = .{ .stream = StallThenData.noStream, .readVec = StallThenData.readVec };
+    var buf: [64]u8 = undefined;
+    var sd = StallThenData{ .reader = .{ .vtable = &vtable, .buffer = &buf, .seek = 0, .end = 0 } };
+
+    var write_scratch: [1]u8 = undefined;
+    var writer = std.Io.Writer.fixed(&write_scratch);
+    const stream: IoStream = .{ .reader = &sd.reader, .writer = &writer };
+
+    var out: [4096]u8 = undefined;
+    const n = try stream.read(&out, null);
+    try std.testing.expectEqualStrings("data", out[0..n]);
+    try std.testing.expectEqual(@as(usize, 2), sd.calls); // looped past the empty read
+}
+
+test "live dialer is semantically analyzed" {
+    // `dial` opens a real socket, so it can't run in CI, and Zig would
+    // otherwise skip analyzing an uncalled function's body. Referencing it (and
+    // the `Relay` methods) forces full type-checking so the live TCP/TLS path
+    // is kept compiling by CI even though it is exercised only by hand.
+    _ = &dial;
+    _ = &dialOver;
+    _ = &resolveAndConnect;
+    _ = &Relay.publish;
+    _ = &Relay.subscribe;
+    _ = &Relay.unsubscribe;
+    _ = &Relay.authenticate;
+    _ = &Relay.receive;
+    _ = &Relay.unreadable;
+    _ = &Relay.deinit;
+}
+
+test "a frame that declares a huge payload cannot grow the receive buffer" {
+    // The 1 MiB cap sat inside the branch where a frame had already decoded.
+    // `decodeFrame` returns null while a declared payload is still arriving, so
+    // a peer could announce a multi-gigabyte frame, dribble filler, and never
+    // reach that check. `recv` grew 4 KiB at a time until the allocator gave
+    // up, in the process that holds the key.
+    const allocator = std.testing.allocator;
+
+    var script: std.ArrayList(u8) = .empty;
+    defer script.deinit(allocator);
+    // FIN + text, 64-bit length, declaring 4 GiB.
+    try script.append(allocator, 0x81);
+    try script.append(allocator, 127);
+    var len_be: [8]u8 = undefined;
+    std.mem.writeInt(u64, &len_be, 4 << 30, .big);
+    try script.appendSlice(allocator, &len_be);
+    // Filler that never comes close to the promise: a little over the cap is
+    // enough to prove the buffer stops growing rather than following along.
+    try script.appendSlice(allocator, &[_]u8{'x'} ** 4096);
+    const filler_rounds = (max_message_len / 4096) + 8;
+    for (0..filler_rounds) |_| try script.appendSlice(allocator, &[_]u8{'x'} ** 4096);
+
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+    var stream = FakeStream{ .to_read = script.items, .written = &written, .allocator = allocator };
+    var conn = TestConn.init(allocator, std.testing.io, &stream);
+    defer conn.deinit();
+
+    try std.testing.expectError(ConnectionError.MessageTooLarge, conn.receive());
+    // And it gave up near the cap rather than swallowing the whole script.
+    try std.testing.expect(conn.recv.items.len <= max_message_len + websocket.max_frame_header_len + 4096);
+}
+
+/// Builds an unmasked server control frame (as a relay would send).
+fn serverControl(allocator: std.mem.Allocator, opcode: u8, payload: []const u8) ![]u8 {
+    var list: std.ArrayList(u8) = .empty;
+    errdefer list.deinit(allocator);
+    try list.append(allocator, 0x80 | opcode);
+    std.debug.assert(payload.len <= 125);
+    try list.append(allocator, @intCast(payload.len));
+    try list.appendSlice(allocator, payload);
+    return list.toOwnedSlice(allocator);
+}
+
+test "a pong is not a message, and is still proof the relay is there" {
+    // The keepalive rests entirely on this. A relay with nothing to say answers
+    // a ping with a pong, `receive` correctly returns no message for it, and
+    // something still has to notice that bytes arrived. If the clock only moved
+    // on a parsed message, a healthy but quiet relay would be cut off.
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+
+    const pong = try serverControl(allocator, 0xa, &.{});
+    defer allocator.free(pong);
+    const notice = try serverText(allocator, "[\"NOTICE\",\"hi\"]");
+    defer allocator.free(notice);
+    const script = try std.mem.concat(allocator, u8, &.{ pong, notice });
+    defer allocator.free(script);
+
+    var server = FakeStream{ .to_read = script, .written = &written, .allocator = allocator };
+    var conn = TestConn.init(allocator, std.testing.io, &server);
+    defer conn.deinit();
+
+    try std.testing.expectEqual(@as(?i64, null), conn.idleMs(std.testing.io));
+
+    var m = (try conn.receive()).?;
+    defer m.deinit();
+    try std.testing.expectEqualStrings("hi", m.value.notice.message);
+
+    // Both frames arrived in one read, so the only claim available is that the
+    // clock started. That it started at all is the property: it is zero, meaning
+    // "never heard from", until a byte lands.
+    try std.testing.expect(conn.idleMs(std.testing.io) != null);
+    try std.testing.expect(conn.last_rx_ms.load(.monotonic) > 0);
+}
+
+test "an idle clock that has never ticked is not an idle connection" {
+    // Zero is the sentinel for "no byte has ever arrived", and reporting that as
+    // an infinite idle time would have a keepalive kill every connection in the
+    // window between the handshake and the relay's first word.
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+    var server = FakeStream{ .to_read = "", .written = &written, .allocator = allocator };
+    var conn = TestConn.init(allocator, std.testing.io, &server);
+    defer conn.deinit();
+    try std.testing.expectEqual(@as(?i64, null), conn.idleMs(std.testing.io));
+}
+
+test "ping writes a masked, empty ping frame" {
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+    var server = FakeStream{ .to_read = "", .written = &written, .allocator = allocator };
+    var conn = TestConn.init(allocator, std.testing.io, &server);
+    defer conn.deinit();
+
+    try conn.ping(std.testing.io);
+
+    // FIN set, opcode 0x9, and the mask bit set: RFC 6455 requires every frame
+    // a CLIENT sends to be masked, and relays behind a strict proxy drop the
+    // connection over an unmasked one.
+    try std.testing.expectEqual(@as(usize, 6), written.items.len);
+    try std.testing.expectEqual(@as(u8, 0x89), written.items[0]);
+    try std.testing.expectEqual(@as(u8, 0x80), written.items[1]);
+}
+
+test "answering a ping does not count as hearing from the relay" {
+    // The trap, stated as a test. A relay's idle timer counts what it RECEIVES,
+    // so the pong we send when it pings us does nothing to keep the connection
+    // open on its side, and the pong it sends when WE ping is the only evidence
+    // there is. What this asserts is the client half: our own pong is a write,
+    // and a write must never be mistaken for inbound traffic.
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+
+    var server = FakeStream{ .to_read = "", .written = &written, .allocator = allocator };
+    var conn = TestConn.init(allocator, std.testing.io, &server);
+    defer conn.deinit();
+
+    // A pong on the wire, with nothing ever read.
+    try conn.sendFrame(std.testing.io, .pong, &.{});
+    try std.testing.expect(written.items.len > 0);
+    try std.testing.expectEqual(@as(?i64, null), conn.idleMs(std.testing.io));
+}
+
+test "a dial waiting on a silent peer can be cancelled, and frees what it made" {
+    // A peer that accepts the TCP connection and then never answers the
+    // websocket upgrade is the case a caller needs a way out of. `dial` takes
+    // no deadline; running it concurrently and cancelling it is the way out,
+    // and this pins that the cancel lands and leaves nothing behind.
+    //
+    // Leak-checked, but without stack traces. On macOS capturing one takes a
+    // lock that notices a pending cancel and swallows it, so a dial cancelled
+    // while it was still allocating would never find out, and the test would
+    // hang rather than fail. `std.testing.allocator` captures them.
+    var debug: std.heap.DebugAllocator(.{ .stack_trace_frames = 0 }) = .init;
+    defer if (debug.deinit() == .leak) @panic("the cancelled dial leaked");
+    const allocator = debug.allocator();
+    const io = std.testing.io;
+
+    var listen_address: std.Io.net.IpAddress = .{ .ip4 = .loopback(0) };
+    var server = try listen_address.listen(io, .{ .reuse_address = true });
+    defer server.deinit(io);
+    const url = try std.fmt.allocPrint(allocator, "ws://127.0.0.1:{d}", .{server.socket.address.ip4.port});
+    defer allocator.free(url);
+
+    const started = std.Io.Timestamp.now(io, .awake).toMilliseconds();
+    var pending = try io.concurrent(dial, .{ allocator, io, url });
+    try io.sleep(.fromMilliseconds(100), .awake);
+    if (pending.cancel(io)) |relay| {
+        relay.deinit();
+        return error.TestUnexpectedResult; // the peer never answered, so no dial can have succeeded
+    } else |_| {}
+    const waited = std.Io.Timestamp.now(io, .awake).toMilliseconds() - started;
+    try std.testing.expect(waited < 5000);
+}
+
+test "dialDiagnosed reports the status a relay answered the upgrade with" {
+    // A relay that is busy answers the upgrade with a plain HTTP 503. The
+    // error stays `HandshakeFailed`; the status is what lets a caller say so.
+    const allocator = std.testing.allocator;
+    const io = std.testing.io;
+
+    var listen_address: std.Io.net.IpAddress = .{ .ip4 = .loopback(0) };
+    var server = try listen_address.listen(io, .{ .reuse_address = true });
+    defer server.deinit(io);
+    const url = try std.fmt.allocPrint(allocator, "ws://127.0.0.1:{d}", .{server.socket.address.ip4.port});
+    defer allocator.free(url);
+
+    var pending = try io.concurrent(refuseUpgrade, .{ io, &server });
+    // A dial that fails before the server has answered must not leave it
+    // parked in `accept` on a socket this frame is about to close.
+    defer pending.cancel(io) catch {};
+    var diagnostic: DialDiagnostic = .{};
+    try std.testing.expectError(ConnectionError.HandshakeFailed, dialDiagnosed(allocator, io, url, &diagnostic));
+    try pending.await(io);
+    try std.testing.expectEqual(@as(u16, 503), diagnostic.status);
+
+    // A dial that never reached the upgrade has nothing to report.
+    var unreached: DialDiagnostic = .{ .status = 999 };
+    try std.testing.expectError(UrlError.UnsupportedScheme, dialDiagnosed(allocator, io, "http://127.0.0.1/", &unreached));
+    try std.testing.expectEqual(@as(u16, 0), unreached.status);
+}
+
+/// Accepts one connection, reads the upgrade request, and answers 503.
+fn refuseUpgrade(io: std.Io, server: *std.Io.net.Server) !void {
+    const served = try server.accept(io);
+    defer served.close(io);
+    var read_buf: [4096]u8 = undefined;
+    var reader = served.reader(io, &read_buf);
+    // The request head ends at the blank line.
+    while (true) {
+        const line = try reader.interface.takeDelimiterInclusive('\n');
+        if (line.len <= 2) break;
+    }
+    var write_buf: [256]u8 = undefined;
+    var writer = served.writer(io, &write_buf);
+    try writer.interface.writeAll("HTTP/1.1 503 Service Unavailable\r\nRetry-After: 5\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+    try writer.interface.flush();
+}
+
+/// A loopback listener and the URL that names it.
+const Loopback = struct {
+    server: std.Io.net.Server,
+    url_buf: [64]u8,
+    url_len: usize,
+
+    fn init(self: *Loopback, io: std.Io, scheme: []const u8) !void {
+        var listen_address: std.Io.net.IpAddress = .{ .ip4 = .loopback(0) };
+        self.server = try listen_address.listen(io, .{ .reuse_address = true });
+        const text = try std.fmt.bufPrint(&self.url_buf, "{s}://127.0.0.1:{d}", .{ scheme, self.server.socket.address.ip4.port });
+        self.url_len = text.len;
+    }
+
+    fn url(self: *const Loopback) []const u8 {
+        return self.url_buf[0..self.url_len];
+    }
+
+    /// Connects a stream the way a caller with its own tunnel would.
+    fn connect(self: *Loopback, io: std.Io) !std.Io.net.Stream {
+        var bound = self.server.socket.address;
+        return bound.connect(io, .{ .mode = .stream });
+    }
+};
+
+/// Whether the peer of `served` has closed its end: reads and drops whatever
+/// is left until end of stream, and gives up after two seconds, so a stream
+/// that was left open fails the test instead of hanging it.
+fn peerClosed(io: std.Io, served: std.Io.net.Stream) !bool {
+    var read_buf: [4096]u8 = undefined;
+    var write_buf: [16]u8 = undefined;
+    var reader = served.reader(io, &read_buf);
+    var writer = served.writer(io, &write_buf);
+    const stream: IoStream = .{
+        .reader = &reader.interface,
+        .writer = &writer.interface,
+        .io = io,
+        .socket = served.socket,
+    };
+    const deadline = std.Io.Clock.Timestamp.fromNow(io, .{ .raw = .fromMilliseconds(2000), .clock = .awake });
+    var buf: [4096]u8 = undefined;
+    while (true) {
+        const n = stream.read(&buf, deadline) catch |err| switch (err) {
+            error.Timeout => return false,
+            // A reset is the peer closing too.
+            else => return true,
+        };
+        if (n == 0) return true;
+    }
+}
+
+/// Plays a relay for one connection: answers the upgrade, reads the REQ for
+/// `s1`, and sends one event and EOSE.
+fn serveOneSubscription(io: std.Io, server: *std.Io.net.Server) !void {
+    const served = try server.accept(io);
+    defer served.close(io);
+    var read_buf: [4096]u8 = undefined;
+    var reader = served.reader(io, &read_buf);
+    var write_buf: [4096]u8 = undefined;
+    var writer = served.writer(io, &write_buf);
+
+    var key: ?[24]u8 = null;
+    while (true) {
+        const line = try reader.interface.takeDelimiterInclusive('\n');
+        if (line.len <= 2) break;
+        const prefix = "Sec-WebSocket-Key: ";
+        if (std.mem.startsWith(u8, line, prefix)) {
+            const value = std.mem.trimEnd(u8, line[prefix.len..], "\r\n");
+            if (value.len != 24) return error.BadKey;
+            key = value[0..24].*;
+        }
+    }
+    const accept = websocket.acceptKey(&(key orelse return error.NoKey));
+    try writer.interface.writeAll("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ");
+    try writer.interface.writeAll(&accept);
+    try writer.interface.writeAll("\r\n\r\n");
+    try writer.interface.flush();
+
+    // One masked client text frame, short enough for a 16-bit length.
+    const head = try reader.interface.takeArray(2);
+    if (head[0] != 0x81 or head[1] & 0x80 == 0) return error.NotAMaskedTextFrame;
+    const len: usize = switch (head[1] & 0x7f) {
+        126 => std.mem.readInt(u16, try reader.interface.takeArray(2), .big),
+        127 => return error.FrameTooLong,
+        else => |n| n,
+    };
+    const mask = (try reader.interface.takeArray(4)).*;
+    const payload = try reader.interface.take(len);
+    for (payload, 0..) |*b, i| b.* ^= mask[i % 4];
+    if (!std.mem.startsWith(u8, payload, "[\"REQ\",\"s1\"")) return error.NotTheReq;
+
+    const ev_json =
+        "[\"EVENT\",\"s1\",{\"id\":\"" ++ "d0a1d13aff1d1725d80305f74a3f8419674d726342773b06ddc6988cc5be3a40" ++
+        "\",\"pubkey\":\"" ++ "f7234bd4c1394dda46d09f35bd384dd30cc552ad5541990f98844fb06676e9ca" ++
+        "\",\"created_at\":1700000000,\"kind\":1,\"tags\":[],\"content\":\"over\",\"sig\":\"" ++ "ab" ** 64 ++ "\"}]";
+    var frames: [512]u8 = undefined;
+    var out: std.ArrayList(u8) = .initBuffer(&frames);
+    try appendServerTextBounded(&out, ev_json);
+    try appendServerTextBounded(&out, "[\"EOSE\",\"s1\"]");
+    try writer.interface.writeAll(out.items);
+    try writer.interface.flush();
+
+    // Wait for the client to go away, so the frames are read before the close.
+    while (true) _ = reader.interface.takeByte() catch return;
+}
+
+/// `appendServerText` into a fixed buffer, for frames under 64 KiB.
+fn appendServerTextBounded(list: *std.ArrayList(u8), text: []const u8) !void {
+    if (text.len <= 125) {
+        try list.appendSliceBounded(&.{ 0x81, @intCast(text.len) });
+    } else {
+        var ext: [2]u8 = undefined;
+        std.mem.writeInt(u16, &ext, @intCast(text.len), .big);
+        try list.appendSliceBounded(&.{ 0x81, 126 });
+        try list.appendSliceBounded(&ext);
+    }
+    try list.appendSliceBounded(text);
+}
+
+test "dialOver upgrades a stream the caller connected and carries a subscription" {
+    const allocator = std.testing.allocator;
+    const io = std.testing.io;
+
+    var loopback: Loopback = undefined;
+    try loopback.init(io, "ws");
+    defer loopback.server.deinit(io);
+
+    var serving = try io.concurrent(serveOneSubscription, .{ io, &loopback.server });
+    defer serving.cancel(io) catch {};
+
+    const tcp = try loopback.connect(io);
+    const relay = try dialOver(allocator, io, loopback.url(), tcp);
+    {
+        defer relay.deinit();
+        try relay.subscribe("s1", &.{.{ .kinds = &.{1} }});
+
+        var m1 = (try relay.receiveTimeout(.{ .duration = .{ .raw = .fromMilliseconds(5000), .clock = .awake } })).?;
+        defer m1.deinit();
+        try std.testing.expectEqualStrings("s1", m1.value.event.subscription_id);
+        try std.testing.expectEqualStrings("over", m1.value.event.event.content);
+
+        var m2 = (try relay.receiveTimeout(.{ .duration = .{ .raw = .fromMilliseconds(5000), .clock = .awake } })).?;
+        defer m2.deinit();
+        try std.testing.expectEqualStrings("s1", m2.value.eose.subscription_id);
+    }
+    try serving.await(io);
+}
+
+test "dialOver closes the stream it was given when the URL does not parse" {
+    const allocator = std.testing.allocator;
+    const io = std.testing.io;
+
+    var loopback: Loopback = undefined;
+    try loopback.init(io, "ws");
+    defer loopback.server.deinit(io);
+
+    const tcp = try loopback.connect(io);
+    const served = try loopback.server.accept(io);
+    defer served.close(io);
+
+    var diagnostic: DialDiagnostic = .{ .status = 999 };
+    try std.testing.expectError(UrlError.UnsupportedScheme, dialOverDiagnosed(allocator, io, "http://127.0.0.1/", tcp, &diagnostic));
+    try std.testing.expectEqual(@as(u16, 0), diagnostic.status);
+    try std.testing.expect(try peerClosed(io, served));
+}
+
+test "dialOver closes the stream and reports the status when the upgrade is refused" {
+    const allocator = std.testing.allocator;
+    const io = std.testing.io;
+
+    var loopback: Loopback = undefined;
+    try loopback.init(io, "ws");
+    defer loopback.server.deinit(io);
+
+    var pending = try io.concurrent(refuseUpgrade, .{ io, &loopback.server });
+    defer pending.cancel(io) catch {};
+
+    const tcp = try loopback.connect(io);
+    var diagnostic: DialDiagnostic = .{};
+    try std.testing.expectError(ConnectionError.HandshakeFailed, dialOverDiagnosed(allocator, io, loopback.url(), tcp, &diagnostic));
+    try pending.await(io);
+    try std.testing.expectEqual(@as(u16, 503), diagnostic.status);
+}
+
+test "a wss dialOver to a peer that does not speak TLS closes the stream and frees the TLS state" {
+    const allocator = std.testing.allocator;
+    const io = std.testing.io;
+
+    var loopback: Loopback = undefined;
+    try loopback.init(io, "wss");
+    defer loopback.server.deinit(io);
+
+    const tcp = try loopback.connect(io);
+    const served = try loopback.server.accept(io);
+    defer served.close(io);
+    // Plain HTTP where a TLS server hello belongs.
+    var write_buf: [128]u8 = undefined;
+    var writer = served.writer(io, &write_buf);
+    try writer.interface.writeAll("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n");
+    try writer.interface.flush();
+
+    if (dialOver(allocator, io, loopback.url(), tcp)) |relay| {
+        relay.deinit();
+        return error.TestUnexpectedResult;
+    } else |_| {}
+    try std.testing.expect(try peerClosed(io, served));
+}
+
+test "a dialOver waiting on a deaf peer ends at its deadline and closes the stream" {
+    // The peer takes the connection and never answers the upgrade. A dial has
+    // no deadline of its own: running it concurrently, waiting out the
+    // deadline and cancelling it is how it is bounded, and the cancel has to
+    // close the stream the caller handed over as well as free the rest.
+    //
+    // Without stack traces, for the reason in the cancelled dial's test.
+    var debug: std.heap.DebugAllocator(.{ .stack_trace_frames = 0 }) = .init;
+    defer if (debug.deinit() == .leak) @panic("the cancelled dialOver leaked");
+    const allocator = debug.allocator();
+    const io = std.testing.io;
+
+    var loopback: Loopback = undefined;
+    try loopback.init(io, "ws");
+    defer loopback.server.deinit(io);
+
+    const tcp = try loopback.connect(io);
+    const served = try loopback.server.accept(io);
+    defer served.close(io);
+
+    const started = std.Io.Timestamp.now(io, .awake).toMilliseconds();
+    var pending = try io.concurrent(dialOver, .{ allocator, io, loopback.url(), tcp });
+    try io.sleep(.fromMilliseconds(200), .awake);
+    if (pending.cancel(io)) |relay| {
+        relay.deinit();
+        return error.TestUnexpectedResult; // the peer never answered
+    } else |_| {} // the upgrade's read reports the cancel as ReadFailed
+    const waited = std.Io.Timestamp.now(io, .awake).toMilliseconds() - started;
+    try std.testing.expect(waited >= 200);
+    try std.testing.expect(waited < 5000);
+    try std.testing.expect(try peerClosed(io, served));
+}
+
+test "a deadline fires on a quiet socket and leaves the connection usable" {
+    // The property the whole shape rests on: a deadline that expires must
+    // consume NOTHING, so the very next call still sees the message that was
+    // half-arrived, or arrives later, on the same connection.
+    //
+    // A read timeout could not promise that. This is a readiness probe, so
+    // there is no state to resynchronise: the test drives a real socket pair
+    // rather than a fixed buffer, because a fixed reader never blocks and would
+    // prove nothing about the gate.
+    const allocator = std.testing.allocator;
+    const io = std.testing.io;
+
+    var listen_address: std.Io.net.IpAddress = .{ .ip4 = .loopback(0) };
+    var server = try listen_address.listen(io, .{ .reuse_address = true });
+    defer server.deinit(io);
+    // Port 0 asks the kernel to choose; `listen` calls getsockname, so the
+    // socket it hands back carries the port it actually got.
+    var bound = server.socket.address;
+
+    const client = try bound.connect(io, .{ .mode = .stream });
+    defer client.close(io);
+    const served = try server.accept(io);
+    defer served.close(io);
+
+    var c_read_buf: [4096]u8 = undefined;
+    var c_write_buf: [4096]u8 = undefined;
+    var c_reader = client.reader(io, &c_read_buf);
+    var c_writer = client.writer(io, &c_write_buf);
+
+    var conn = LiveConnection.init(allocator, io, .{
+        .reader = &c_reader.interface,
+        .writer = &c_writer.interface,
+        .io = io,
+        .socket = client.socket,
+    });
+    defer conn.deinit();
+
+    // Nothing sent yet, so the deadline is the only way out. Without the gate
+    // this call never returns and the test hangs, which is the failure the
+    // issue describes.
+    const started = std.Io.Timestamp.now(io, .awake).toMilliseconds();
+    try std.testing.expectError(error.Timeout, conn.receiveTimeout(.{ .duration = .{ .raw = .fromMilliseconds(250), .clock = .awake } }));
+    const waited = std.Io.Timestamp.now(io, .awake).toMilliseconds() - started;
+    try std.testing.expect(waited >= 200);
+
+    // And the connection is not merely alive, it is UNDISTURBED: a message sent
+    // after the timeout arrives whole on the same socket.
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(allocator);
+    try appendServerText(&frame, allocator, "[\"NOTICE\",\"after the deadline\"]");
+    var srv_write_buf: [4096]u8 = undefined;
+    var srv_writer = served.writer(io, &srv_write_buf);
+    try srv_writer.interface.writeAll(frame.items);
+    try srv_writer.interface.flush();
+
+    var m = (try conn.receiveTimeout(.{ .duration = .{ .raw = .fromMilliseconds(5000), .clock = .awake } })).?;
+    defer m.deinit();
+    try std.testing.expectEqualStrings("after the deadline", m.value.notice.message);
+}
+
+test "a reader that asks again on every timeout still ends when it is cancelled" {
+    // The usual reader: a short deadline, housekeeping, ask again. Cancelling
+    // it has to end it. Before, the wait that ran when the cancel arrived took
+    // it and said nothing, and the read after it blocked until the relay sent
+    // a byte, so on a quiet relay the cancel never returned.
+    //
+    // A hang is not a failure anyone sees, so a watchdog turns one into a
+    // failure: if the cancel is still waiting after a while, it closes the
+    // relay's end, which ends the stuck read, and records that it had to.
+    //
+    // Without stack traces, for the reason in the cancelled dial's test above.
+    var debug: std.heap.DebugAllocator(.{ .stack_trace_frames = 0 }) = .init;
+    defer if (debug.deinit() == .leak) @panic("the cancelled reader leaked");
+    const allocator = debug.allocator();
+    const io = std.testing.io;
+
+    var listen_address: std.Io.net.IpAddress = .{ .ip4 = .loopback(0) };
+    var server = try listen_address.listen(io, .{ .reuse_address = true });
+    defer server.deinit(io);
+    var bound = server.socket.address;
+    const client = try bound.connect(io, .{ .mode = .stream });
+    defer client.close(io);
+    const served = try server.accept(io);
+    defer served.close(io);
+
+    var c_read_buf: [4096]u8 = undefined;
+    var c_write_buf: [4096]u8 = undefined;
+    var c_reader = client.reader(io, &c_read_buf);
+    var c_writer = client.writer(io, &c_write_buf);
+    var conn = LiveConnection.init(allocator, io, .{
+        .reader = &c_reader.interface,
+        .writer = &c_writer.interface,
+        .io = io,
+        .socket = client.socket,
+    });
+    defer conn.deinit();
+
+    var stuck: std.atomic.Value(bool) = .init(false);
+    var reader = try io.concurrent(readUntilEnd, .{&conn});
+    var watchdog = try io.concurrent(unstickAfter, .{ io, served, &stuck });
+    defer watchdog.cancel(io) catch {};
+
+    // Let it go round a few deadlines first, so the cancel can land in the
+    // wait as well as between waits.
+    try io.sleep(.fromMilliseconds(200), .awake);
+    const started = std.Io.Timestamp.now(io, .awake).toMilliseconds();
+    const ended = reader.cancel(io);
+    const waited = std.Io.Timestamp.now(io, .awake).toMilliseconds() - started;
+
+    try std.testing.expect(!stuck.load(.acquire));
+    try std.testing.expectError(error.ReadFailed, ended);
+    try std.testing.expect(waited < 2000);
+}
+
+/// Reads until the relay is gone, asking again on every timeout.
+fn readUntilEnd(conn: *LiveConnection) !void {
+    while (true) {
+        var m = (conn.receiveTimeout(.{ .duration = .{ .raw = .fromMilliseconds(20), .clock = .awake } }) catch |err| switch (err) {
+            error.Timeout => continue,
+            else => |e| return e,
+        }) orelse return;
+        m.deinit();
+    }
+}
+
+/// After three seconds, records that it had to and shuts the relay's end down.
+fn unstickAfter(io: std.Io, served: std.Io.net.Stream, stuck: *std.atomic.Value(bool)) !void {
+    try io.sleep(.fromMilliseconds(3000), .awake);
+    stuck.store(true, .release);
+    served.shutdown(io, .both) catch {};
+}
+
+/// A client connection over loopback whose other end accepts and never reads.
+const DeafPeer = struct {
+    server: std.Io.net.Server,
+    client: std.Io.net.Stream,
+    served: std.Io.net.Stream,
+    read_buf: [4096]u8,
+    write_buf: [4096]u8,
+    reader: std.Io.net.Stream.Reader,
+    writer: std.Io.net.Stream.Writer,
+
+    fn init(self: *DeafPeer, io: std.Io) !void {
+        var listen_address: std.Io.net.IpAddress = .{ .ip4 = .loopback(0) };
+        self.server = try listen_address.listen(io, .{ .reuse_address = true });
+        errdefer self.server.deinit(io);
+        var bound = self.server.socket.address;
+        self.client = try bound.connect(io, .{ .mode = .stream });
+        errdefer self.client.close(io);
+        self.served = try self.server.accept(io);
+        // Loopback buffers are tuned by the system and can grow past any size
+        // a test can afford to write (Linux and Windows CI runners did). Small
+        // buffers on both ends make the writer block after a few kilobytes,
+        // whatever the platform.
+        shrinkSocketBuffers(self.client.socket.handle);
+        shrinkSocketBuffers(self.served.socket.handle);
+        self.reader = self.client.reader(io, &self.read_buf);
+        self.writer = self.client.writer(io, &self.write_buf);
+    }
+
+    fn connection(self: *DeafPeer, allocator: std.mem.Allocator, io: std.Io) LiveConnection {
+        return LiveConnection.init(allocator, io, .{
+            .reader = &self.reader.interface,
+            .writer = &self.writer.interface,
+            .io = io,
+            .socket = self.client.socket,
+        });
+    }
+
+    fn deinit(self: *DeafPeer, io: std.Io) void {
+        self.served.close(io);
+        self.client.close(io);
+        self.server.deinit(io);
+    }
+};
+
+fn shrinkSocketBuffers(handle: std.Io.net.Socket.Handle) void {
+    const size: i32 = 4096;
+    const bytes = std.mem.asBytes(&size);
+    if (builtin.os.tag == .windows) {
+        const ws2 = std.os.windows.ws2_32;
+        const set = struct {
+            extern "ws2_32" fn setsockopt(s: std.Io.net.Socket.Handle, level: i32, optname: i32, optval: [*]const u8, optlen: i32) callconv(.winapi) i32;
+        }.setsockopt;
+        _ = set(handle, ws2.SOL.SOCKET, ws2.SO.SNDBUF, bytes.ptr, bytes.len);
+        _ = set(handle, ws2.SOL.SOCKET, ws2.SO.RCVBUF, bytes.ptr, bytes.len);
+    } else {
+        std.posix.setsockopt(handle, std.posix.SOL.SOCKET, std.posix.SO.SNDBUF, bytes) catch {};
+        std.posix.setsockopt(handle, std.posix.SOL.SOCKET, std.posix.SO.RCVBUF, bytes) catch {};
+    }
+}
+
+/// An event far larger than a loopback socket's buffers, so writing it to a
+/// peer that does not read can never finish.
+fn hugeEvent(allocator: std.mem.Allocator) !struct { ev: Event, content: []u8 } {
+    const content = try allocator.alloc(u8, 32 << 20);
+    @memset(content, 'a');
+    return .{ .content = content, .ev = .{
+        .id = [_]u8{1} ** 32,
+        .pubkey = [_]u8{2} ** 32,
+        .created_at = 1,
+        .kind = 1,
+        .tags = &.{},
+        .content = content,
+        .sig = [_]u8{3} ** 64,
+    } };
+}
+
+const small_event: Event = .{
+    .id = [_]u8{1} ** 32,
+    .pubkey = [_]u8{2} ** 32,
+    .created_at = 1,
+    .kind = 1,
+    .tags = &.{},
+    .content = "small",
+    .sig = [_]u8{3} ** 64,
+};
+
+test "a publish to a peer that stopped reading gives up at its deadline" {
+    // Windows completes a large send on a loopback socket without waiting
+    // for the peer to read, whatever the buffer sizes, so this cannot block
+    // there. The deadline logic itself is the same code on every system and
+    // is covered by "a publish waiting behind another write times out and
+    // sends nothing", which uses no real socket.
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+    const allocator = std.testing.allocator;
+    const io = std.testing.io;
+    var peer: DeafPeer = undefined;
+    try peer.init(io);
+    defer peer.deinit(io);
+    var conn = peer.connection(allocator, io);
+    defer conn.deinit();
+
+    const huge = try hugeEvent(allocator);
+    defer allocator.free(huge.content);
+
+    const started = std.Io.Timestamp.now(io, .awake).toMilliseconds();
+    try std.testing.expectError(error.Timeout, conn.publishTimeout(huge.ev, .{ .duration = .{ .raw = .fromMilliseconds(300), .clock = .awake } }));
+    const waited = std.Io.Timestamp.now(io, .awake).toMilliseconds() - started;
+    try std.testing.expect(waited >= 250);
+    try std.testing.expect(waited < 3000);
+
+    // Part of that frame is on the wire, so nothing after it can be read by
+    // the relay, and every later write says so instead of sending garbage.
+    try std.testing.expectError(ConnectionError.Broken, conn.publish(small_event));
+    try std.testing.expectError(ConnectionError.Broken, conn.publishTimeout(small_event, .{ .duration = .{ .raw = .fromMilliseconds(300), .clock = .awake } }));
+}
+
+test "a publish waiting behind another write times out and sends nothing" {
+    const allocator = std.testing.allocator;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+    var server = FakeStream{ .to_read = "", .written = &written, .allocator = allocator };
+    var conn = newConn(allocator, &server);
+    defer conn.deinit();
+
+    // Another writer holds the lock and is not letting go.
+    try std.testing.expect(conn.write_lock.tryLock());
+    try std.testing.expectError(error.Timeout, conn.publishTimeout(small_event, .{ .duration = .{ .raw = .fromMilliseconds(100), .clock = .awake } }));
+    conn.write_lock.unlock(std.testing.io);
+    try std.testing.expectEqual(@as(usize, 0), written.items.len);
+
+    // Nothing was sent, so the connection is as it was.
+    try conn.publishTimeout(small_event, .{ .duration = .{ .raw = .fromMilliseconds(5000), .clock = .awake } });
+    const text = try onlyWrittenText(allocator, written.items);
+    defer allocator.free(text);
+    try std.testing.expect(std.mem.startsWith(u8, text, "[\"EVENT\","));
+}
+
+fn publishAfterCancel(io: std.Io, conn: *TestConn) !void {
+    // Waits to be cancelled, then carries the cancel into the publish.
+    io.sleep(.fromMilliseconds(60_000), .awake) catch |err| switch (err) {
+        error.Canceled => io.recancel(),
+    };
+    return conn.publish(small_event);
+}
+
+test "a publish that is cancelled reports the cancel, not a failure" {
+    const allocator = std.testing.allocator;
+    const io = std.testing.io;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+    var server = FakeStream{ .to_read = "", .written = &written, .allocator = allocator };
+    var conn = newConn(allocator, &server);
+    defer conn.deinit();
+
+    var pending = try io.concurrent(publishAfterCancel, .{ io, &conn });
+    // Where a cancel lands depends on the system: on Linux the read of
+    // entropy for the frame's mask takes it, elsewhere nothing in a write
+    // to this stream does and the publish completes. Either is fine. A cancel
+    // turned into some other error is not.
+    pending.cancel(io) catch |err| try std.testing.expectEqual(error.Canceled, err);
+}
+
+fn handshakeAfterCancel(io: std.Io, conn: *TestConn) !void {
+    io.sleep(.fromMilliseconds(60_000), .awake) catch |err| switch (err) {
+        error.Canceled => io.recancel(),
+    };
+    return conn.handshake("relay.example.com", "/");
+}
+
+test "a handshake that is cancelled reports the cancel, not a failure" {
+    const allocator = std.testing.allocator;
+    const io = std.testing.io;
+    var written: std.ArrayList(u8) = .empty;
+    defer written.deinit(allocator);
+    var server = FakeStream{ .to_read = "", .written = &written, .allocator = allocator };
+    var conn = newConn(allocator, &server);
+    defer conn.deinit();
+
+    var pending = try io.concurrent(handshakeAfterCancel, .{ io, &conn });
+    // As for the publish: on Linux the key's randomness takes the cancel.
+    // Elsewhere the handshake runs on and this relay, which answers
+    // nothing, fails it.
+    pending.cancel(io) catch |err| {
+        const e: anyerror = err;
+        if (e != error.Canceled and e != ConnectionError.HandshakeFailed) return err;
+    };
+}
+
+test "a bounded publish stuck on a deaf peer ends when its caller is cancelled" {
+    // Windows completes a large send on a loopback socket without waiting
+    // for the peer to read, whatever the buffer sizes, so this cannot block
+    // there. The deadline logic itself is the same code on every system and
+    // is covered by "a publish waiting behind another write times out and
+    // sends nothing", which uses no real socket.
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+    // Without stack traces, for the reason in the cancelled dial's test.
+    var debug: std.heap.DebugAllocator(.{ .stack_trace_frames = 0 }) = .init;
+    defer if (debug.deinit() == .leak) @panic("the cancelled publish leaked");
+    const allocator = debug.allocator();
+    const io = std.testing.io;
+    var peer: DeafPeer = undefined;
+    try peer.init(io);
+    defer peer.deinit(io);
+    var conn = peer.connection(allocator, io);
+    defer conn.deinit();
+
+    const huge = try hugeEvent(allocator);
+    defer allocator.free(huge.content);
+
+    var pending = try io.concurrent(LiveConnection.publishTimeout, .{ &conn, huge.ev, .{ .duration = .{ .raw = .fromMilliseconds(60_000), .clock = .awake } } });
+    // Cancelled only once the write is blocked in the kernel. Encoding and
+    // masking 32 MB comes first and is plain computation that no cancel can
+    // interrupt, and a slow runner spends seconds on it in a Debug build.
+    // A socket with no room left is the sign the write has started and is
+    // stuck.
+    const give_up = std.Io.Timestamp.now(io, .awake).toMilliseconds() + 30_000;
+    while (socketWritable(io, peer.client.socket.handle, 0)) {
+        if (std.Io.Timestamp.now(io, .awake).toMilliseconds() > give_up) return error.TestUnexpectedResult;
+        try io.sleep(.fromMilliseconds(10), .awake);
+    }
+    const started = std.Io.Timestamp.now(io, .awake).toMilliseconds();
+    try std.testing.expectError(error.Canceled, pending.cancel(io));
+    const waited = std.Io.Timestamp.now(io, .awake).toMilliseconds() - started;
+    try std.testing.expect(waited < 2000);
+}

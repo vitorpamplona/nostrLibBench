@@ -113,6 +113,18 @@ function expectedSet(w, ambiguousAccepted, expiredAccepted) {
 const now = () => performance.now();
 const cpuMs = (u) => (u.user + u.system) / 1000;
 
+// A library exception that escapes to the event loop (a throw in a socket callback or a
+// microtask) ends the current run as an error instead of killing the process.
+let activeSink = null;
+function trapUncaught() {
+  const h = (e) => {
+    if (activeSink) activeSink.error(new Error(`uncaught exception in library code: ${e?.name ?? 'Error'}: ${e?.message ?? e}${e?.stack?.split('\n').find((l) => l.trim().startsWith('at '))?.trim().replace(/^at /, ' (at ').concat(')') ?? ''}`));
+    else process.stderr.write(`    ! uncaught outside a run: ${e?.message ?? e}\n`);
+  };
+  process.on('uncaughtException', h);
+  process.on('unhandledRejection', h);
+}
+
 // Runs one subscription end to end (HARNESS.md "A run"). Returns
 // { ms, cpu, accepted, xor, amb, exp, eoseSeen } or throws.
 async function oneRun(C, ctx, url, w, special, opts) {
@@ -166,6 +178,7 @@ async function oneRun(C, ctx, url, w, special, opts) {
     },
   };
 
+  activeSink = sink;
   const timeout = setTimeout(() => finish({ how: 'timeout' }), opts.timeoutMs);
   // 2. timed
   const cpu0 = process.cpuUsage();
@@ -177,6 +190,7 @@ async function oneRun(C, ctx, url, w, special, opts) {
     sink.error(e);
   }
   const res = await done;
+  activeSink = null;
   clearTimeout(timeout);
   if (idleTimer) clearInterval(idleTimer);
 
@@ -262,6 +276,7 @@ function baseRow(C, meta, w) {
 async function runChild(opts, workloads) {
   const C = CLIENTS.find((c) => c.id === opts.child);
   if (!C) throw new Error(`unknown client ${opts.child}`);
+  trapUncaught();
   let meta = { version: null, license: null };
   let ctx = null;
   let loadError = null;

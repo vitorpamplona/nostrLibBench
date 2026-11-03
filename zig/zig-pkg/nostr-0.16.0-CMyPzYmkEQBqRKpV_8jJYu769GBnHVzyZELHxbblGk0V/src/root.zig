@@ -1,0 +1,65 @@
+//! zig-nostr/nostr — a Nostr protocol library for Zig.
+
+const std = @import("std");
+
+/// Kept in step with `build.zig.zon` by hand, and it had drifted three
+/// releases behind, so anything reading it was told the wrong number.
+pub const version = "0.16.0";
+
+pub const bech32 = @import("bech32.zig");
+pub const nip19 = @import("nip19.zig");
+pub const nip49 = @import("nip49.zig");
+pub const nip44 = @import("nip44.zig");
+pub const nip46 = @import("nip46.zig");
+pub const nip42 = @import("nip42.zig");
+pub const hex = @import("hex.zig");
+pub const event = @import("event.zig");
+pub const keys = @import("keys.zig");
+pub const bip39 = @import("bip39.zig");
+pub const nip06 = @import("nip06.zig");
+pub const filter = @import("filter.zig");
+pub const message = @import("message.zig");
+pub const websocket = @import("websocket.zig");
+pub const relay = @import("relay.zig");
+pub const nip65 = @import("nip65.zig");
+// When a relay connection has gone quiet and what to do about it. Policy
+// only: the table of connections and the thread that ticks stay with the
+// product, because what "give up" means differs between a client and a signer.
+pub const liveness = @import("liveness.zig");
+pub const store = @import("store.zig");
+// Signer support (experimental, pre-1.0): the at-rest key file and the
+// NIP-46 signer-side serving loop, so a signer is a thin shell over the
+// library rather than a fork of it. The authorization policy lives with the
+// rest of NIP-46 in `nip46` (see `nip46.PolicyConfig`).
+pub const keystore = @import("keystore.zig");
+pub const signer = @import("signer.zig");
+// The signer loopback protocol's wire types (experimental, pre-1.0): the
+// request/response bodies a keyholder daemon and its clients exchange over
+// local HTTP, so every product speaks the identical protocol without sharing
+// a server. Transport, ports, and authentication stay product concerns.
+pub const signer_ipc = @import("signer_ipc.zig");
+// Legacy encryption, gift wrap, proof of work, negentropy, the remote signer
+// client, and the HTTP-side codecs (NIP-05, NIP-11, NIP-86, NIP-98, Blossom).
+pub const nip04 = @import("nip04.zig");
+pub const nip05 = @import("nip05.zig");
+pub const nip11 = @import("nip11.zig");
+pub const nip13 = @import("nip13.zig");
+pub const nip46_client = @import("nip46_client.zig");
+pub const nip59 = @import("nip59.zig");
+pub const nip77 = @import("nip77.zig");
+pub const nip86 = @import("nip86.zig");
+pub const nip98 = @import("nip98.zig");
+pub const blossom = @import("blossom.zig");
+
+test "module compiles and version is set" {
+    try std.testing.expect(version.len > 0);
+}
+
+test {
+    std.testing.refAllDecls(@This());
+    // Test-only, so referenced rather than exported: the fuzz targets are not
+    // part of the library's surface, they are the parsers being driven with
+    // input nobody wrote by hand. `zig build test` runs each against its corpus
+    // and a few generated inputs; `zig build test --fuzz` runs them properly.
+    _ = @import("fuzz.zig");
+}

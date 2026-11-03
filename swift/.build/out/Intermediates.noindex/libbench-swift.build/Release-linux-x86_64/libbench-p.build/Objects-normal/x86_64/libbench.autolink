@@ -1,0 +1,16 @@
+-lswiftCore
+-lswiftObservation
+-lswift_Concurrency
+-lswift_StringProcessing
+-lswift_RegexParser
+-lswiftGlibc
+-lBlocksRuntime
+-ldispatch
+-lswiftDispatch
+-lFoundation
+-lFoundationEssentials
+-lFoundationInternationalization
+-lm
+-lpthread
+-lutil
+-ldl

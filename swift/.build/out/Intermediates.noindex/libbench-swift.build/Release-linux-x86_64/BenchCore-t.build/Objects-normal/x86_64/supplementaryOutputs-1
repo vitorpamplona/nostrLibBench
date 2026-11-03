@@ -1,0 +1,11 @@
+{
+  "\/home\/user\/nostrLibBench\/swift\/Sources\/BenchCore\/Async.swift" : {
+    "const-values" : "\/home\/user\/nostrLibBench\/swift\/.build\/out\/Intermediates.noindex\/libbench-swift.build\/Release-linux-x86_64\/BenchCore-t.build\/Objects-normal\/x86_64\/BenchCore-primary.swiftconstvalues",
+    "dependencies" : "\/home\/user\/nostrLibBench\/swift\/.build\/out\/Intermediates.noindex\/libbench-swift.build\/Release-linux-x86_64\/BenchCore-t.build\/Objects-normal\/x86_64\/BenchCore-primary.d",
+    "diagnostics" : "\/home\/user\/nostrLibBench\/swift\/.build\/out\/Intermediates.noindex\/libbench-swift.build\/Release-linux-x86_64\/BenchCore-t.build\/Objects-normal\/x86_64\/BenchCore-primary.dia",
+    "objc-header" : "\/home\/user\/nostrLibBench\/swift\/.build\/out\/Intermediates.noindex\/libbench-swift.build\/Release-linux-x86_64\/BenchCore-t.build\/Objects-normal\/x86_64\/BenchCore-Swift.h",
+    "swiftdoc" : "\/home\/user\/nostrLibBench\/swift\/.build\/out\/Intermediates.noindex\/libbench-swift.build\/Release-linux-x86_64\/BenchCore-t.build\/Objects-normal\/x86_64\/Modules\/BenchCore.swiftdoc",
+    "swiftmodule" : "\/home\/user\/nostrLibBench\/swift\/.build\/out\/Intermediates.noindex\/libbench-swift.build\/Release-linux-x86_64\/BenchCore-t.build\/Objects-normal\/x86_64\/Modules\/BenchCore.swiftmodule",
+    "swiftsourceinfo" : "\/home\/user\/nostrLibBench\/swift\/.build\/out\/Intermediates.noindex\/libbench-swift.build\/Release-linux-x86_64\/BenchCore-t.build\/Objects-normal\/x86_64\/Modules\/BenchCore.swiftsourceinfo"
+  }
+}

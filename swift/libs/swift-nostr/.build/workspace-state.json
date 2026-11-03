@@ -1,0 +1,27 @@
+{
+  "object" : {
+    "artifacts" : [
+
+    ],
+    "dependencies" : [
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "swift",
+          "kind" : "fileSystem",
+          "location" : "/home/user/nostrLibBench/swift",
+          "name" : "libbench-swift"
+        },
+        "state" : {
+          "name" : "fileSystem",
+          "path" : "/home/user/nostrLibBench/swift"
+        },
+        "subpath" : "swift"
+      }
+    ],
+    "prebuilts" : [
+
+    ]
+  },
+  "version" : 7
+}

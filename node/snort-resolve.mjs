@@ -6,7 +6,7 @@ export async function resolve(specifier, context, next) {
   try {
     return await next(specifier, context);
   } catch (e) {
-    const rel = specifier.startsWith('./') || specifier.startsWith('../');
+    const rel = specifier === '.' || specifier === '..' || specifier.startsWith('./') || specifier.startsWith('../');
     if (rel && context.parentURL?.includes('/node_modules/@snort/')) {
       for (const suffix of ['.js', '/index.js']) {
         try {

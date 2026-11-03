@@ -1,0 +1,10 @@
+Target dependency graph (4 targets)
+Target 'AllExcludingTests' in project 'Aggregate'
+➜ Explicit dependency on target 'BenchCore-product' in project 'libbench-swift'
+➜ Explicit dependency on target 'libbench-product' in project 'libbench-swift'
+➜ Explicit dependency on target 'BenchCore' in project 'libbench-swift'
+Target 'libbench-product' in project 'libbench-swift'
+➜ Explicit dependency on target 'BenchCore' in project 'libbench-swift'
+Target 'BenchCore-product' in project 'libbench-swift'
+➜ Explicit dependency on target 'BenchCore' in project 'libbench-swift'
+Target 'BenchCore' in project 'libbench-swift' (no dependencies)

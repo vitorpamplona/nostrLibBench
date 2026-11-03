@@ -1,0 +1,16 @@
+{
+  "" : {
+    "const-values" : "/home/user/nostrLibBench/swift/.build/out/Intermediates.noindex/libbench-swift.build/Release-linux-x86_64/libbench-p.build/Objects-normal/x86_64/libbench-primary.swiftconstvalues",
+    "dependencies" : "/home/user/nostrLibBench/swift/.build/out/Intermediates.noindex/libbench-swift.build/Release-linux-x86_64/libbench-p.build/Objects-normal/x86_64/libbench-primary.d",
+    "diagnostics" : "/home/user/nostrLibBench/swift/.build/out/Intermediates.noindex/libbench-swift.build/Release-linux-x86_64/libbench-p.build/Objects-normal/x86_64/libbench-primary.dia",
+    "emit-module-dependencies" : "/home/user/nostrLibBench/swift/.build/out/Intermediates.noindex/libbench-swift.build/Release-linux-x86_64/libbench-p.build/Objects-normal/x86_64/libbench-primary-emit-module.d",
+    "emit-module-diagnostics" : "/home/user/nostrLibBench/swift/.build/out/Intermediates.noindex/libbench-swift.build/Release-linux-x86_64/libbench-p.build/Objects-normal/x86_64/libbench-primary-emit-module.dia",
+    "pch" : "/home/user/nostrLibBench/swift/.build/out/Intermediates.noindex/libbench-swift.build/Release-linux-x86_64/libbench-p.build/Objects-normal/x86_64/libbench-primary-Bridging-header.pch",
+    "swift-dependencies" : "/home/user/nostrLibBench/swift/.build/out/Intermediates.noindex/libbench-swift.build/Release-linux-x86_64/libbench-p.build/Objects-normal/x86_64/libbench-primary.swiftdeps"
+  },
+  "/home/user/nostrLibBench/swift/Sources/libbench/main.swift" : {
+    "index-unit-output-path" : "/libbench-swift.build/Release-linux-x86_64/libbench-p.build/Objects-normal/x86_64/main.o",
+    "llvm-bc" : "/home/user/nostrLibBench/swift/.build/out/Intermediates.noindex/libbench-swift.build/Release-linux-x86_64/libbench-p.build/Objects-normal/x86_64/main.bc",
+    "object" : "/home/user/nostrLibBench/swift/.build/out/Intermediates.noindex/libbench-swift.build/Release-linux-x86_64/libbench-p.build/Objects-normal/x86_64/main.o"
+  }
+}

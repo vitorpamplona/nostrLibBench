@@ -1,0 +1,4 @@
+module BenchCore {
+header "BenchCore-Swift.h"
+export *
+}

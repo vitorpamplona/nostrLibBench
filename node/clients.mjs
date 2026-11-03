@@ -501,7 +501,7 @@ const snortCommon = {
   start(inst, filter, sink) {
     const { RequestBuilder, EventExt } = inst.m.sys;
     const rb = new RequestBuilder(`bench-${Math.random().toString(36).slice(2)}`);
-    rb.withOptions({ leaveOpen: false });
+    rb.withOptions({ leaveOpen: true });
     rb.withFilter().limit(filter.limit).relay(inst.url);
     const q = inst.sys.Query(rb);
     inst.q = q;
@@ -532,7 +532,7 @@ async function importSnort() {
 }
 
 const SNORT_NOTES =
-  'NostrSystem does not verify by default (checkSigs: false); the harness turns checkSigs on. The connection pool batches the events of one microtask turn into one optimizer.batchVerify call; verification checks the signature against an id it recomputes (EventExt.createId) but never compares it to event.id, so the harness also calls EventExt.createId(event) and drops events whose id differs (a second serialization + sha256 per event). The Query feeds a NoteCollection; "event" handlers receive arrays of new events. Outbox model and follow graph off. A new NostrSystem per run.';
+  'NostrSystem does not verify by default (checkSigs: false); the harness turns checkSigs on. The request uses leaveOpen: true (the query is closed in teardown): with the default (false) a 30 s QueryFetchTimeout hard timer would cut a long stream, and the trace closes at the EOSE while the last events of the socket read that carried it still wait in the pool\'s queueMicrotask verify batch, so those are dropped (a tail of ~50 events lost, a different number every run). The Query feed (NoteCollection) hands new events to "event" listeners on a timer (emitInterval), so events reach the app after the EOSE; the run ends at the last one. The connection pool batches the events of one microtask turn into one optimizer.batchVerify call; verification checks the signature against an id it recomputes (EventExt.createId) but never compares it to event.id, so the harness also calls EventExt.createId(event) and drops events whose id differs (a second serialization + sha256 per event). The Query feeds a NoteCollection; "event" handlers receive arrays of new events. Outbox model and follow graph off. A new NostrSystem per run.';
 
 const snort = {
   ...snortCommon,
@@ -549,7 +549,6 @@ const snort = {
 const snortWasm = {
   ...snortCommon,
   id: 'snort-system-wasm',
-  variant: true,
   get crypto() {
     return `@snort/system-wasm ${ver('@snort/system-wasm')} (Rust secp256k1 0.10 → libsecp256k1 in WebAssembly), schnorr_verify_batch`;
   },

@@ -1,0 +1,3441 @@
+//! Local-first event store over LMDB.
+//!
+//! The storage engine for the local-first cache (milestone A4): a zero-copy,
+//! memory-mapped key/value database. This module owns the on-disk event record
+//! format, the primary store keyed by event id, the secondary indexes, and the
+//! filter-driven query API that serves reads entirely from the local database.
+//!
+//! Events are stored in a compact binary record (see `EventView`) rather than
+//! JSON: the fixed-size scalar fields sit at constant offsets so they can be
+//! read in O(1) straight out of the memory map, with no JSON re-parse on read.
+//!
+//! Secondary indexes (by author, kind, created_at, and single-letter tag) are
+//! written in the same transaction as the event. A query selects the most
+//! selective index as its driving scan, gathers candidate ids, and applies the
+//! full `Filter` to each candidate — reusing the exact matching semantics that
+//! subscriptions use — returning results newest-first with pagination.
+
+const std = @import("std");
+const c = @import("lmdb");
+const event = @import("event.zig");
+const filter_mod = @import("filter.zig");
+const keys = @import("keys.zig");
+const hex = @import("hex.zig");
+
+const Event = event.Event;
+const Tag = event.Tag;
+const Filter = filter_mod.Filter;
+
+/// How many cursors a single merged query will open before it stops pairing
+/// authors with kinds and reads the author index instead.
+///
+/// The merge picks the newest entry across live streams by scanning them, so
+/// every stream costs a comparison per event returned. Pairing is worth that as
+/// long as the streams stay few: a client asking for one kind from a full
+/// contact list is a few hundred. A filter broad enough to pass this is one
+/// where most of what the author index yields would be accepted anyway, which
+/// is the case the author index is already good at.
+const max_merge_streams = 4096;
+
+pub const Error = error{
+    /// LMDB returned a non-success, non-`NOTFOUND` status code.
+    Lmdb,
+    /// A stored event record was truncated or malformed.
+    CorruptRecord,
+    /// More events match than `SyncOptions.max_items` allows.
+    TooManyItems,
+    OutOfMemory,
+};
+
+/// A handle to an open LMDB environment (a single memory-mapped database file)
+/// plus the named sub-databases the store uses.
+pub const Store = struct {
+    env: *c.MDB_env,
+    /// Generic key/value database used by `put`/`get`.
+    kv_dbi: c.MDB_dbi,
+    /// Primary event store: 32-byte event id -> binary event record.
+    events_dbi: c.MDB_dbi,
+    /// Index: pubkey ++ time-key ++ id -> (empty).
+    idx_author_dbi: c.MDB_dbi,
+    /// Index: pubkey ++ kind(be u16) ++ time-key ++ id -> (empty).
+    ///
+    /// Serves the common filter that names both authors and kinds. Without it
+    /// such a filter walks the author index, which is every kind that author
+    /// ever wrote, and rejects the wrong ones after decoding them. That is the
+    /// difference between reading a profile and reading a timeline: asking for
+    /// one account's kind:0 walks back through every note they have posted
+    /// since they last edited it.
+    idx_author_kind_dbi: c.MDB_dbi,
+    /// Index: kind(be u16) ++ time-key ++ id -> (empty).
+    idx_kind_dbi: c.MDB_dbi,
+    /// Index: time-key ++ id -> (empty). Drives "everything, newest first".
+    idx_created_dbi: c.MDB_dbi,
+    /// Index: letter ++ value ++ time-key ++ id -> (empty).
+    idx_tag_dbi: c.MDB_dbi,
+    /// Replaceable coordinate -> current event id. The coordinate is
+    /// pubkey ++ kind(be u16) for (parameterized-)replaceable events, with the
+    /// `d`-tag value appended for parameterized ones. Lets ingestion find the
+    /// event a new replaceable event supersedes.
+    repl_dbi: c.MDB_dbi,
+    /// Tombstones for NIP-09 deletions: deleted event id -> the pubkey that
+    /// deleted it. Prevents a deleted event from being re-added by its author.
+    deleted_dbi: c.MDB_dbi,
+    /// Conversation index for direct messages: canonical-pair ++ time-key ++ id
+    /// -> (empty). The canonical pair is the two participants' pubkeys sorted,
+    /// so both sides of a conversation resolve to the same prefix.
+    idx_convo_dbi: c.MDB_dbi,
+
+    pub const OpenOptions = struct {
+        /// Upper bound on the memory map (and thus the on-disk database) size.
+        /// LMDB reserves this as virtual address space, not physical memory,
+        /// so a generous default is cheap. Defaults to 1 GiB. Windows is the
+        /// exception: there LMDB sets the file to this size when it opens it,
+        /// so the whole map is taken on disk from the start.
+        map_size: usize = 1 << 30,
+        /// Maximum number of named sub-databases. Defaults to 16.
+        max_dbs: u32 = 16,
+        /// How much a commit waits for the disk. See `Durability`.
+        durability: Durability = .full,
+    };
+
+    /// What survives a crash, traded against what a commit costs. LMDB syncs
+    /// to disk on every commit by default, and a client ingesting events one
+    /// write at a time spends most of its time there.
+    ///
+    /// None of these can corrupt the database through a crash of the program
+    /// alone: the operating system still writes what it was handed. They
+    /// differ when the machine itself goes down before the disk caught up.
+    pub const Durability = enum {
+        /// Sync data and metadata on every commit. A committed write
+        /// survives a power loss.
+        full,
+        /// Sync data but not the meta page (`MDB_NOMETASYNC`). After a power
+        /// loss the last commit may be rolled back, and the database stays
+        /// consistent.
+        no_meta_sync,
+        /// Never sync (`MDB_NOSYNC`); the operating system writes when it
+        /// chooses. After a power loss any recent commits may be lost, and on
+        /// a filesystem that reorders writes the file can be left corrupt.
+        /// For a cache that can be rebuilt from relays, or a temporary store.
+        no_sync,
+
+        fn envFlags(self: Durability) c_uint {
+            return switch (self) {
+                .full => 0,
+                .no_meta_sync => @intCast(c.MDB_NOMETASYNC),
+                .no_sync => @intCast(c.MDB_NOSYNC),
+            };
+        }
+    };
+
+    /// Opens (creating if necessary) the LMDB environment at `path`. The path
+    /// is treated as a single file (`MDB_NOSUBDIR`) rather than a directory.
+    /// The named sub-databases are created up front so that read-only
+    /// transactions can rely on their existence.
+    pub fn open(path: [*:0]const u8, options: OpenOptions) Error!Store {
+        var env: ?*c.MDB_env = null;
+        try check(c.mdb_env_create(&env));
+        errdefer c.mdb_env_close(env);
+        try check(c.mdb_env_set_mapsize(env, options.map_size));
+        try check(c.mdb_env_set_maxdbs(env, @intCast(options.max_dbs)));
+        try check(c.mdb_env_open(env, path, @as(c_uint, @intCast(c.MDB_NOSUBDIR)) | options.durability.envFlags(), 0o644));
+
+        // Create/open the named sub-databases in a single write transaction.
+        // The dbi handles remain valid for the life of the environment.
+        var txn: ?*c.MDB_txn = null;
+        try check(c.mdb_txn_begin(env, null, 0, &txn));
+        errdefer c.mdb_txn_abort(txn);
+        const store = Store{
+            .env = env.?,
+            .kv_dbi = try openDb(txn, "kv"),
+            .events_dbi = try openDb(txn, "events"),
+            .idx_author_dbi = try openDb(txn, "idx_author"),
+            .idx_author_kind_dbi = try openDb(txn, "idx_author_kind"),
+            .idx_kind_dbi = try openDb(txn, "idx_kind"),
+            .idx_created_dbi = try openDb(txn, "idx_created"),
+            .idx_tag_dbi = try openDb(txn, "idx_tag"),
+            .repl_dbi = try openDb(txn, "repl"),
+            .deleted_dbi = try openDb(txn, "deleted"),
+            .idx_convo_dbi = try openDb(txn, "idx_convo"),
+        };
+        try check(c.mdb_txn_commit(txn));
+
+        var opened = store;
+        try opened.fillAuthorKindIndex();
+        return opened;
+    }
+
+    /// Builds `idx_author_kind` from the stored events unless it already holds
+    /// one entry per event, which is the invariant `applyIndexes` maintains.
+    ///
+    /// A database written before this index existed has none of it, and at
+    /// query time an empty index is indistinguishable from an author who has
+    /// written nothing. A reader upgrading would open the app to a blank feed,
+    /// an empty contact list and a profile with no name, and nothing about that
+    /// looks like a missing index: it looks like the account. So the count is
+    /// checked on every open rather than recorded once, which also repairs a
+    /// database that an interrupted fill, or a build without this index, has
+    /// since written to.
+    ///
+    /// The fill commits as a single transaction, so a second process opening
+    /// the same pre-index database while this one is filling reads the empty
+    /// index until that commit lands, and an authors-and-kinds query in that
+    /// window comes back empty. It is a one-time upgrade window that closes on
+    /// its own, because that process fills the index too.
+    fn fillAuthorKindIndex(self: *Store) Error!void {
+        const complete = complete: {
+            var txn: ?*c.MDB_txn = null;
+            try check(c.mdb_txn_begin(self.env, null, @intCast(c.MDB_RDONLY), &txn));
+            defer c.mdb_txn_abort(txn);
+            var events_stat: c.MDB_stat = undefined;
+            var index_stat: c.MDB_stat = undefined;
+            try check(c.mdb_stat(txn, self.events_dbi, &events_stat));
+            try check(c.mdb_stat(txn, self.idx_author_kind_dbi, &index_stat));
+            break :complete events_stat.ms_entries == index_stat.ms_entries;
+        };
+        if (complete) return;
+
+        var txn: ?*c.MDB_txn = null;
+        try check(c.mdb_txn_begin(self.env, null, 0, &txn));
+        errdefer c.mdb_txn_abort(txn);
+
+        // Emptied first, so a half-written index is replaced rather than added
+        // to. `mdb_drop` with 0 keeps the sub-database itself.
+        try check(c.mdb_drop(txn, self.idx_author_kind_dbi, 0));
+
+        var cursor: ?*c.MDB_cursor = null;
+        try check(c.mdb_cursor_open(txn, self.events_dbi, &cursor));
+        var k: c.MDB_val = undefined;
+        var v: c.MDB_val = undefined;
+        var rc = c.mdb_cursor_get(cursor, &k, &v, c.MDB_FIRST);
+        while (rc == c.MDB_SUCCESS) : (rc = c.mdb_cursor_get(cursor, &k, &v, c.MDB_NEXT)) {
+            const bytes = valBytes(v);
+            if (bytes.len < header_len) return error.CorruptRecord;
+            // Header fields only: the key needs the pubkey, kind and time, and
+            // decoding every event's tags to reach them would turn a one-time
+            // upgrade into a visible pause.
+            const view = EventView{ .bytes = bytes };
+            var key: [74]u8 = undefined;
+            @memcpy(key[0..32], view.pubkey());
+            std.mem.writeInt(u16, key[32..34], view.kind(), .big);
+            key[34..42].* = orderKey(view.createdAt());
+            @memcpy(key[42..74], view.id());
+            try indexOp(txn, self.idx_author_kind_dbi, &key, .put);
+        }
+        if (rc != c.MDB_NOTFOUND) try check(rc);
+        // Closed while the transaction is still live: a write transaction's
+        // cursors must not outlive it.
+        c.mdb_cursor_close(cursor);
+        try check(c.mdb_txn_commit(txn));
+    }
+
+    /// Flushes and closes the environment. The handle is invalid afterwards.
+    pub fn deinit(self: *Store) void {
+        c.mdb_env_close(self.env);
+        self.* = undefined;
+    }
+
+    // -- Generic key/value access -------------------------------------------
+
+    /// Stores `value` under `key` in the generic key/value database, committing
+    /// the write. An existing value for `key` is overwritten.
+    pub fn put(self: *Store, key: []const u8, value: []const u8) Error!void {
+        var txn: ?*c.MDB_txn = null;
+        try check(c.mdb_txn_begin(self.env, null, 0, &txn));
+        errdefer c.mdb_txn_abort(txn);
+        var k = val(key);
+        var v = val(value);
+        try check(c.mdb_put(txn, self.kv_dbi, &k, &v, 0));
+        try check(c.mdb_txn_commit(txn));
+    }
+
+    /// Looks up `key` in the generic key/value database. Returns a caller-owned
+    /// copy of the value (allocated with `allocator`), or null if absent.
+    pub fn get(self: *Store, allocator: std.mem.Allocator, key: []const u8) Error!?[]u8 {
+        var txn: ?*c.MDB_txn = null;
+        try check(c.mdb_txn_begin(self.env, null, @intCast(c.MDB_RDONLY), &txn));
+        defer c.mdb_txn_abort(txn);
+        var k = val(key);
+        var v: c.MDB_val = undefined;
+        const rc = c.mdb_get(txn, self.kv_dbi, &k, &v);
+        if (rc == c.MDB_NOTFOUND) return null;
+        try check(rc);
+        return try allocator.dupe(u8, valBytes(v));
+    }
+
+    // -- Event storage ------------------------------------------------------
+
+    /// Stores `ev` keyed by its 32-byte id and writes its secondary index
+    /// entries in the same transaction. Idempotent: because the id is a hash of
+    /// the event's own content, an id that already exists denotes the same
+    /// event, so a duplicate insert is a no-op. Returns true if the event was
+    /// newly inserted, false if it was already present.
+    pub fn putEvent(self: *Store, gpa: std.mem.Allocator, ev: Event) Error!bool {
+        const record = try encodeEvent(gpa, ev);
+        defer gpa.free(record);
+
+        var txn: ?*c.MDB_txn = null;
+        try check(c.mdb_txn_begin(self.env, null, 0, &txn));
+        errdefer c.mdb_txn_abort(txn);
+
+        var k = val(&ev.id);
+        var v = val(record);
+        const rc = c.mdb_put(txn, self.events_dbi, &k, &v, @intCast(c.MDB_NOOVERWRITE));
+        const inserted = rc != c.MDB_KEYEXIST;
+        if (inserted) {
+            try check(rc);
+            try self.applyIndexes(gpa, txn, ev, .put);
+        }
+        try check(c.mdb_txn_commit(txn));
+        return inserted;
+    }
+
+    /// Inserts many events in a single transaction — the bulk-load path (e.g.
+    /// hydrating the cache from a relay's backlog). One commit (one fsync)
+    /// covers the whole batch, so throughput is far higher than calling
+    /// `putEvent` per event, at the cost of per-event durability. Events whose
+    /// id is already stored are skipped. Returns the number newly inserted.
+    ///
+    /// Like `putEvent`, this is the low-level insert: it does not apply
+    /// replaceable/deletion semantics (use `ingest` for those).
+    pub fn putEventBatch(self: *Store, gpa: std.mem.Allocator, events: []const Event) Error!usize {
+        var txn: ?*c.MDB_txn = null;
+        try check(c.mdb_txn_begin(self.env, null, 0, &txn));
+        errdefer c.mdb_txn_abort(txn);
+
+        var inserted: usize = 0;
+        for (events) |ev| {
+            var k = val(&ev.id);
+            var probe: c.MDB_val = undefined;
+            if (c.mdb_get(txn, self.events_dbi, &k, &probe) == c.MDB_SUCCESS) continue;
+            try self.storeEvent(gpa, txn, ev);
+            inserted += 1;
+        }
+
+        try check(c.mdb_txn_commit(txn));
+        return inserted;
+    }
+
+    /// Writes or deletes every secondary-index entry for `ev` within `txn`.
+    /// Building both directions from one place guarantees an index delete uses
+    /// the exact keys its insert did.
+    fn applyIndexes(self: *Store, gpa: std.mem.Allocator, txn: ?*c.MDB_txn, ev: Event, op: IndexOp) Error!void {
+        const tk = orderKey(ev.created_at);
+
+        var key: std.ArrayList(u8) = .empty;
+        defer key.deinit(gpa);
+
+        // created_at index: [time][id]
+        key.clearRetainingCapacity();
+        try key.appendSlice(gpa, &tk);
+        try key.appendSlice(gpa, &ev.id);
+        try indexOp(txn, self.idx_created_dbi, key.items, op);
+
+        // Big-endian so the index key sorts by kind, shared by both indexes
+        // below.
+        var kb: [2]u8 = undefined;
+        std.mem.writeInt(u16, &kb, ev.kind, .big);
+
+        // author index: [pubkey][time][id]
+        key.clearRetainingCapacity();
+        try key.appendSlice(gpa, &ev.pubkey);
+        try key.appendSlice(gpa, &tk);
+        try key.appendSlice(gpa, &ev.id);
+        try indexOp(txn, self.idx_author_dbi, key.items, op);
+
+        // author+kind index: [pubkey][kind big-endian][time][id]
+        key.clearRetainingCapacity();
+        try key.appendSlice(gpa, &ev.pubkey);
+        try key.appendSlice(gpa, &kb);
+        try key.appendSlice(gpa, &tk);
+        try key.appendSlice(gpa, &ev.id);
+        try indexOp(txn, self.idx_author_kind_dbi, key.items, op);
+
+        // kind index: [kind big-endian][time][id]
+        key.clearRetainingCapacity();
+        try key.appendSlice(gpa, &kb);
+        try key.appendSlice(gpa, &tk);
+        try key.appendSlice(gpa, &ev.id);
+        try indexOp(txn, self.idx_kind_dbi, key.items, op);
+
+        // tag index: [letter][value][time][id] for each single-letter tag.
+        for (ev.tags) |tag| {
+            if (tag.len < 2 or tag[0].len != 1) continue;
+            key.clearRetainingCapacity();
+            try key.append(gpa, tag[0][0]);
+            try key.appendSlice(gpa, tag[1]);
+            try key.appendSlice(gpa, &tk);
+            try key.appendSlice(gpa, &ev.id);
+            try indexOp(txn, self.idx_tag_dbi, key.items, op);
+        }
+
+        // conversation index for direct messages: one entry per counterparty
+        // (each `p`-tagged pubkey), keyed by the canonical (sorted) pair so
+        // that both participants resolve to the same conversation prefix.
+        if (isDirectMessage(ev.kind)) {
+            for (ev.tags) |tag| {
+                if (tag.len < 2 or tag[0].len != 1 or tag[0][0] != 'p') continue;
+                const other = hex.decodeFixed(32, tag[1]) catch continue;
+                if (std.mem.eql(u8, &other, &ev.pubkey)) continue; // skip self
+                const pair = canonicalPair(ev.pubkey, other);
+                key.clearRetainingCapacity();
+                try key.appendSlice(gpa, &pair);
+                try key.appendSlice(gpa, &tk);
+                try key.appendSlice(gpa, &ev.id);
+                try indexOp(txn, self.idx_convo_dbi, key.items, op);
+            }
+        }
+    }
+
+    /// Encodes and stores `ev`'s record and index entries within `txn`,
+    /// overwriting any record already at its id. Used by the ingestion paths,
+    /// which have already decided the write should happen.
+    fn storeEvent(self: *Store, gpa: std.mem.Allocator, txn: ?*c.MDB_txn, ev: Event) Error!void {
+        const record = try encodeEvent(gpa, ev);
+        defer gpa.free(record);
+        var k = val(&ev.id);
+        var v = val(record);
+        try check(c.mdb_put(txn, self.events_dbi, &k, &v, 0));
+        try self.applyIndexes(gpa, txn, ev, .put);
+    }
+
+    /// Removes `ev`'s record and all its index entries within `txn`.
+    fn removeEvent(self: *Store, gpa: std.mem.Allocator, txn: ?*c.MDB_txn, ev: Event) Error!void {
+        try self.applyIndexes(gpa, txn, ev, .del);
+        var k = val(&ev.id);
+        const rc = c.mdb_del(txn, self.events_dbi, &k, null);
+        if (rc != c.MDB_NOTFOUND) try check(rc);
+    }
+
+    /// Returns true if an event with `id` is stored.
+    pub fn hasEvent(self: *Store, id: [32]u8) Error!bool {
+        var txn: ?*c.MDB_txn = null;
+        try check(c.mdb_txn_begin(self.env, null, @intCast(c.MDB_RDONLY), &txn));
+        defer c.mdb_txn_abort(txn);
+        var k = val(&id);
+        var v: c.MDB_val = undefined;
+        const rc = c.mdb_get(txn, self.events_dbi, &k, &v);
+        if (rc == c.MDB_NOTFOUND) return false;
+        try check(rc);
+        return true;
+    }
+
+    /// Looks up the event with `id` and decodes it into a caller-owned
+    /// `StoredEvent` (backed by its own arena), or null if absent. The decode
+    /// reads the binary record directly — there is no JSON parsing on this
+    /// path. Call `deinit` on the result to free it.
+    pub fn getEvent(self: *Store, gpa: std.mem.Allocator, id: [32]u8) Error!?StoredEvent {
+        var txn: ?*c.MDB_txn = null;
+        try check(c.mdb_txn_begin(self.env, null, @intCast(c.MDB_RDONLY), &txn));
+        defer c.mdb_txn_abort(txn);
+        var k = val(&id);
+        var v: c.MDB_val = undefined;
+        const rc = c.mdb_get(txn, self.events_dbi, &k, &v);
+        if (rc == c.MDB_NOTFOUND) return null;
+        try check(rc);
+
+        const arena = try gpa.create(std.heap.ArenaAllocator);
+        arena.* = std.heap.ArenaAllocator.init(gpa);
+        errdefer {
+            arena.deinit();
+            gpa.destroy(arena);
+        }
+        const ev = try decodeEvent(arena.allocator(), valBytes(v));
+        return StoredEvent{ .arena = arena, .event = ev };
+    }
+
+    // -- Query --------------------------------------------------------------
+
+    /// Runs `filter` against the local database and returns the matching events
+    /// newest-first (ties broken deterministically by id), capped at
+    /// `filter.limit` when set. The result owns an arena backing all returned
+    /// event data — call `deinit` on it to free.
+    ///
+    /// The query drives off the most selective available index (ids > authors >
+    /// kinds > tags > everything-by-time) to gather candidates, then applies the
+    /// full `Filter` to each, so every constraint is enforced exactly as in
+    /// subscription matching.
+    ///
+    /// `filter.search`, which `Filter.matches` leaves to relays, is applied here
+    /// as a substring of `content`, ignoring case for ASCII letters (other
+    /// characters must match exactly). No index serves it, so a search with no
+    /// other constraint reads events newest-first until `limit` of them match.
+    /// Content is compared as stored, so an encrypted message is ciphertext and
+    /// a search should name the kinds it means.
+    pub fn query(self: *Store, gpa: std.mem.Allocator, filter: Filter) Error!QueryResult {
+        var txn: ?*c.MDB_txn = null;
+        try check(c.mdb_txn_begin(self.env, null, @intCast(c.MDB_RDONLY), &txn));
+        defer c.mdb_txn_abort(txn);
+
+        // An explicit id list is already a bounded candidate set: fetch each
+        // id directly. Every other filter shape is served by a bounded
+        // newest-first merge over the relevant index, which stops at `limit`
+        // instead of materializing every matching event first.
+        if (filter.ids) |ids| {
+            var seen: std.AutoHashMapUnmanaged([32]u8, void) = .empty;
+            defer seen.deinit(gpa);
+            var candidates: std.ArrayList([32]u8) = .empty;
+            defer candidates.deinit(gpa);
+            for (ids) |id| try addCandidate(gpa, &candidates, &seen, id);
+            // Everything else in the filter still has to be checked; the id
+            // list does not, because the candidate set IS the id list.
+            var rest = filter;
+            rest.ids = null;
+            return self.collectResults(txn, gpa, candidates.items, rest, filter.limit);
+        }
+
+        return self.queryMerged(txn, gpa, filter);
+    }
+
+    /// Answers `filter` by walking the most selective index newest-first and
+    /// stopping once `filter.limit` events match, instead of collecting every
+    /// candidate up front. One reverse cursor is opened per index prefix (per
+    /// author / kind / tag value, or the whole created_at index when the
+    /// filter has no selective constraint), and a k-way merge on the keys'
+    /// embedded `[time][id]` suffix yields candidates globally newest-first —
+    /// so the work is proportional to the events *returned* (plus any
+    /// rejected along the way), not to the total matching history.
+    fn queryMerged(self: *Store, txn: ?*c.MDB_txn, gpa: std.mem.Allocator, filter: Filter) Error!QueryResult {
+        var scratch = std.heap.ArenaAllocator.init(gpa);
+        defer scratch.deinit();
+        const sa = scratch.allocator();
+
+        // The index time-keys are order-preserving, so since/until become key
+        // bounds: streams start at `until` and stop below `since`, both
+        // inclusive, matching `Filter.matches`.
+        const until_key = orderKey(filter.until orelse std.math.maxInt(i64));
+        const since_key = orderKey(filter.since orelse std.math.minInt(i64));
+
+        var streams: std.ArrayList(RevStream) = .empty;
+        defer for (streams.items) |*s| {
+            if (s.cursor != null) c.mdb_cursor_close(s.cursor);
+        };
+
+        // A filter naming both authors and kinds is served by the composite
+        // index, one stream per (author, kind) pair, so a stream only ever
+        // walks entries the filter can accept. Naming the authors alone would
+        // make the merge step through every other kind those authors wrote and
+        // throw each one away after a decode.
+        //
+        // The pairing is a product, and every pair costs a cursor and a heap
+        // slot, so a filter with many of both is left on the author index:
+        // paying a decode per rejected event beats paying for the pairs.
+        const author_kind: ?[]const u16 = blk: {
+            const authors = filter.authors orelse break :blk null;
+            const kinds = filter.kinds orelse break :blk null;
+            const pairs = std.math.mul(usize, authors.len, kinds.len) catch break :blk null;
+            if (pairs > max_merge_streams) break :blk null;
+            break :blk kinds;
+        };
+
+        // What the chosen index has already decided, so the per-candidate check
+        // below does not decide it again. `Filter.matches` compares a pubkey or
+        // an id against the whole list it was given, one at a time, which is
+        // fine for a filter naming three authors and quadratic for one naming
+        // two thousand: a home feed over a real follow list re-scanned the
+        // entire list for every note it returned, having reached that note
+        // through that author's own index.
+        var residual = filter;
+        residual.limit = null;
+
+        if (author_kind) |kinds| {
+            residual.authors = null;
+            residual.kinds = null;
+            for (filter.authors.?) |a| {
+                for (kinds) |kd| {
+                    var prefix: [34]u8 = undefined;
+                    @memcpy(prefix[0..32], &a);
+                    std.mem.writeInt(u16, prefix[32..34], kd, .big);
+                    const s = try streams.addOne(sa);
+                    try revStreamInit(s, txn, self.idx_author_kind_dbi, sa, &prefix, until_key, since_key);
+                }
+            }
+        } else if (filter.authors) |authors| {
+            residual.authors = null;
+            for (authors) |a| {
+                const s = try streams.addOne(sa);
+                try revStreamInit(s, txn, self.idx_author_dbi, sa, &a, until_key, since_key);
+            }
+        } else if (filter.kinds) |kinds| {
+            residual.kinds = null;
+            for (kinds) |kd| {
+                var kb: [2]u8 = undefined;
+                std.mem.writeInt(u16, &kb, kd, .big);
+                const s = try streams.addOne(sa);
+                try revStreamInit(s, txn, self.idx_kind_dbi, sa, &kb, until_key, since_key);
+            }
+        } else if (filter.tags != null and filter.tags.?.len > 0) {
+            const tf = filter.tags.?[0];
+            for (tf.values) |value| {
+                const prefix = try sa.alloc(u8, 1 + value.len);
+                prefix[0] = tf.letter;
+                @memcpy(prefix[1..], value);
+                const s = try streams.addOne(sa);
+                try revStreamInit(s, txn, self.idx_tag_dbi, sa, prefix, until_key, since_key);
+            }
+        } else {
+            const s = try streams.addOne(sa);
+            try revStreamInit(s, txn, self.idx_created_dbi, sa, &.{}, until_key, since_key);
+        }
+
+        const arena = try gpa.create(std.heap.ArenaAllocator);
+        arena.* = std.heap.ArenaAllocator.init(gpa);
+        errdefer {
+            arena.deinit();
+            gpa.destroy(arena);
+        }
+        const aa = arena.allocator();
+
+        var matched: std.ArrayList(Event) = .empty;
+        defer matched.deinit(gpa);
+        var seen: std.AutoHashMapUnmanaged([32]u8, void) = .empty;
+        defer seen.deinit(gpa);
+
+        var heap = MergeHeap.init(try sa.alloc(u32, streams.items.len), streams.items);
+
+        var examined: usize = 0;
+        var list_checks: usize = 0;
+        const width = listWidth(residual);
+        const limit: usize = if (filter.limit) |l| l else std.math.maxInt(usize);
+        while (matched.items.len < limit) {
+            // Pop the globally newest candidate: largest (time, id) suffix
+            // across the live streams, which is the top of the heap.
+            const bi = heap.top() orelse break;
+            const id = streams.items[bi].id;
+            examined += 1;
+            try revStreamAdvance(&streams.items[bi], since_key);
+            heap.settleTop(streams.items);
+
+            // The same event can surface from two streams (e.g. two queried
+            // tag values on one event); yield it once.
+            const gop = try seen.getOrPut(gpa, id);
+            if (gop.found_existing) continue;
+
+            var k = val(&id);
+            var v: c.MDB_val = undefined;
+            const rc = c.mdb_get(txn, self.events_dbi, &k, &v);
+            if (rc == c.MDB_NOTFOUND) continue;
+            try check(rc);
+            const ev = try decodeEvent(aa, valBytes(v));
+            // `residual`, not `filter`: whatever the index above guaranteed is
+            // already true of this event. The time bounds stay in, cheap and a
+            // check on the index agreeing with the record it points at.
+            list_checks += width;
+            if (!residual.matches(ev)) continue;
+            if (!searchHit(filter.search, ev.content)) continue;
+            try matched.append(gpa, ev);
+        }
+
+        // The merge yields (created_at desc, id desc) — the same order the
+        // sort-based path produced — so results are returned as popped.
+        const events = try aa.dupe(Event, matched.items);
+        return QueryResult{
+            .arena = arena,
+            .events = events,
+            .examined = examined,
+            .list_checks = list_checks,
+        };
+    }
+
+    /// Returns the direct-message conversation between pubkeys `a` and `b`
+    /// (both directions), newest-first, capped at `limit` when set. Served from
+    /// the conversation index, so it does not scan unrelated events.
+    pub fn queryConversation(self: *Store, gpa: std.mem.Allocator, a: [32]u8, b: [32]u8, limit: ?u32) Error!QueryResult {
+        var txn: ?*c.MDB_txn = null;
+        try check(c.mdb_txn_begin(self.env, null, @intCast(c.MDB_RDONLY), &txn));
+        defer c.mdb_txn_abort(txn);
+
+        var seen: std.AutoHashMapUnmanaged([32]u8, void) = .empty;
+        defer seen.deinit(gpa);
+        var candidates: std.ArrayList([32]u8) = .empty;
+        defer candidates.deinit(gpa);
+        const prefix = canonicalPair(a, b);
+        try scanPrefix(txn, self.idx_convo_dbi, gpa, &prefix, &candidates, &seen);
+
+        return self.collectResults(txn, gpa, candidates.items, null, limit);
+    }
+
+    /// Fetches each candidate id, decodes it, keeps those matching `filter`
+    /// (when given), and returns them newest-first capped at `limit`. The
+    /// returned result owns an arena holding all event data; `txn` need only
+    /// stay open for the duration of this call.
+    fn collectResults(
+        self: *Store,
+        txn: ?*c.MDB_txn,
+        gpa: std.mem.Allocator,
+        candidate_ids: []const [32]u8,
+        filter: ?Filter,
+        limit: ?u32,
+    ) Error!QueryResult {
+        const arena = try gpa.create(std.heap.ArenaAllocator);
+        arena.* = std.heap.ArenaAllocator.init(gpa);
+        errdefer {
+            arena.deinit();
+            gpa.destroy(arena);
+        }
+        const aa = arena.allocator();
+
+        var matched: std.ArrayList(Event) = .empty;
+        defer matched.deinit(gpa);
+        const width = if (filter) |f| listWidth(f) else 0;
+        var list_checks: usize = 0;
+        for (candidate_ids) |id| {
+            var k = val(&id);
+            var v: c.MDB_val = undefined;
+            const rc = c.mdb_get(txn, self.events_dbi, &k, &v);
+            if (rc == c.MDB_NOTFOUND) continue;
+            try check(rc);
+            const ev = try decodeEvent(aa, valBytes(v));
+            if (filter) |f| {
+                list_checks += width;
+                if (!f.matches(ev)) continue;
+                if (!searchHit(f.search, ev.content)) continue;
+            }
+            try matched.append(gpa, ev);
+        }
+
+        std.mem.sort(Event, matched.items, {}, lessByTimeDesc);
+
+        const count = if (limit) |l| @min(@as(usize, l), matched.items.len) else matched.items.len;
+        const events = try aa.dupe(Event, matched.items[0..count]);
+        // An explicit id list is its own candidate set: every id named is read.
+        return QueryResult{
+            .arena = arena,
+            .events = events,
+            .examined = candidate_ids.len,
+            .list_checks = list_checks,
+        };
+    }
+
+    /// How many id and author entries `f` still has to be compared against, per
+    /// candidate. See `QueryResult.list_checks`.
+    fn listWidth(f: Filter) usize {
+        var n: usize = 0;
+        if (f.ids) |ids| n += ids.len;
+        if (f.authors) |authors| n += authors.len;
+        return n;
+    }
+
+    // -- Local-first reconciliation -----------------------------------------
+
+    /// The newest `created_at` among locally stored events matching `filter`,
+    /// or null if none match.
+    pub fn newestMatching(self: *Store, gpa: std.mem.Allocator, filter: Filter) Error!?i64 {
+        var f = filter;
+        f.limit = 1; // query returns newest-first, so we only need the first
+        var r = try self.query(gpa, f);
+        defer r.deinit();
+        if (r.events.len == 0) return null;
+        return r.events[0].created_at;
+    }
+
+    /// Builds the filter to send to relays when reconciling a local-first view:
+    /// a copy of `filter` whose `since` is advanced to the newest locally stored
+    /// matching event, so the subscription only streams what the cache is
+    /// missing. `since` stays inclusive (not `+1`) so events sharing the newest
+    /// timestamp are not skipped — `ingest` deduplicates the boundary re-fetch.
+    ///
+    /// Typical flow: render immediately from `query(filter)`, send
+    /// `message.encodeReq` of `reconcileFilter(filter)` to the relays, and feed
+    /// each incoming event back through `ingest`; a later `query` then reflects
+    /// the reconciled state.
+    ///
+    /// A filter with `search` comes back unchanged. Relays decide what a search
+    /// matches, so the newest local substring match says nothing about which
+    /// of their results the store already holds, and a `since` taken from it
+    /// would hide every older result the relays would have returned.
+    pub fn reconcileFilter(self: *Store, gpa: std.mem.Allocator, filter: Filter) Error!Filter {
+        var f = filter;
+        if (filter.search != null) return f;
+        if (try self.newestMatching(gpa, filter)) |newest| {
+            if (f.since == null or f.since.? < newest) f.since = newest;
+        }
+        return f;
+    }
+
+    /// Every stored event matching `filter` as a `(created_at, id)` pair,
+    /// sorted by `created_at` ascending and then by id: the order NIP-77
+    /// negentropy reconciles over. The caller owns the returned slice.
+    ///
+    /// `limit` is honoured the way `query` honours it (the newest `limit`
+    /// matches). Events with a negative `created_at` are left out, since a
+    /// negentropy timestamp is unsigned.
+    ///
+    /// A filter that constrains nothing but `authors`, `kinds`, `since` and
+    /// `until` is answered from index keys alone, which already hold the
+    /// timestamp and the id, so no event is read or decoded. Any other filter
+    /// goes through `query` and is sorted.
+    ///
+    /// With `options.max_items` set, a filter matching more than that fails
+    /// with `error.TooManyItems` as soon as the walk passes it, so a relay
+    /// can refuse a reconciliation over too large a set (NIP-77's
+    /// `NEG-ERR "blocked: too many records"`) without first collecting it.
+    pub fn syncItems(self: *Store, gpa: std.mem.Allocator, filter: Filter, options: SyncOptions) Error![]SyncItem {
+        var out: std.ArrayList(SyncItem) = .empty;
+        errdefer out.deinit(gpa);
+        const max = options.max_items orelse std.math.maxInt(usize);
+
+        const from_index = filter.ids == null and filter.tags == null and
+            filter.search == null and filter.limit == null;
+        if (!from_index) {
+            var f = filter;
+            // One past the cap is enough to know the cap was passed.
+            if (options.max_items) |m| {
+                const over: u32 = std.math.cast(u32, m +| 1) orelse std.math.maxInt(u32);
+                f.limit = if (filter.limit) |l| @min(l, over) else over;
+            }
+            var r = try self.query(gpa, f);
+            defer r.deinit();
+            if (r.events.len > max) return error.TooManyItems;
+            try out.ensureTotalCapacity(gpa, r.events.len);
+            for (r.events) |ev| {
+                if (ev.created_at < 0) continue;
+                out.appendAssumeCapacity(.{ .created_at = @intCast(ev.created_at), .id = ev.id });
+            }
+            std.mem.sort(SyncItem, out.items, {}, SyncItem.lessThan);
+            return out.toOwnedSlice(gpa);
+        }
+
+        const since = @max(filter.since orelse 0, 0);
+        const until = filter.until orelse std.math.maxInt(i64);
+        if (until < since) return out.toOwnedSlice(gpa);
+        const range: SyncRange = .{ .since_key = orderKey(since), .until_key = orderKey(until), .max = max };
+
+        var txn: ?*c.MDB_txn = null;
+        try check(c.mdb_txn_begin(self.env, null, @intCast(c.MDB_RDONLY), &txn));
+        defer c.mdb_txn_abort(txn);
+
+        // The same author or kind named twice would list its events twice.
+        const authors = try sortedUnique([32]u8, gpa, filter.authors orelse &.{});
+        defer gpa.free(authors);
+        const kinds = try sortedUnique(u16, gpa, filter.kinds orelse &.{});
+        defer gpa.free(kinds);
+
+        if (filter.authors == null and filter.kinds == null) {
+            // Keys are time-key ++ id, so a forward walk is already in
+            // (created_at, id) order.
+            try walkSyncRange(gpa, txn, self.idx_created_dbi, &.{}, range, &out);
+            return out.toOwnedSlice(gpa);
+        }
+        var prefix: [34]u8 = undefined;
+        if (filter.authors != null and filter.kinds != null) {
+            for (authors) |pk| for (kinds) |kind| {
+                prefix[0..32].* = pk;
+                std.mem.writeInt(u16, prefix[32..34], kind, .big);
+                try walkSyncRange(gpa, txn, self.idx_author_kind_dbi, &prefix, range, &out);
+            };
+        } else if (filter.authors != null) {
+            for (authors) |pk| try walkSyncRange(gpa, txn, self.idx_author_dbi, &pk, range, &out);
+        } else {
+            for (kinds) |kind| {
+                std.mem.writeInt(u16, prefix[0..2], kind, .big);
+                try walkSyncRange(gpa, txn, self.idx_kind_dbi, prefix[0..2], range, &out);
+            }
+        }
+        // One walk is in order already; several have to be merged.
+        std.mem.sort(SyncItem, out.items, {}, SyncItem.lessThan);
+        return out.toOwnedSlice(gpa);
+    }
+
+    // -- Cache policy -------------------------------------------------------
+
+    /// The number of events currently stored (O(1), from LMDB's statistics).
+    pub fn eventCount(self: *Store) Error!usize {
+        var txn: ?*c.MDB_txn = null;
+        try check(c.mdb_txn_begin(self.env, null, @intCast(c.MDB_RDONLY), &txn));
+        defer c.mdb_txn_abort(txn);
+        var stat: c.MDB_stat = undefined;
+        try check(c.mdb_stat(txn, self.events_dbi, &stat));
+        return stat.ms_entries;
+    }
+
+    /// Evicts the oldest events (by `created_at`) until at most `max_events`
+    /// remain, removing each event's record and all its index entries. Returns
+    /// how many were evicted. This is a size-cap cache policy; evicted events
+    /// are not tombstoned, so they can be re-fetched and re-ingested later.
+    pub fn evictToCap(self: *Store, gpa: std.mem.Allocator, max_events: usize) Error!usize {
+        var txn: ?*c.MDB_txn = null;
+        try check(c.mdb_txn_begin(self.env, null, 0, &txn));
+        errdefer c.mdb_txn_abort(txn);
+
+        var stat: c.MDB_stat = undefined;
+        try check(c.mdb_stat(txn, self.events_dbi, &stat));
+        var remaining = stat.ms_entries;
+
+        var scratch = std.heap.ArenaAllocator.init(gpa);
+        defer scratch.deinit();
+
+        var evicted: usize = 0;
+        while (remaining > max_events) {
+            // The first key in the created_at index is the oldest event.
+            var cursor: ?*c.MDB_cursor = null;
+            try check(c.mdb_cursor_open(txn, self.idx_created_dbi, &cursor));
+            var k: c.MDB_val = undefined;
+            var v: c.MDB_val = undefined;
+            const rc = c.mdb_cursor_get(cursor, &k, &v, c.MDB_FIRST);
+            const key = valBytes(k);
+            if (rc != c.MDB_SUCCESS or key.len < 32) {
+                c.mdb_cursor_close(cursor);
+                break;
+            }
+            const id: [32]u8 = key[key.len - 32 ..][0..32].*;
+            c.mdb_cursor_close(cursor);
+
+            var ek = val(&id);
+            var ev: c.MDB_val = undefined;
+            const erc = c.mdb_get(txn, self.events_dbi, &ek, &ev);
+            if (erc == c.MDB_NOTFOUND) break; // index/record inconsistency; stop
+            try check(erc);
+
+            _ = scratch.reset(.retain_capacity);
+            const decoded = try decodeEvent(scratch.allocator(), valBytes(ev));
+            try self.removeEvent(gpa, txn, decoded);
+            try self.clearReplCoordinate(gpa, txn, decoded);
+
+            remaining -= 1;
+            evicted += 1;
+        }
+
+        try check(c.mdb_txn_commit(txn));
+        return evicted;
+    }
+
+    /// Removes the event `id` and every index entry that points at it, in one
+    /// write transaction. Returns whether it was stored.
+    ///
+    /// This is a local removal, not a NIP-09 deletion: no tombstone is
+    /// recorded, so the same event can be ingested again later. If it was the
+    /// current event of a replaceable coordinate, the coordinate is cleared,
+    /// so an older version that arrives afterwards is taken as the current one.
+    pub fn remove(self: *Store, gpa: std.mem.Allocator, id: [32]u8) Error!bool {
+        var txn: ?*c.MDB_txn = null;
+        try check(c.mdb_txn_begin(self.env, null, 0, &txn));
+        errdefer c.mdb_txn_abort(txn);
+        var scratch = std.heap.ArenaAllocator.init(gpa);
+        defer scratch.deinit();
+        const removed = try self.removeIn(gpa, txn, scratch.allocator(), id);
+        try check(c.mdb_txn_commit(txn));
+        return removed;
+    }
+
+    /// Removes every event `query(filter)` returns, in one write transaction,
+    /// and returns how many. A `limit` on the filter bounds it the way it
+    /// bounds the query. Like `remove`, records no tombstones.
+    pub fn removeMatching(self: *Store, gpa: std.mem.Allocator, filter: Filter) Error!usize {
+        var found = try self.query(gpa, filter);
+        defer found.deinit();
+
+        var txn: ?*c.MDB_txn = null;
+        try check(c.mdb_txn_begin(self.env, null, 0, &txn));
+        errdefer c.mdb_txn_abort(txn);
+        var scratch = std.heap.ArenaAllocator.init(gpa);
+        defer scratch.deinit();
+        var removed: usize = 0;
+        for (found.events) |ev| {
+            _ = scratch.reset(.retain_capacity);
+            if (try self.removeIn(gpa, txn, scratch.allocator(), ev.id)) removed += 1;
+        }
+        try check(c.mdb_txn_commit(txn));
+        return removed;
+    }
+
+    /// Removes `id` within `txn`, decoding the stored record into `scratch`
+    /// so the index keys it wrote can be rebuilt and deleted.
+    fn removeIn(self: *Store, gpa: std.mem.Allocator, txn: ?*c.MDB_txn, scratch: std.mem.Allocator, id: [32]u8) Error!bool {
+        var k = val(&id);
+        var v: c.MDB_val = undefined;
+        const rc = c.mdb_get(txn, self.events_dbi, &k, &v);
+        if (rc == c.MDB_NOTFOUND) return false;
+        try check(rc);
+        const stored = try decodeEvent(scratch, valBytes(v));
+        try self.removeEvent(gpa, txn, stored);
+        try self.clearReplCoordinate(gpa, txn, stored);
+        return true;
+    }
+
+    // -- Ingestion ----------------------------------------------------------
+
+    /// Ingests `ev`, applying NIP-01 protocol semantics on top of raw storage:
+    /// optional signature validation, and replaceable / parameterized-
+    /// replaceable "latest wins" upserts. Ephemeral events are not persisted.
+    /// See `IngestResult` for the possible outcomes.
+    ///
+    /// This is the protocol-aware entry point; `putEvent` is the low-level
+    /// insert. Callers feeding events from relays should use `ingest`.
+    pub fn ingest(self: *Store, gpa: std.mem.Allocator, ev: Event, options: IngestOptions) Error!IngestResult {
+        var results: [1]IngestResult = undefined;
+        try self.ingestBatch(gpa, &.{ev}, options, &results);
+        return results[0];
+    }
+
+    /// `ingest` for many events at once, in one write transaction, writing
+    /// event `i`'s outcome to `results[i]`.
+    ///
+    /// Each event gets exactly the treatment `ingest` gives it, in order, and
+    /// sees what the events before it in the batch wrote: a deletion early in
+    /// the batch tombstones an event later in it, and a newer replaceable
+    /// event later in the batch supersedes an older one earlier in it.
+    ///
+    /// One transaction is one commit, and a commit is what costs: LMDB syncs
+    /// to disk on every one. Events arriving from relays one at a time cost a
+    /// sync each through `ingest`, and a batch of them costs one.
+    ///
+    /// Nothing is written if any event fails with an error rather than an
+    /// outcome, such as running out of memory or space.
+    pub fn ingestBatch(self: *Store, gpa: std.mem.Allocator, events: []const Event, options: IngestOptions, results: []IngestResult) Error!void {
+        std.debug.assert(results.len >= events.len);
+        var txn: ?*c.MDB_txn = null;
+        try check(c.mdb_txn_begin(self.env, null, 0, &txn));
+        errdefer c.mdb_txn_abort(txn);
+        for (events, 0..) |ev, i| results[i] = try self.ingestIn(gpa, txn, ev, options);
+        try check(c.mdb_txn_commit(txn));
+    }
+
+    fn ingestIn(self: *Store, gpa: std.mem.Allocator, txn: ?*c.MDB_txn, ev: Event, options: IngestOptions) Error!IngestResult {
+        if (options.verify_with) |signer| {
+            if (!(try event.verify(gpa, signer, ev))) return .invalid;
+        }
+        // A NIP-09 deletion tombstones an id against its author, so a later
+        // re-arrival of that event from the same author is rejected.
+        if (try self.isTombstoned(txn, ev.id, ev.pubkey)) return .deleted;
+        if (ev.kind == 5) return self.ingestDeletion(gpa, txn, ev);
+        switch (classify(ev.kind)) {
+            .ephemeral => return .ephemeral,
+            .regular => {
+                var k = val(&ev.id);
+                var probe: c.MDB_val = undefined;
+                if (c.mdb_get(txn, self.events_dbi, &k, &probe) == c.MDB_SUCCESS) return .duplicate;
+                try self.storeEvent(gpa, txn, ev);
+                return .added;
+            },
+            .replaceable, .parameterized => |class| return self.ingestReplaceable(gpa, txn, ev, class),
+        }
+    }
+
+    /// True if `id` has been tombstoned by `pubkey` (i.e. that pubkey deleted an
+    /// event with this id). A tombstone recorded by a *different* pubkey does
+    /// not block `pubkey`'s event, since one can only delete one's own events.
+    fn isTombstoned(self: *Store, txn: ?*c.MDB_txn, id: [32]u8, pubkey: [32]u8) Error!bool {
+        var k = val(&id);
+        var v: c.MDB_val = undefined;
+        const rc = c.mdb_get(txn, self.deleted_dbi, &k, &v);
+        if (rc == c.MDB_NOTFOUND) return false;
+        try check(rc);
+        return valBytes(v).len == 32 and std.mem.eql(u8, valBytes(v), &pubkey);
+    }
+
+    /// Ingests a kind-5 deletion event: stores the request itself, then applies
+    /// its `e` (by id) and `a` (by addressable coordinate) deletions. A target
+    /// is only removed when it was authored by the same pubkey as the deletion;
+    /// `a` deletions additionally only affect events at or older than the
+    /// deletion. Every `e` target id is tombstoned so it cannot be re-added by
+    /// its author, even if the target has not been seen yet.
+    fn ingestDeletion(self: *Store, gpa: std.mem.Allocator, txn: ?*c.MDB_txn, ev: Event) Error!IngestResult {
+        var k = val(&ev.id);
+        var probe: c.MDB_val = undefined;
+        const existed = c.mdb_get(txn, self.events_dbi, &k, &probe) == c.MDB_SUCCESS;
+        if (!existed) try self.storeEvent(gpa, txn, ev);
+
+        for (ev.tags) |tag| {
+            if (tag.len < 2 or tag[0].len != 1) continue;
+            switch (tag[0][0]) {
+                'e' => {
+                    const target = hex.decodeFixed(32, tag[1]) catch continue;
+                    try self.deleteById(gpa, txn, ev.pubkey, target);
+                },
+                'a' => try self.deleteByCoord(gpa, txn, ev.pubkey, ev.created_at, tag[1]),
+                else => {},
+            }
+        }
+
+        return if (existed) .duplicate else .added;
+    }
+
+    /// Deletes the event `id` if it is stored and authored by `deleter`, and
+    /// tombstones the id against `deleter` regardless (so a not-yet-seen target
+    /// is blocked on arrival).
+    fn deleteById(self: *Store, gpa: std.mem.Allocator, txn: ?*c.MDB_txn, deleter: [32]u8, id: [32]u8) Error!void {
+        var k = val(&id);
+        var v: c.MDB_val = undefined;
+        const rc = c.mdb_get(txn, self.events_dbi, &k, &v);
+        if (rc != c.MDB_NOTFOUND) {
+            try check(rc);
+            var scratch = std.heap.ArenaAllocator.init(gpa);
+            defer scratch.deinit();
+            const target = try decodeEvent(scratch.allocator(), valBytes(v));
+            if (!std.mem.eql(u8, &target.pubkey, &deleter)) return; // not the author
+            try self.removeEvent(gpa, txn, target);
+            try self.clearReplCoordinate(gpa, txn, target);
+        }
+        try self.tombstone(txn, id, deleter);
+    }
+
+    /// Applies an `a`-tag deletion `kind:pubkey:dtag`: if the coordinate is
+    /// owned by `deleter` and its current event is at or older than `del_time`,
+    /// that event is removed. No tombstone is recorded — a strictly newer
+    /// replaceable event may legitimately arrive later.
+    fn deleteByCoord(self: *Store, gpa: std.mem.Allocator, txn: ?*c.MDB_txn, deleter: [32]u8, del_time: i64, a_value: []const u8) Error!void {
+        var it = std.mem.splitScalar(u8, a_value, ':');
+        const kind_str = it.next() orelse return;
+        const pk_str = it.next() orelse return;
+        const dtag = it.rest();
+        const kind = std.fmt.parseInt(u16, kind_str, 10) catch return;
+        const pk = hex.decodeFixed(32, pk_str) catch return;
+        if (!std.mem.eql(u8, &pk, &deleter)) return;
+
+        const class = classify(kind);
+        if (class != .replaceable and class != .parameterized) return;
+
+        var coord: std.ArrayList(u8) = .empty;
+        defer coord.deinit(gpa);
+        try appendCoord(gpa, &coord, pk, kind, if (class == .parameterized) dtag else null);
+
+        var ck = val(coord.items);
+        var cv: c.MDB_val = undefined;
+        const crc = c.mdb_get(txn, self.repl_dbi, &ck, &cv);
+        if (crc == c.MDB_NOTFOUND) return;
+        try check(crc);
+        const target_id: [32]u8 = valBytes(cv)[0..32].*;
+
+        var ek = val(&target_id);
+        var ev: c.MDB_val = undefined;
+        const erc = c.mdb_get(txn, self.events_dbi, &ek, &ev);
+        if (erc == c.MDB_NOTFOUND) return;
+        try check(erc);
+        var scratch = std.heap.ArenaAllocator.init(gpa);
+        defer scratch.deinit();
+        const target = try decodeEvent(scratch.allocator(), valBytes(ev));
+        if (target.created_at > del_time) return; // newer than the deletion; keep
+
+        try self.removeEvent(gpa, txn, target);
+        _ = c.mdb_del(txn, self.repl_dbi, &ck, null);
+    }
+
+    /// If `ev` is (parameterized-)replaceable and its coordinate currently
+    /// points at `ev`, clears that coordinate mapping.
+    fn clearReplCoordinate(self: *Store, gpa: std.mem.Allocator, txn: ?*c.MDB_txn, ev: Event) Error!void {
+        const class = classify(ev.kind);
+        if (class != .replaceable and class != .parameterized) return;
+
+        var coord: std.ArrayList(u8) = .empty;
+        defer coord.deinit(gpa);
+        try appendCoord(gpa, &coord, ev.pubkey, ev.kind, if (class == .parameterized) dTagValue(ev) else null);
+
+        var ck = val(coord.items);
+        var cv: c.MDB_val = undefined;
+        const crc = c.mdb_get(txn, self.repl_dbi, &ck, &cv);
+        if (crc == c.MDB_NOTFOUND) return;
+        try check(crc);
+        if (std.mem.eql(u8, valBytes(cv), &ev.id)) {
+            _ = c.mdb_del(txn, self.repl_dbi, &ck, null);
+        }
+    }
+
+    fn tombstone(self: *Store, txn: ?*c.MDB_txn, id: [32]u8, deleter: [32]u8) Error!void {
+        var k = val(&id);
+        var v = val(&deleter);
+        try check(c.mdb_put(txn, self.deleted_dbi, &k, &v, 0));
+    }
+
+    fn ingestReplaceable(self: *Store, gpa: std.mem.Allocator, txn: ?*c.MDB_txn, ev: Event, class: Class) Error!IngestResult {
+        // Build the replaceable coordinate: pubkey ++ kind, plus the d-tag
+        // value for parameterized-replaceable events.
+        var coord: std.ArrayList(u8) = .empty;
+        defer coord.deinit(gpa);
+        try appendCoord(gpa, &coord, ev.pubkey, ev.kind, if (class == .parameterized) dTagValue(ev) else null);
+
+        var ck = val(coord.items);
+        var cv: c.MDB_val = undefined;
+        const crc = c.mdb_get(txn, self.repl_dbi, &ck, &cv);
+
+        var result: IngestResult = .added;
+        if (crc != c.MDB_NOTFOUND) {
+            try check(crc);
+            const existing_id: [32]u8 = valBytes(cv)[0..32].*;
+            if (std.mem.eql(u8, &existing_id, &ev.id)) return .duplicate;
+            // Compare against the currently stored event for this coordinate.
+            var ek = val(&existing_id);
+            var evv: c.MDB_val = undefined;
+            const erc = c.mdb_get(txn, self.events_dbi, &ek, &evv);
+            if (erc != c.MDB_NOTFOUND) {
+                try check(erc);
+                var scratch = std.heap.ArenaAllocator.init(gpa);
+                defer scratch.deinit();
+                const existing = try decodeEvent(scratch.allocator(), valBytes(evv));
+                if (!replaces(ev, existing)) return .stale;
+                try self.removeEvent(gpa, txn, existing);
+                result = .replaced;
+            }
+        }
+
+        try self.storeEvent(gpa, txn, ev);
+        // Point the coordinate at the new event.
+        var v = val(&ev.id);
+        try check(c.mdb_put(txn, self.repl_dbi, &ck, &v, 0));
+        return result;
+    }
+};
+
+/// A stored event reduced to what NIP-77 negentropy reconciles: its
+/// `created_at` and its id. See `Store.syncItems`.
+pub const SyncOptions = struct {
+    /// Fail with `error.TooManyItems` once more than this many events match.
+    /// Null is no cap.
+    max_items: ?usize = null,
+};
+
+/// The time bounds and the cap of one `syncItems` walk.
+const SyncRange = struct {
+    since_key: [8]u8,
+    until_key: [8]u8,
+    max: usize,
+};
+
+/// Appends the `(created_at, id)` of every key in `dbi` that is `prefix`
+/// followed by a time key inside `range` and an id, reading only the keys.
+fn walkSyncRange(gpa: std.mem.Allocator, txn: ?*c.MDB_txn, dbi: c.MDB_dbi, prefix: []const u8, range: SyncRange, out: *std.ArrayList(SyncItem)) Error!void {
+    var cursor: ?*c.MDB_cursor = null;
+    try check(c.mdb_cursor_open(txn, dbi, &cursor));
+    defer c.mdb_cursor_close(cursor);
+
+    var start_buf: [34 + 8]u8 = undefined;
+    @memcpy(start_buf[0..prefix.len], prefix);
+    start_buf[prefix.len..][0..8].* = range.since_key;
+    var k = val(start_buf[0 .. prefix.len + 8]);
+    var v: c.MDB_val = undefined;
+    var rc = c.mdb_cursor_get(cursor, &k, &v, c.MDB_SET_RANGE);
+    while (rc == c.MDB_SUCCESS) : (rc = c.mdb_cursor_get(cursor, &k, &v, c.MDB_NEXT)) {
+        const key = valBytes(k);
+        if (!std.mem.startsWith(u8, key, prefix)) break;
+        const rest = key[prefix.len..];
+        if (rest.len != 40) continue;
+        if (std.mem.order(u8, rest[0..8], &range.until_key) == .gt) break;
+        if (out.items.len >= range.max) return error.TooManyItems;
+        const t: i64 = @bitCast(std.mem.readInt(u64, rest[0..8], .big) ^ (@as(u64, 1) << 63));
+        try out.append(gpa, .{ .created_at = @intCast(t), .id = rest[8..40].* });
+    }
+    if (rc != c.MDB_SUCCESS and rc != c.MDB_NOTFOUND) return error.Lmdb;
+}
+
+/// A sorted copy of `items` with duplicates removed. The caller frees it.
+fn sortedUnique(comptime T: type, gpa: std.mem.Allocator, items: []const T) Error![]T {
+    const copy = try gpa.dupe(T, items);
+    const less = struct {
+        fn f(_: void, a: T, b: T) bool {
+            return if (T == u16) a < b else std.mem.order(u8, &a, &b) == .lt;
+        }
+    }.f;
+    std.mem.sort(T, copy, {}, less);
+    var n: usize = 0;
+    for (copy) |item| {
+        if (n > 0 and std.meta.eql(copy[n - 1], item)) continue;
+        copy[n] = item;
+        n += 1;
+    }
+    if (n == copy.len) return copy;
+    return gpa.realloc(copy, n) catch copy[0..n];
+}
+
+pub const SyncItem = struct {
+    created_at: u64,
+    id: [32]u8,
+
+    /// Orders by `created_at`, then by id bytes.
+    pub fn lessThan(_: void, a: SyncItem, b: SyncItem) bool {
+        if (a.created_at != b.created_at) return a.created_at < b.created_at;
+        return std.mem.order(u8, &a.id, &b.id) == .lt;
+    }
+};
+
+/// An owned, decoded event: `event`'s tag/content storage lives in `arena`.
+pub const StoredEvent = struct {
+    arena: *std.heap.ArenaAllocator,
+    event: Event,
+
+    pub fn deinit(self: *StoredEvent) void {
+        const gpa = self.arena.child_allocator;
+        self.arena.deinit();
+        gpa.destroy(self.arena);
+    }
+};
+
+/// The owned result of a `query`: `events` (newest-first) and all their backing
+/// storage live in `arena`.
+pub const QueryResult = struct {
+    arena: *std.heap.ArenaAllocator,
+    events: []Event,
+    /// How many index entries the merge popped to produce `events`, including
+    /// the ones it read and then rejected.
+    ///
+    /// The difference between this and `events.len` is the query's waste, and
+    /// it is the only way to see from the outside whether a filter is being
+    /// answered from an index that suits it or by reading past everything that
+    /// does not match. A wall-clock assertion cannot tell those apart on a busy
+    /// machine; this can.
+    examined: usize = 0,
+    /// Candidates read, times the combined length of the id and author lists
+    /// still to be checked against each one. `Filter.matches` compares those
+    /// lists entry by entry, so this is the size of the quadratic term in a
+    /// query naming many of either.
+    ///
+    /// It should be zero for every filter an index can answer: reaching an
+    /// event through its author's own index already proves the author matches,
+    /// and reading it because its id was named already proves the id does. A
+    /// non-zero value on a feed-shaped query means the query is re-deciding
+    /// something the index decided, once per author, once per note returned.
+    list_checks: usize = 0,
+
+    pub fn deinit(self: *QueryResult) void {
+        const gpa = self.arena.child_allocator;
+        self.arena.deinit();
+        gpa.destroy(self.arena);
+    }
+};
+
+/// Options controlling `Store.ingest`.
+pub const IngestOptions = struct {
+    /// When set, the event's signature and id are verified before storing; a
+    /// failing event is rejected with `IngestResult.invalid`. When null the
+    /// event is trusted (e.g. already verified upstream).
+    verify_with: ?keys.Signer = null,
+};
+
+/// The outcome of `Store.ingest`.
+pub const IngestResult = enum {
+    /// Stored as a new event (or the first for its replaceable coordinate).
+    added,
+    /// A (parameterized-)replaceable event superseded an older stored one.
+    replaced,
+    /// The same event id was already stored; nothing changed.
+    duplicate,
+    /// A replaceable event at least as new is already stored; not stored.
+    stale,
+    /// Rejected: signature/id validation failed.
+    invalid,
+    /// An ephemeral-kind event, which is not persisted.
+    ephemeral,
+    /// Rejected: the event was previously deleted (NIP-09) by its author.
+    deleted,
+};
+
+/// NIP-01 event-kind classes that determine storage semantics.
+const Class = enum { regular, replaceable, parameterized, ephemeral };
+
+fn classify(kind: u16) Class {
+    if (kind == 0 or kind == 3) return .replaceable;
+    if (kind >= 10_000 and kind < 20_000) return .replaceable;
+    if (kind >= 20_000 and kind < 30_000) return .ephemeral;
+    if (kind >= 30_000 and kind < 40_000) return .parameterized;
+    return .regular;
+}
+
+/// Whether `new` supersedes `old` for the same replaceable coordinate: the
+/// higher `created_at` wins, ties broken by the lexicographically lower id
+/// (per NIP-01).
+fn replaces(new: Event, old: Event) bool {
+    if (new.created_at != old.created_at) return new.created_at > old.created_at;
+    return std.mem.order(u8, &new.id, &old.id) == .lt;
+}
+
+/// The value of the first `d` tag, or "" if absent (an addressable event with
+/// no `d` tag is treated as having an empty identifier).
+fn dTagValue(ev: Event) []const u8 {
+    for (ev.tags) |tag| {
+        if (tag.len >= 1 and tag[0].len == 1 and tag[0][0] == 'd') {
+            return if (tag.len >= 2) tag[1] else "";
+        }
+    }
+    return "";
+}
+
+/// Appends a replaceable coordinate to `out`: `pubkey ++ kind(be u16)`, plus
+/// the `d`-tag value when `dtag` is non-null (parameterized-replaceable).
+fn appendCoord(gpa: std.mem.Allocator, out: *std.ArrayList(u8), pubkey: [32]u8, kind: u16, dtag: ?[]const u8) Error!void {
+    try out.appendSlice(gpa, &pubkey);
+    var kb: [2]u8 = undefined;
+    std.mem.writeInt(u16, &kb, kind, .big);
+    try out.appendSlice(gpa, &kb);
+    if (dtag) |d| try out.appendSlice(gpa, d);
+}
+
+/// The direct-message kinds whose participants are conversation-indexed:
+/// NIP-04 legacy DMs (kind 4) and NIP-17 chat messages (kind 14, the
+/// decrypted rumor a messenger re-ingests after unwrapping a gift wrap).
+fn isDirectMessage(kind: u16) bool {
+    return kind == 4 or kind == 14;
+}
+
+/// The two pubkeys sorted ascending and concatenated, so a conversation has one
+/// canonical 64-byte key regardless of who authored a given message.
+fn canonicalPair(a: [32]u8, b: [32]u8) [64]u8 {
+    var out: [64]u8 = undefined;
+    const a_first = std.mem.order(u8, &a, &b) != .gt;
+    @memcpy(out[0..32], if (a_first) &a else &b);
+    @memcpy(out[32..64], if (a_first) &b else &a);
+    return out;
+}
+
+/// Whether `content` contains `search`, ignoring ASCII case. No search is a hit.
+fn searchHit(search: ?[]const u8, content: []const u8) bool {
+    const needle = search orelse return true;
+    return std.ascii.indexOfIgnoreCase(content, needle) != null;
+}
+
+fn lessByTimeDesc(_: void, a: Event, b: Event) bool {
+    if (a.created_at != b.created_at) return a.created_at > b.created_at;
+    return std.mem.order(u8, &a.id, &b.id) == .gt;
+}
+
+fn addCandidate(
+    gpa: std.mem.Allocator,
+    candidates: *std.ArrayList([32]u8),
+    seen: *std.AutoHashMapUnmanaged([32]u8, void),
+    id: [32]u8,
+) Error!void {
+    const gop = try seen.getOrPut(gpa, id);
+    if (gop.found_existing) return;
+    try candidates.append(gpa, id);
+}
+
+/// Scans an index database for all keys beginning with `prefix` (an empty
+/// prefix scans everything), extracts the trailing 32-byte id of each, and adds
+/// it to `candidates`. Every index key ends with `[time-key(8)][id(32)]`, so a
+/// non-empty prefix match additionally requires the exact length
+/// `prefix.len + 40`, which rules out a shorter query value being a prefix of a
+/// longer stored value.
+fn scanPrefix(
+    txn: ?*c.MDB_txn,
+    dbi: c.MDB_dbi,
+    gpa: std.mem.Allocator,
+    prefix: []const u8,
+    candidates: *std.ArrayList([32]u8),
+    seen: *std.AutoHashMapUnmanaged([32]u8, void),
+) Error!void {
+    var cursor: ?*c.MDB_cursor = null;
+    try check(c.mdb_cursor_open(txn, dbi, &cursor));
+    defer c.mdb_cursor_close(cursor);
+
+    var k: c.MDB_val = if (prefix.len == 0) undefined else val(prefix);
+    var v: c.MDB_val = undefined;
+    var rc = if (prefix.len == 0)
+        c.mdb_cursor_get(cursor, &k, &v, c.MDB_FIRST)
+    else
+        c.mdb_cursor_get(cursor, &k, &v, c.MDB_SET_RANGE);
+
+    while (rc == c.MDB_SUCCESS) : (rc = c.mdb_cursor_get(cursor, &k, &v, c.MDB_NEXT)) {
+        const key = valBytes(k);
+        if (prefix.len != 0) {
+            if (key.len < prefix.len or !std.mem.eql(u8, key[0..prefix.len], prefix)) break;
+            if (key.len != prefix.len + 40) continue;
+        }
+        if (key.len < 32) continue;
+        try addCandidate(gpa, candidates, seen, key[key.len - 32 ..][0..32].*);
+    }
+    if (rc != c.MDB_SUCCESS and rc != c.MDB_NOTFOUND) return error.Lmdb;
+}
+
+/// One reverse (newest-first) walk over the keys of a single index prefix.
+/// While `live`, `tk`/`id` hold the `[time][id]` suffix of the entry the
+/// cursor is parked on. The cursor belongs to the caller's transaction and
+/// must be closed by the caller.
+const RevStream = struct {
+    cursor: ?*c.MDB_cursor = null,
+    prefix: []const u8 = &.{},
+    live: bool = false,
+    tk: [8]u8 = undefined,
+    id: [32]u8 = undefined,
+};
+
+/// Opens `s` over `dbi` and parks it on the newest in-range entry: the
+/// largest key with `prefix` whose time-key is <= `until_key` (and >=
+/// `since_key`). `prefix` is duplicated into `aa`, which must outlive the
+/// stream.
+fn revStreamInit(
+    s: *RevStream,
+    txn: ?*c.MDB_txn,
+    dbi: c.MDB_dbi,
+    aa: std.mem.Allocator,
+    prefix: []const u8,
+    until_key: [8]u8,
+    since_key: [8]u8,
+) Error!void {
+    s.* = .{ .prefix = try aa.dupe(u8, prefix) };
+    try check(c.mdb_cursor_open(txn, dbi, &s.cursor));
+
+    // Seek target: the largest possible in-range key. MDB_SET_RANGE parks on
+    // the first key >= target, so stepping back once (unless the target
+    // itself exists) lands on the newest key <= target.
+    const seek = try aa.alloc(u8, prefix.len + 40);
+    @memcpy(seek[0..prefix.len], prefix);
+    @memcpy(seek[prefix.len..][0..8], &until_key);
+    @memset(seek[prefix.len + 8 ..], 0xFF);
+
+    var k = val(seek);
+    var v: c.MDB_val = undefined;
+    var rc = c.mdb_cursor_get(s.cursor, &k, &v, c.MDB_SET_RANGE);
+    if (rc == c.MDB_NOTFOUND) {
+        rc = c.mdb_cursor_get(s.cursor, &k, &v, c.MDB_LAST);
+        if (rc == c.MDB_NOTFOUND) return; // empty index: stream stays dead
+        try check(rc);
+    } else {
+        try check(rc);
+        if (!std.mem.eql(u8, valBytes(k), seek)) {
+            rc = c.mdb_cursor_get(s.cursor, &k, &v, c.MDB_PREV);
+            if (rc == c.MDB_NOTFOUND) return;
+            try check(rc);
+        }
+    }
+    try revStreamSettle(s, since_key);
+}
+
+/// Parks `s` on the cursor's current entry if it is in range, else walks
+/// backwards to the next in-range entry. Keys that share the prefix but have
+/// a different length belong to longer tag values interleaved in the same
+/// region and are skipped; a same-length key older than `since_key` ends the
+/// stream, since everything before it is older still.
+fn revStreamSettle(s: *RevStream, since_key: [8]u8) Error!void {
+    var k: c.MDB_val = undefined;
+    var v: c.MDB_val = undefined;
+    var rc = c.mdb_cursor_get(s.cursor, &k, &v, c.MDB_GET_CURRENT);
+    while (rc == c.MDB_SUCCESS) : (rc = c.mdb_cursor_get(s.cursor, &k, &v, c.MDB_PREV)) {
+        const key = valBytes(k);
+        if (!std.mem.startsWith(u8, key, s.prefix)) break;
+        if (key.len != s.prefix.len + 40) continue;
+        const tk: [8]u8 = key[s.prefix.len..][0..8].*;
+        if (std.mem.order(u8, &tk, &since_key) == .lt) break;
+        s.tk = tk;
+        s.id = key[s.prefix.len + 8 ..][0..32].*;
+        s.live = true;
+        return;
+    }
+    if (rc != c.MDB_SUCCESS and rc != c.MDB_NOTFOUND) return error.Lmdb;
+    s.live = false;
+}
+
+/// Steps `s` back one entry and re-parks it on the next in-range entry, or
+/// marks it dead when the range is exhausted.
+fn revStreamAdvance(s: *RevStream, since_key: [8]u8) Error!void {
+    var k: c.MDB_val = undefined;
+    var v: c.MDB_val = undefined;
+    const rc = c.mdb_cursor_get(s.cursor, &k, &v, c.MDB_PREV);
+    if (rc == c.MDB_NOTFOUND) {
+        s.live = false;
+        return;
+    }
+    try check(rc);
+    try revStreamSettle(s, since_key);
+}
+
+/// A binary max-heap of indices into the merge's stream list, keyed by what
+/// each live stream is parked on, so the newest candidate is always `top()` and
+/// taking it costs a sift of O(log streams) instead of a scan of all of them.
+/// Streams tied on (time-key, id), which happens when one event is reached
+/// through two index prefixes, are ordered by index: the same pick the linear
+/// scan made, so the merge yields identical output either way. The streams
+/// slice must keep its length and position for as long as the heap is used.
+const MergeHeap = struct {
+    items: []u32,
+    len: usize,
+
+    /// Fills `buf` (at least `streams.len` slots) with the live streams and
+    /// orders it.
+    fn init(buf: []u32, streams: []const RevStream) MergeHeap {
+        var h = MergeHeap{ .items = buf, .len = 0 };
+        for (streams, 0..) |s, i| {
+            if (!s.live) continue;
+            h.items[h.len] = @intCast(i);
+            h.len += 1;
+        }
+        var i = h.len / 2;
+        while (i > 0) {
+            i -= 1;
+            h.siftDown(streams, i);
+        }
+        return h;
+    }
+
+    /// The index of the stream parked on the newest entry, if any is live.
+    fn top(h: MergeHeap) ?u32 {
+        return if (h.len == 0) null else h.items[0];
+    }
+
+    /// Restores the order after the top stream was advanced: it keeps its
+    /// slot if it is still live and leaves the heap if it ran out.
+    fn settleTop(h: *MergeHeap, streams: []const RevStream) void {
+        if (!streams[h.items[0]].live) {
+            h.len -= 1;
+            h.items[0] = h.items[h.len];
+        }
+        h.siftDown(streams, 0);
+    }
+
+    fn before(streams: []const RevStream, a: u32, b: u32) bool {
+        const sa = &streams[a];
+        const sb = &streams[b];
+        return switch (std.mem.order(u8, &sa.tk, &sb.tk)) {
+            .gt => true,
+            .lt => false,
+            .eq => switch (std.mem.order(u8, &sa.id, &sb.id)) {
+                .gt => true,
+                .lt => false,
+                .eq => a < b,
+            },
+        };
+    }
+
+    fn siftDown(h: *MergeHeap, streams: []const RevStream, start: usize) void {
+        var i = start;
+        while (true) {
+            const l = 2 * i + 1;
+            if (l >= h.len) return;
+            var m = l;
+            if (l + 1 < h.len and before(streams, h.items[l + 1], h.items[l])) m = l + 1;
+            if (!before(streams, h.items[m], h.items[i])) return;
+            std.mem.swap(u32, &h.items[i], &h.items[m]);
+            i = m;
+        }
+    }
+};
+
+/// Order-preserving big-endian encoding of an `i64` timestamp: flipping the
+/// sign bit maps two's-complement order onto unsigned lexicographic order, so
+/// LMDB's byte comparison sorts index keys by time.
+fn orderKey(t: i64) [8]u8 {
+    const u = @as(u64, @bitCast(t)) ^ (@as(u64, 1) << 63);
+    var b: [8]u8 = undefined;
+    std.mem.writeInt(u64, &b, u, .big);
+    return b;
+}
+
+// -- Binary event record ----------------------------------------------------
+//
+// Layout (little-endian):
+//   [0..32)    id
+//   [32..64)   pubkey
+//   [64..128)  sig
+//   [128..136) created_at (i64)
+//   [136..138) kind (u16)
+//   [138..142) content length (u32)
+//   [142..146) tag count (u32)
+//   [146..146+content_len) content bytes
+//   then, tag_count times:
+//     field count (u32)
+//     then, field_count times: field length (u32) + field bytes
+//
+// The scalar fields and the content slice are at fixed/computable offsets, so
+// `EventView` reads them with no allocation and no parse.
+
+const header_len = 146;
+const off_id = 0;
+const off_pubkey = 32;
+const off_sig = 64;
+const off_created_at = 128;
+const off_kind = 136;
+const off_content_len = 138;
+const off_tag_count = 142;
+
+/// A zero-copy view over a stored event record. Accessors return slices into
+/// the underlying `bytes`, which for a record read from LMDB point directly
+/// into the memory map and are valid only for the life of the read
+/// transaction. Callers who need the data to outlive the transaction should
+/// use `Store.getEvent`, which copies into an owned arena.
+pub const EventView = struct {
+    bytes: []const u8,
+
+    pub fn id(self: EventView) *const [32]u8 {
+        return self.bytes[off_id..][0..32];
+    }
+    pub fn pubkey(self: EventView) *const [32]u8 {
+        return self.bytes[off_pubkey..][0..32];
+    }
+    pub fn sig(self: EventView) *const [64]u8 {
+        return self.bytes[off_sig..][0..64];
+    }
+    pub fn createdAt(self: EventView) i64 {
+        return std.mem.readInt(i64, self.bytes[off_created_at..][0..8], .little);
+    }
+    pub fn kind(self: EventView) u16 {
+        return std.mem.readInt(u16, self.bytes[off_kind..][0..2], .little);
+    }
+    pub fn content(self: EventView) []const u8 {
+        const len = std.mem.readInt(u32, self.bytes[off_content_len..][0..4], .little);
+        return self.bytes[header_len..][0..len];
+    }
+};
+
+/// Encodes `ev` into a freshly allocated binary record (see the layout above).
+fn encodeEvent(gpa: std.mem.Allocator, ev: Event) Error![]u8 {
+    var list: std.ArrayList(u8) = .empty;
+    errdefer list.deinit(gpa);
+
+    try list.appendSlice(gpa, &ev.id);
+    try list.appendSlice(gpa, &ev.pubkey);
+    try list.appendSlice(gpa, &ev.sig);
+    try appendInt(&list, gpa, i64, ev.created_at);
+    try appendInt(&list, gpa, u16, ev.kind);
+    try appendInt(&list, gpa, u32, @intCast(ev.content.len));
+    try appendInt(&list, gpa, u32, @intCast(ev.tags.len));
+    try list.appendSlice(gpa, ev.content);
+    for (ev.tags) |tag| {
+        try appendInt(&list, gpa, u32, @intCast(tag.len));
+        for (tag) |field| {
+            try appendInt(&list, gpa, u32, @intCast(field.len));
+            try list.appendSlice(gpa, field);
+        }
+    }
+    return list.toOwnedSlice(gpa);
+}
+
+/// Decodes a binary record into an `Event` whose tag/content storage is
+/// allocated from `arena`. Returns `CorruptRecord` if the record is truncated.
+fn decodeEvent(arena: std.mem.Allocator, bytes: []const u8) Error!Event {
+    if (bytes.len < header_len) return error.CorruptRecord;
+    const content_len = std.mem.readInt(u32, bytes[off_content_len..][0..4], .little);
+    const tag_count = std.mem.readInt(u32, bytes[off_tag_count..][0..4], .little);
+
+    var cursor: usize = header_len;
+    const content = try readSlice(bytes, &cursor, content_len);
+
+    const tags = try arena.alloc(Tag, tag_count);
+    for (tags) |*tag| {
+        const field_count = try readU32(bytes, &cursor);
+        const fields = try arena.alloc([]const u8, field_count);
+        for (fields) |*field| {
+            const field_len = try readU32(bytes, &cursor);
+            field.* = try arena.dupe(u8, try readSlice(bytes, &cursor, field_len));
+        }
+        tag.* = fields;
+    }
+
+    return Event{
+        .id = bytes[off_id..][0..32].*,
+        .pubkey = bytes[off_pubkey..][0..32].*,
+        .created_at = std.mem.readInt(i64, bytes[off_created_at..][0..8], .little),
+        .kind = std.mem.readInt(u16, bytes[off_kind..][0..2], .little),
+        .tags = tags,
+        .content = try arena.dupe(u8, content),
+        .sig = bytes[off_sig..][0..64].*,
+    };
+}
+
+fn readU32(bytes: []const u8, cursor: *usize) Error!u32 {
+    const slice = try readSlice(bytes, cursor, 4);
+    return std.mem.readInt(u32, slice[0..4], .little);
+}
+
+/// Returns the next `len` bytes at `cursor` and advances it, or `CorruptRecord`
+/// if the record does not contain that many more bytes.
+fn readSlice(bytes: []const u8, cursor: *usize, len: usize) Error![]const u8 {
+    const end = std.math.add(usize, cursor.*, len) catch return error.CorruptRecord;
+    if (end > bytes.len) return error.CorruptRecord;
+    defer cursor.* = end;
+    return bytes[cursor.*..end];
+}
+
+fn appendInt(list: *std.ArrayList(u8), gpa: std.mem.Allocator, comptime T: type, v: T) Error!void {
+    var buf: [@sizeOf(T)]u8 = undefined;
+    std.mem.writeInt(T, &buf, v, .little);
+    try list.appendSlice(gpa, &buf);
+}
+
+// -- LMDB helpers -----------------------------------------------------------
+
+/// Opens (creating) a named database within `txn` and returns its handle.
+fn openDb(txn: ?*c.MDB_txn, name: [*:0]const u8) Error!c.MDB_dbi {
+    var dbi: c.MDB_dbi = 0;
+    try check(c.mdb_dbi_open(txn, name, @intCast(c.MDB_CREATE), &dbi));
+    return dbi;
+}
+
+const IndexOp = enum { put, del };
+
+/// Inserts (with an empty value) or deletes an index key, per `op`. A delete of
+/// an already-absent key is not an error.
+fn indexOp(txn: ?*c.MDB_txn, dbi: c.MDB_dbi, key: []const u8, op: IndexOp) Error!void {
+    var k = val(key);
+    switch (op) {
+        .put => {
+            var v = val(&.{});
+            try check(c.mdb_put(txn, dbi, &k, &v, 0));
+        },
+        .del => {
+            const rc = c.mdb_del(txn, dbi, &k, null);
+            if (rc != c.MDB_NOTFOUND) try check(rc);
+        },
+    }
+}
+
+/// Wraps a byte slice as an `MDB_val` for passing to LMDB. LMDB does not mutate
+/// key/value inputs, so casting away const is sound here.
+fn val(bytes: []const u8) c.MDB_val {
+    return .{ .mv_size = bytes.len, .mv_data = @ptrCast(@constCast(bytes.ptr)) };
+}
+
+/// Views an LMDB-returned `MDB_val` as a byte slice.
+fn valBytes(v: c.MDB_val) []const u8 {
+    if (v.mv_size == 0) return &.{};
+    return @as([*]const u8, @ptrCast(v.mv_data.?))[0..v.mv_size];
+}
+
+/// Translates an LMDB status code into a Zig error. `MDB_SUCCESS` (0) is Ok.
+fn check(rc: c_int) Error!void {
+    if (rc == c.MDB_SUCCESS) return;
+    return error.Lmdb;
+}
+
+// -- tests ------------------------------------------------------------------
+
+fn testStorePath(tmp: *std.testing.TmpDir, name: []const u8, buf: []u8) [:0]const u8 {
+    var dir_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const dir_len = tmp.dir.realPath(std.testing.io, &dir_buf) catch unreachable;
+    return std.fmt.bufPrintZ(buf, "{s}/{s}", .{ dir_buf[0..dir_len], name }) catch unreachable;
+}
+
+fn openTempStore(tmp: *std.testing.TmpDir, name: []const u8, buf: []u8) !Store {
+    const path = testStorePath(tmp, name, buf);
+    return Store.open(path.ptr, .{});
+}
+
+fn sampleEvent() Event {
+    return Event{
+        .id = [_]u8{0x11} ** 32,
+        .pubkey = [_]u8{0x22} ** 32,
+        .created_at = 1_700_000_000,
+        .kind = 1,
+        .tags = &[_]Tag{
+            &[_][]const u8{ "e", "5c83da77af1dec6d7289834998ad7aafbd9e2191396d75ec3cc27f5a77226f36", "wss://relay.example" },
+            &[_][]const u8{ "p", "f7234bd4c1394dda46d09f35bd384dd30cc552ad5541990f98844fb06676e9ca" },
+        },
+        .content = "hello, nostr \"world\"\n",
+        .sig = [_]u8{0x33} ** 64,
+    };
+}
+
+fn expectEventEqual(a: Event, b: Event) !void {
+    try std.testing.expectEqualSlices(u8, &a.id, &b.id);
+    try std.testing.expectEqualSlices(u8, &a.pubkey, &b.pubkey);
+    try std.testing.expectEqual(a.created_at, b.created_at);
+    try std.testing.expectEqual(a.kind, b.kind);
+    try std.testing.expectEqualStrings(a.content, b.content);
+    try std.testing.expectEqualSlices(u8, &a.sig, &b.sig);
+    try std.testing.expectEqual(a.tags.len, b.tags.len);
+    for (a.tags, b.tags) |ta, tb| {
+        try std.testing.expectEqual(ta.len, tb.len);
+        for (ta, tb) |fa, fb| try std.testing.expectEqualStrings(fa, fb);
+    }
+}
+
+test "store: open, put, and get round-trip through LMDB" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "store.mdb", &buf);
+    defer store.deinit();
+
+    try store.put("hello", "world");
+    const got = try store.get(std.testing.allocator, "hello");
+    defer if (got) |g| std.testing.allocator.free(g);
+    try std.testing.expectEqualStrings("world", got.?);
+
+    try store.put("hello", "nostr"); // overwrite
+    const got2 = try store.get(std.testing.allocator, "hello");
+    defer if (got2) |g| std.testing.allocator.free(g);
+    try std.testing.expectEqualStrings("nostr", got2.?);
+
+    const missing = try store.get(std.testing.allocator, "absent");
+    try std.testing.expect(missing == null);
+}
+
+test "store: event record encode/decode round-trip" {
+    const ev = sampleEvent();
+    const record = try encodeEvent(std.testing.allocator, ev);
+    defer std.testing.allocator.free(record);
+
+    const view = EventView{ .bytes = record };
+    try std.testing.expectEqualSlices(u8, &ev.id, view.id());
+    try std.testing.expectEqualSlices(u8, &ev.pubkey, view.pubkey());
+    try std.testing.expectEqualSlices(u8, &ev.sig, view.sig());
+    try std.testing.expectEqual(ev.created_at, view.createdAt());
+    try std.testing.expectEqual(ev.kind, view.kind());
+    try std.testing.expectEqualStrings(ev.content, view.content());
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const decoded = try decodeEvent(arena.allocator(), record);
+    try expectEventEqual(ev, decoded);
+}
+
+test "store: decodeEvent rejects a truncated record" {
+    const ev = sampleEvent();
+    const record = try encodeEvent(std.testing.allocator, ev);
+    defer std.testing.allocator.free(record);
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    try std.testing.expectError(error.CorruptRecord, decodeEvent(arena.allocator(), record[0 .. record.len - 3]));
+    try std.testing.expectError(error.CorruptRecord, decodeEvent(arena.allocator(), record[0..10]));
+}
+
+test "store: orderKey preserves i64 order as unsigned bytes" {
+    const times = [_]i64{ -1_000, -1, 0, 1, 1_700_000_000, std.math.maxInt(i32) };
+    var prev: ?[8]u8 = null;
+    for (times) |t| {
+        const k = orderKey(t);
+        if (prev) |p| try std.testing.expect(std.mem.order(u8, &p, &k) == .lt);
+        prev = k;
+    }
+}
+
+test "store: putEvent / getEvent round-trip and idempotent dedup" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "events.mdb", &buf);
+    defer store.deinit();
+
+    const ev = sampleEvent();
+    try std.testing.expect(!(try store.hasEvent(ev.id)));
+
+    try std.testing.expect(try store.putEvent(std.testing.allocator, ev));
+    try std.testing.expect(try store.hasEvent(ev.id));
+    try std.testing.expect(!(try store.putEvent(std.testing.allocator, ev))); // no-op
+
+    var stored = (try store.getEvent(std.testing.allocator, ev.id)).?;
+    defer stored.deinit();
+    try expectEventEqual(ev, stored.event);
+
+    const none = try store.getEvent(std.testing.allocator, [_]u8{0xAA} ** 32);
+    try std.testing.expect(none == null);
+}
+
+test "store: putEventBatch inserts many in one transaction, skipping duplicates" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "batch.mdb", &buf);
+    defer store.deinit();
+
+    const a = [_]u8{0xA1} ** 32;
+    const evs = [_]Event{
+        qEvent(1, a, 1, 100, &[_]Tag{}),
+        qEvent(2, a, 1, 200, &[_]Tag{}),
+        qEvent(3, a, 1, 300, &[_]Tag{}),
+    };
+    try std.testing.expectEqual(@as(usize, 3), try store.putEventBatch(gpa, &evs));
+    try std.testing.expectEqual(@as(usize, 3), try store.eventCount());
+    // Re-inserting the same batch inserts nothing (all duplicates).
+    try std.testing.expectEqual(@as(usize, 0), try store.putEventBatch(gpa, &evs));
+
+    // Indexes were written in the batch: the query returns them newest-first.
+    var r = try store.query(gpa, .{ .authors = &[_][32]u8{a} });
+    defer r.deinit();
+    try std.testing.expectEqual(@as(usize, 3), r.events.len);
+    try std.testing.expectEqual(@as(u8, 3), r.events[0].id[0]);
+}
+
+test "store: stored events survive reopen (decoded from mmap, no JSON)" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const path = testStorePath(&tmp, "events-persist.mdb", &buf);
+
+    const ev = sampleEvent();
+    {
+        var store = try Store.open(path.ptr, .{});
+        defer store.deinit();
+        _ = try store.putEvent(std.testing.allocator, ev);
+    }
+    {
+        var store = try Store.open(path.ptr, .{});
+        defer store.deinit();
+        var stored = (try store.getEvent(std.testing.allocator, ev.id)).?;
+        defer stored.deinit();
+        try expectEventEqual(ev, stored.event);
+    }
+}
+
+// -- query tests ------------------------------------------------------------
+
+const author_a = [_]u8{0xA1} ** 32;
+const author_b = [_]u8{0xB2} ** 32;
+
+/// Builds a minimal event with a distinct id derived from `seed`.
+fn qEvent(seed: u8, pubkey: [32]u8, kind: u16, created_at: i64, tags: []const Tag) Event {
+    return Event{
+        .id = [_]u8{seed} ** 32,
+        .pubkey = pubkey,
+        .created_at = created_at,
+        .kind = kind,
+        .tags = tags,
+        .content = "",
+        .sig = [_]u8{0} ** 64,
+    };
+}
+
+/// Collects the seeds (first id byte) of the query results in order.
+fn resultSeeds(r: QueryResult, out: []u8) []u8 {
+    for (r.events, 0..) |e, i| out[i] = e.id[0];
+    return out[0..r.events.len];
+}
+
+test "store: query drives off indexes and returns newest-first" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "query.mdb", &buf);
+    defer store.deinit();
+
+    const gpa = std.testing.allocator;
+    const p_tag = [_]Tag{&[_][]const u8{ "p", "cafe" }};
+    // seed, author, kind, created_at, tags
+    _ = try store.putEvent(gpa, qEvent(1, author_a, 1, 100, &p_tag));
+    _ = try store.putEvent(gpa, qEvent(2, author_a, 1, 200, &.{}));
+    _ = try store.putEvent(gpa, qEvent(3, author_b, 1, 150, &.{}));
+    _ = try store.putEvent(gpa, qEvent(4, author_a, 7, 300, &.{}));
+
+    var seeds: [8]u8 = undefined;
+
+    // Empty filter: all events, newest-first (300, 200, 150, 100).
+    {
+        var r = try store.query(gpa, .{});
+        defer r.deinit();
+        try std.testing.expectEqualSlices(u8, &[_]u8{ 4, 2, 3, 1 }, resultSeeds(r, &seeds));
+    }
+    // By author A (any kind), newest-first: 4(300), 2(200), 1(100).
+    {
+        var r = try store.query(gpa, .{ .authors = &[_][32]u8{author_a} });
+        defer r.deinit();
+        try std.testing.expectEqualSlices(u8, &[_]u8{ 4, 2, 1 }, resultSeeds(r, &seeds));
+    }
+    // Author A AND kind 1: 2(200), 1(100).
+    {
+        var r = try store.query(gpa, .{ .authors = &[_][32]u8{author_a}, .kinds = &[_]u16{1} });
+        defer r.deinit();
+        try std.testing.expectEqualSlices(u8, &[_]u8{ 2, 1 }, resultSeeds(r, &seeds));
+    }
+    // By kind 7: just event 4.
+    {
+        var r = try store.query(gpa, .{ .kinds = &[_]u16{7} });
+        defer r.deinit();
+        try std.testing.expectEqualSlices(u8, &[_]u8{4}, resultSeeds(r, &seeds));
+    }
+    // By id.
+    {
+        var r = try store.query(gpa, .{ .ids = &[_][32]u8{[_]u8{3} ** 32} });
+        defer r.deinit();
+        try std.testing.expectEqualSlices(u8, &[_]u8{3}, resultSeeds(r, &seeds));
+    }
+    // By tag #p = cafe: just event 1.
+    {
+        const vals = [_][]const u8{"cafe"};
+        var r = try store.query(gpa, .{ .tags = &[_]filter_mod.TagFilter{.{ .letter = 'p', .values = &vals }} });
+        defer r.deinit();
+        try std.testing.expectEqualSlices(u8, &[_]u8{1}, resultSeeds(r, &seeds));
+    }
+    // Time window since/until.
+    {
+        var r = try store.query(gpa, .{ .since = 150, .until = 250 });
+        defer r.deinit();
+        try std.testing.expectEqualSlices(u8, &[_]u8{ 2, 3 }, resultSeeds(r, &seeds));
+    }
+    // Limit caps the newest N.
+    {
+        var r = try store.query(gpa, .{ .limit = 2 });
+        defer r.deinit();
+        try std.testing.expectEqualSlices(u8, &[_]u8{ 4, 2 }, resultSeeds(r, &seeds));
+    }
+    // Duplicate authors do not produce duplicate results.
+    {
+        var r = try store.query(gpa, .{ .authors = &[_][32]u8{ author_a, author_a } });
+        defer r.deinit();
+        try std.testing.expectEqualSlices(u8, &[_]u8{ 4, 2, 1 }, resultSeeds(r, &seeds));
+    }
+    // A tag prefix that is shorter than a stored value must not match it.
+    {
+        const vals = [_][]const u8{"ca"}; // "ca" is a prefix of "cafe"
+        var r = try store.query(gpa, .{ .tags = &[_]filter_mod.TagFilter{.{ .letter = 'p', .values = &vals }} });
+        defer r.deinit();
+        try std.testing.expectEqual(@as(usize, 0), r.events.len);
+    }
+}
+
+test "store: bounded query merges streams newest-first and stops at limit" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "bounded.mdb", &buf);
+    defer store.deinit();
+
+    const gpa = std.testing.allocator;
+    // Two authors with interleaved timestamps and a created_at tie (200)
+    // across streams, so the merge must interleave and tie-break by id.
+    _ = try store.putEvent(gpa, qEvent(1, author_a, 1, 100, &.{}));
+    _ = try store.putEvent(gpa, qEvent(2, author_a, 1, 200, &.{}));
+    _ = try store.putEvent(gpa, qEvent(5, author_b, 1, 200, &.{}));
+    _ = try store.putEvent(gpa, qEvent(6, author_b, 1, 300, &.{}));
+
+    var seeds: [8]u8 = undefined;
+    const both = [_][32]u8{ author_a, author_b };
+
+    // Global newest-first across streams; the 200/200 tie prefers the
+    // larger id (5 over 2), matching the unbounded path's ordering.
+    {
+        var r = try store.query(gpa, .{ .authors = &both });
+        defer r.deinit();
+        try std.testing.expectEqualSlices(u8, &[_]u8{ 6, 5, 2, 1 }, resultSeeds(r, &seeds));
+    }
+    // The limit cuts mid-tie: only the tie winner is returned.
+    {
+        var r = try store.query(gpa, .{ .authors = &both, .limit = 2 });
+        defer r.deinit();
+        try std.testing.expectEqualSlices(u8, &[_]u8{ 6, 5 }, resultSeeds(r, &seeds));
+    }
+    // A limit larger than the match count returns everything.
+    {
+        var r = try store.query(gpa, .{ .authors = &both, .limit = 10 });
+        defer r.deinit();
+        try std.testing.expectEqualSlices(u8, &[_]u8{ 6, 5, 2, 1 }, resultSeeds(r, &seeds));
+    }
+    // `until` bounds where the reverse walk starts; both endpoints inclusive.
+    {
+        var r = try store.query(gpa, .{ .authors = &both, .since = 100, .until = 200 });
+        defer r.deinit();
+        try std.testing.expectEqualSlices(u8, &[_]u8{ 5, 2, 1 }, resultSeeds(r, &seeds));
+    }
+}
+
+test "store: bounded tag query skips longer values interleaved in the same key region" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "tagscan.mdb", &buf);
+    defer store.deinit();
+
+    const gpa = std.testing.allocator;
+    // "ca" is a strict prefix of "cafe", so both values' index keys share a
+    // key region and the reverse walk for one must step over the other's
+    // entries (their keys have a different length) without ending the scan.
+    const tag_ca = [_]Tag{&[_][]const u8{ "p", "ca" }};
+    const tag_cafe = [_]Tag{&[_][]const u8{ "p", "cafe" }};
+    _ = try store.putEvent(gpa, qEvent(1, author_a, 1, 100, &tag_ca));
+    _ = try store.putEvent(gpa, qEvent(2, author_a, 1, 200, &tag_cafe));
+    _ = try store.putEvent(gpa, qEvent(3, author_b, 1, 300, &tag_ca));
+
+    var seeds: [8]u8 = undefined;
+
+    // Querying "ca" walks past the interleaved "cafe" key to reach both
+    // "ca" events, newest-first.
+    {
+        const vals = [_][]const u8{"ca"};
+        var r = try store.query(gpa, .{ .tags = &[_]filter_mod.TagFilter{.{ .letter = 'p', .values = &vals }} });
+        defer r.deinit();
+        try std.testing.expectEqualSlices(u8, &[_]u8{ 3, 1 }, resultSeeds(r, &seeds));
+    }
+    // Querying "cafe" matches only the exact value.
+    {
+        const vals = [_][]const u8{"cafe"};
+        var r = try store.query(gpa, .{ .tags = &[_]filter_mod.TagFilter{.{ .letter = 'p', .values = &vals }} });
+        defer r.deinit();
+        try std.testing.expectEqualSlices(u8, &[_]u8{2}, resultSeeds(r, &seeds));
+    }
+    // Both values in one tag filter: each event once, newest-first.
+    {
+        const vals = [_][]const u8{ "ca", "cafe" };
+        var r = try store.query(gpa, .{ .tags = &[_]filter_mod.TagFilter{.{ .letter = 'p', .values = &vals }} });
+        defer r.deinit();
+        try std.testing.expectEqualSlices(u8, &[_]u8{ 3, 2, 1 }, resultSeeds(r, &seeds));
+    }
+}
+
+// -- ingestion tests --------------------------------------------------------
+
+test "store: classify maps kinds to storage semantics" {
+    try std.testing.expectEqual(Class.replaceable, classify(0));
+    try std.testing.expectEqual(Class.replaceable, classify(3));
+    try std.testing.expectEqual(Class.replaceable, classify(10002));
+    try std.testing.expectEqual(Class.ephemeral, classify(20001));
+    try std.testing.expectEqual(Class.parameterized, classify(30023));
+    try std.testing.expectEqual(Class.regular, classify(1));
+    try std.testing.expectEqual(Class.regular, classify(5));
+    try std.testing.expectEqual(Class.regular, classify(40000));
+}
+
+test "store: ingest verifies signatures when a signer is given" {
+    const gpa = std.testing.allocator;
+    var signer = try keys.Signer.initRandomized(std.testing.io);
+    defer signer.deinit();
+    const kp = try signer.generateKeyPair(std.testing.io);
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "ingest-verify.mdb", &buf);
+    defer store.deinit();
+
+    const good = try event.create(gpa, signer, kp, 1000, 1, &[_]Tag{}, "hi", null);
+    try std.testing.expectEqual(IngestResult.added, try store.ingest(gpa, good, .{ .verify_with = signer }));
+    try std.testing.expect(try store.hasEvent(good.id));
+
+    // A valid id but a zeroed signature must be rejected when verifying.
+    var bad = try event.create(gpa, signer, kp, 2000, 1, &[_]Tag{}, "nope", null);
+    bad.sig = [_]u8{0} ** 64;
+    try std.testing.expectEqual(IngestResult.invalid, try store.ingest(gpa, bad, .{ .verify_with = signer }));
+    try std.testing.expect(!(try store.hasEvent(bad.id)));
+
+    // Without a signer the same event is trusted and stored.
+    try std.testing.expectEqual(IngestResult.added, try store.ingest(gpa, bad, .{}));
+    try std.testing.expect(try store.hasEvent(bad.id));
+}
+
+test "store: ingest replaceable keeps the newest" {
+    const gpa = std.testing.allocator;
+    var signer = try keys.Signer.initRandomized(std.testing.io);
+    defer signer.deinit();
+    const kp = try signer.generateKeyPair(std.testing.io);
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "ingest-repl.mdb", &buf);
+    defer store.deinit();
+
+    const older = try event.create(gpa, signer, kp, 1000, 0, &[_]Tag{}, "old profile", null);
+    const newer = try event.create(gpa, signer, kp, 2000, 0, &[_]Tag{}, "new profile", null);
+
+    try std.testing.expectEqual(IngestResult.added, try store.ingest(gpa, older, .{}));
+    try std.testing.expectEqual(IngestResult.replaced, try store.ingest(gpa, newer, .{}));
+    try std.testing.expect(!(try store.hasEvent(older.id)));
+    try std.testing.expect(try store.hasEvent(newer.id));
+
+    // Only the newest survives, and its indexes point at it.
+    {
+        var r = try store.query(gpa, .{ .authors = &[_][32]u8{kp.public_key}, .kinds = &[_]u16{0} });
+        defer r.deinit();
+        try std.testing.expectEqual(@as(usize, 1), r.events.len);
+        try std.testing.expectEqualSlices(u8, &newer.id, &r.events[0].id);
+    }
+
+    // An older event for the same coordinate is stale; the same one is a dup.
+    try std.testing.expectEqual(IngestResult.stale, try store.ingest(gpa, older, .{}));
+    try std.testing.expect(try store.hasEvent(newer.id));
+    try std.testing.expectEqual(IngestResult.duplicate, try store.ingest(gpa, newer, .{}));
+}
+
+test "store: ingest replaceable tie-break prefers the lower id" {
+    const gpa = std.testing.allocator;
+    var signer = try keys.Signer.initRandomized(std.testing.io);
+    defer signer.deinit();
+    const kp = try signer.generateKeyPair(std.testing.io);
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "ingest-tiebreak.mdb", &buf);
+    defer store.deinit();
+
+    // Same author, kind and created_at, different content -> different ids.
+    const e1 = try event.create(gpa, signer, kp, 1000, 0, &[_]Tag{}, "aaa", null);
+    const e2 = try event.create(gpa, signer, kp, 1000, 0, &[_]Tag{}, "bbb", null);
+    const e1_lower = std.mem.order(u8, &e1.id, &e2.id) == .lt;
+    const lower = if (e1_lower) e1 else e2;
+    const higher = if (e1_lower) e2 else e1;
+
+    try std.testing.expectEqual(IngestResult.added, try store.ingest(gpa, higher, .{}));
+    // The lexicographically lower id wins the tie and replaces the stored one.
+    try std.testing.expectEqual(IngestResult.replaced, try store.ingest(gpa, lower, .{}));
+    try std.testing.expect(try store.hasEvent(lower.id));
+    try std.testing.expect(!(try store.hasEvent(higher.id)));
+    // Re-ingesting the higher id now loses the tie.
+    try std.testing.expectEqual(IngestResult.stale, try store.ingest(gpa, higher, .{}));
+}
+
+test "store: ingest parameterized-replaceable is keyed by the d tag" {
+    const gpa = std.testing.allocator;
+    var signer = try keys.Signer.initRandomized(std.testing.io);
+    defer signer.deinit();
+    const kp = try signer.generateKeyPair(std.testing.io);
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "ingest-param.mdb", &buf);
+    defer store.deinit();
+
+    const d_profile = [_]Tag{&[_][]const u8{ "d", "profile" }};
+    const d_other = [_]Tag{&[_][]const u8{ "d", "other" }};
+    const a1 = try event.create(gpa, signer, kp, 1000, 30000, &d_profile, "a1", null);
+    const a2 = try event.create(gpa, signer, kp, 2000, 30000, &d_profile, "a2", null);
+    const b1 = try event.create(gpa, signer, kp, 1500, 30000, &d_other, "b1", null);
+
+    try std.testing.expectEqual(IngestResult.added, try store.ingest(gpa, a1, .{}));
+    try std.testing.expectEqual(IngestResult.added, try store.ingest(gpa, b1, .{}));
+    // a2 replaces a1 (same d), b1 is a different coordinate and untouched.
+    try std.testing.expectEqual(IngestResult.replaced, try store.ingest(gpa, a2, .{}));
+    try std.testing.expect(!(try store.hasEvent(a1.id)));
+    try std.testing.expect(try store.hasEvent(a2.id));
+    try std.testing.expect(try store.hasEvent(b1.id));
+
+    var r = try store.query(gpa, .{ .authors = &[_][32]u8{kp.public_key}, .kinds = &[_]u16{30000} });
+    defer r.deinit();
+    try std.testing.expectEqual(@as(usize, 2), r.events.len);
+}
+
+test "store: ingest does not persist ephemeral events" {
+    const gpa = std.testing.allocator;
+    var signer = try keys.Signer.initRandomized(std.testing.io);
+    defer signer.deinit();
+    const kp = try signer.generateKeyPair(std.testing.io);
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "ingest-ephemeral.mdb", &buf);
+    defer store.deinit();
+
+    const eph = try event.create(gpa, signer, kp, 1000, 20000, &[_]Tag{}, "ephemeral", null);
+    try std.testing.expectEqual(IngestResult.ephemeral, try store.ingest(gpa, eph, .{}));
+    try std.testing.expect(!(try store.hasEvent(eph.id)));
+}
+
+// -- NIP-09 deletion tests --------------------------------------------------
+
+test "store: ingest deletion removes the author's event and tombstones it" {
+    const gpa = std.testing.allocator;
+    var signer = try keys.Signer.initRandomized(std.testing.io);
+    defer signer.deinit();
+    const kp = try signer.generateKeyPair(std.testing.io);
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "del-e.mdb", &buf);
+    defer store.deinit();
+
+    const note = try event.create(gpa, signer, kp, 1000, 1, &[_]Tag{}, "to be deleted", null);
+    try std.testing.expectEqual(IngestResult.added, try store.ingest(gpa, note, .{}));
+
+    const id_hex = std.fmt.bytesToHex(note.id, .lower);
+    const e_tag = [_]Tag{&[_][]const u8{ "e", id_hex[0..] }};
+    const del = try event.create(gpa, signer, kp, 2000, 5, &e_tag, "", null);
+
+    try std.testing.expectEqual(IngestResult.added, try store.ingest(gpa, del, .{}));
+    try std.testing.expect(!(try store.hasEvent(note.id))); // target removed
+    try std.testing.expect(try store.hasEvent(del.id)); // deletion request kept
+
+    // The tombstone blocks re-adding the same event by its author.
+    try std.testing.expectEqual(IngestResult.deleted, try store.ingest(gpa, note, .{}));
+    try std.testing.expect(!(try store.hasEvent(note.id)));
+}
+
+test "store: a batch sees what the events before it in the batch wrote" {
+    const gpa = std.testing.allocator;
+    var signer = try keys.Signer.initRandomized(std.testing.io);
+    defer signer.deinit();
+    const kp = try signer.generateKeyPair(std.testing.io);
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "batch-sees.mdb", &buf);
+    defer store.deinit();
+
+    const note = try event.create(gpa, signer, kp, 1000, 1, &[_]Tag{}, "deleted before it lands", null);
+    const id_hex = std.fmt.bytesToHex(note.id, .lower);
+    const e_tag = [_]Tag{&[_][]const u8{ "e", id_hex[0..] }};
+    const del = try event.create(gpa, signer, kp, 2000, 5, &e_tag, "", null);
+    const old_profile = try event.create(gpa, signer, kp, 3000, 0, &[_]Tag{}, "{\"name\":\"old\"}", null);
+    const new_profile = try event.create(gpa, signer, kp, 4000, 0, &[_]Tag{}, "{\"name\":\"new\"}", null);
+    const older_again = try event.create(gpa, signer, kp, 3500, 0, &[_]Tag{}, "{\"name\":\"older\"}", null);
+    const other = try event.create(gpa, signer, kp, 5000, 1, &[_]Tag{}, "kept", null);
+
+    const batch = [_]Event{ del, note, old_profile, new_profile, older_again, other, other };
+    var results: [batch.len]IngestResult = undefined;
+    try store.ingestBatch(gpa, &batch, .{}, &results);
+
+    try std.testing.expectEqualSlices(IngestResult, &.{ .added, .deleted, .added, .replaced, .stale, .added, .duplicate }, &results);
+    try std.testing.expect(!(try store.hasEvent(note.id)));
+    try std.testing.expect(!(try store.hasEvent(old_profile.id)));
+    try std.testing.expect(try store.hasEvent(new_profile.id));
+    try std.testing.expect(!(try store.hasEvent(older_again.id)));
+    try std.testing.expect(try store.hasEvent(other.id));
+}
+
+test "store: a batch gives every event the outcome ingest would, one at a time" {
+    const gpa = std.testing.allocator;
+    var signer = try keys.Signer.initRandomized(std.testing.io);
+    defer signer.deinit();
+    const kp_a = try signer.generateKeyPair(std.testing.io);
+    const kp_b = try signer.generateKeyPair(std.testing.io);
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf_a: [std.fs.max_path_bytes]u8 = undefined;
+    var one = try openTempStore(&tmp, "one-by-one.mdb", &buf_a);
+    defer one.deinit();
+    var buf_b: [std.fs.max_path_bytes]u8 = undefined;
+    var batched = try openTempStore(&tmp, "batched.mdb", &buf_b);
+    defer batched.deinit();
+
+    const d_x = [_]Tag{&[_][]const u8{ "d", "x" }};
+    const a_note = try event.create(gpa, signer, kp_a, 100, 1, &[_]Tag{}, "a", null);
+    const b_note = try event.create(gpa, signer, kp_b, 101, 1, &[_]Tag{}, "b", null);
+    const a_hex = std.fmt.bytesToHex(a_note.id, .lower);
+    const del_by_b = try event.create(gpa, signer, kp_b, 102, 5, &[_]Tag{&[_][]const u8{ "e", a_hex[0..] }}, "", null);
+    const art1 = try event.create(gpa, signer, kp_a, 103, 30023, &d_x, "v1", null);
+    const art2 = try event.create(gpa, signer, kp_a, 104, 30023, &d_x, "v2", null);
+    const ephemeral = try event.create(gpa, signer, kp_a, 105, 20001, &[_]Tag{}, "gone", null);
+    const events = [_]Event{ a_note, b_note, del_by_b, art2, art1, ephemeral, a_note };
+
+    var want: [events.len]IngestResult = undefined;
+    for (events, 0..) |ev, i| want[i] = try one.ingest(gpa, ev, .{});
+    var got: [events.len]IngestResult = undefined;
+    try batched.ingestBatch(gpa, &events, .{}, &got);
+
+    try std.testing.expectEqualSlices(IngestResult, &want, &got);
+    try std.testing.expectEqual(try one.eventCount(), try batched.eventCount());
+}
+
+test "store: ingest deletion cannot remove another author's event" {
+    const gpa = std.testing.allocator;
+    var signer = try keys.Signer.initRandomized(std.testing.io);
+    defer signer.deinit();
+    const kp_a = try signer.generateKeyPair(std.testing.io);
+    const kp_b = try signer.generateKeyPair(std.testing.io);
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "del-foreign.mdb", &buf);
+    defer store.deinit();
+
+    const note_b = try event.create(gpa, signer, kp_b, 1000, 1, &[_]Tag{}, "b's note", null);
+    try std.testing.expectEqual(IngestResult.added, try store.ingest(gpa, note_b, .{}));
+
+    // A attempts to delete B's stored event by id: rejected, B's note survives.
+    const id_hex = std.fmt.bytesToHex(note_b.id, .lower);
+    const e_tag = [_]Tag{&[_][]const u8{ "e", id_hex[0..] }};
+    const del_a = try event.create(gpa, signer, kp_a, 2000, 5, &e_tag, "", null);
+    try std.testing.expectEqual(IngestResult.added, try store.ingest(gpa, del_a, .{}));
+    try std.testing.expect(try store.hasEvent(note_b.id));
+}
+
+test "store: ingest deletion tombstones a not-yet-seen event, scoped to the deleter" {
+    const gpa = std.testing.allocator;
+    var signer = try keys.Signer.initRandomized(std.testing.io);
+    defer signer.deinit();
+    const kp_a = try signer.generateKeyPair(std.testing.io);
+    const kp_b = try signer.generateKeyPair(std.testing.io);
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "del-ooo.mdb", &buf);
+    defer store.deinit();
+
+    // A's own note, deleted before it is ever stored (out-of-order arrival).
+    const note_a = try event.create(gpa, signer, kp_a, 1000, 1, &[_]Tag{}, "a's future note", null);
+    const a_hex = std.fmt.bytesToHex(note_a.id, .lower);
+    const del_a = try event.create(gpa, signer, kp_a, 2000, 5, &[_]Tag{&[_][]const u8{ "e", a_hex[0..] }}, "", null);
+    try std.testing.expectEqual(IngestResult.added, try store.ingest(gpa, del_a, .{}));
+    // When A's note finally arrives it is rejected as deleted.
+    try std.testing.expectEqual(IngestResult.deleted, try store.ingest(gpa, note_a, .{}));
+    try std.testing.expect(!(try store.hasEvent(note_a.id)));
+
+    // But a tombstone A placed on B's (unseen) id does not block B's event.
+    const note_b = try event.create(gpa, signer, kp_b, 1000, 1, &[_]Tag{}, "b's note", null);
+    const b_hex = std.fmt.bytesToHex(note_b.id, .lower);
+    const del_a_on_b = try event.create(gpa, signer, kp_a, 2000, 5, &[_]Tag{&[_][]const u8{ "e", b_hex[0..] }}, "", null);
+    try std.testing.expectEqual(IngestResult.added, try store.ingest(gpa, del_a_on_b, .{}));
+    try std.testing.expectEqual(IngestResult.added, try store.ingest(gpa, note_b, .{}));
+    try std.testing.expect(try store.hasEvent(note_b.id));
+}
+
+test "store: ingest a-tag deletion removes a parameterized-replaceable event" {
+    const gpa = std.testing.allocator;
+    var signer = try keys.Signer.initRandomized(std.testing.io);
+    defer signer.deinit();
+    const kp = try signer.generateKeyPair(std.testing.io);
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "del-a.mdb", &buf);
+    defer store.deinit();
+
+    const d_tag = [_]Tag{&[_][]const u8{ "d", "profile" }};
+    const article = try event.create(gpa, signer, kp, 1000, 30000, &d_tag, "article", null);
+    try std.testing.expectEqual(IngestResult.added, try store.ingest(gpa, article, .{}));
+
+    // "a" coordinate = kind:pubkey:dtag. Deletion at t=2000 covers the t=1000 event.
+    const pk_hex = std.fmt.bytesToHex(kp.public_key, .lower);
+    var abuf: [128]u8 = undefined;
+    const a_val = try std.fmt.bufPrint(&abuf, "30000:{s}:profile", .{pk_hex[0..]});
+    const del = try event.create(gpa, signer, kp, 2000, 5, &[_]Tag{&[_][]const u8{ "a", a_val }}, "", null);
+    try std.testing.expectEqual(IngestResult.added, try store.ingest(gpa, del, .{}));
+    try std.testing.expect(!(try store.hasEvent(article.id)));
+
+    // A strictly newer article at the same coordinate is not blocked.
+    const article2 = try event.create(gpa, signer, kp, 3000, 30000, &d_tag, "new article", null);
+    try std.testing.expectEqual(IngestResult.added, try store.ingest(gpa, article2, .{}));
+    try std.testing.expect(try store.hasEvent(article2.id));
+}
+
+// -- conversation-index tests -----------------------------------------------
+
+test "store: canonicalPair is order-independent" {
+    const x = [_]u8{0x01} ** 32;
+    const y = [_]u8{0x02} ** 32;
+    try std.testing.expectEqualSlices(u8, &canonicalPair(x, y), &canonicalPair(y, x));
+    // The lower pubkey comes first.
+    try std.testing.expectEqualSlices(u8, &x, canonicalPair(y, x)[0..32]);
+}
+
+/// Creates a direct message of `kind` from `author_kp` to `recipient_pk` and
+/// ingests it, returning the event id. All borrowed tag storage stays local.
+fn ingestDM(
+    store: *Store,
+    gpa: std.mem.Allocator,
+    signer: keys.Signer,
+    author_kp: keys.KeyPair,
+    recipient_pk: [32]u8,
+    kind: u16,
+    created_at: i64,
+    content: []const u8,
+) ![32]u8 {
+    const r_hex = std.fmt.bytesToHex(recipient_pk, .lower);
+    const p_tag = [_]Tag{&[_][]const u8{ "p", r_hex[0..] }};
+    const dm = try event.create(gpa, signer, author_kp, created_at, kind, &p_tag, content, null);
+    _ = try store.ingest(gpa, dm, .{});
+    return dm.id;
+}
+
+fn resultIds(r: QueryResult, out: [][32]u8) [][32]u8 {
+    for (r.events, 0..) |e, i| out[i] = e.id;
+    return out[0..r.events.len];
+}
+
+test "store: conversation index returns both sides of a thread, newest-first" {
+    const gpa = std.testing.allocator;
+    var signer = try keys.Signer.initRandomized(std.testing.io);
+    defer signer.deinit();
+    const kp_a = try signer.generateKeyPair(std.testing.io);
+    const kp_b = try signer.generateKeyPair(std.testing.io);
+    const kp_c = try signer.generateKeyPair(std.testing.io);
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "convo.mdb", &buf);
+    defer store.deinit();
+
+    // A<->B thread across both directions and both DM kinds, plus an A->C
+    // message that belongs to a different conversation.
+    const ab1 = try ingestDM(&store, gpa, signer, kp_a, kp_b.public_key, 4, 100, "hi B");
+    const ba = try ingestDM(&store, gpa, signer, kp_b, kp_a.public_key, 4, 200, "hi A");
+    const ab2 = try ingestDM(&store, gpa, signer, kp_a, kp_b.public_key, 14, 300, "later");
+    const ac = try ingestDM(&store, gpa, signer, kp_a, kp_c.public_key, 4, 150, "hi C");
+
+    var ids: [8][32]u8 = undefined;
+
+    // A<->B, newest-first, from either participant's perspective.
+    {
+        var r = try store.queryConversation(gpa, kp_a.public_key, kp_b.public_key, null);
+        defer r.deinit();
+        try std.testing.expectEqual(@as(usize, 3), r.events.len);
+        const got = resultIds(r, &ids);
+        try std.testing.expectEqualSlices(u8, &ab2, &got[0]);
+        try std.testing.expectEqualSlices(u8, &ba, &got[1]);
+        try std.testing.expectEqualSlices(u8, &ab1, &got[2]);
+    }
+    {
+        var r = try store.queryConversation(gpa, kp_b.public_key, kp_a.public_key, null);
+        defer r.deinit();
+        try std.testing.expectEqual(@as(usize, 3), r.events.len); // symmetric
+    }
+    // A<->C has just the one message.
+    {
+        var r = try store.queryConversation(gpa, kp_a.public_key, kp_c.public_key, null);
+        defer r.deinit();
+        try std.testing.expectEqual(@as(usize, 1), r.events.len);
+        try std.testing.expectEqualSlices(u8, &ac, &r.events[0].id);
+    }
+    // Limit caps the newest messages.
+    {
+        var r = try store.queryConversation(gpa, kp_a.public_key, kp_b.public_key, 2);
+        defer r.deinit();
+        try std.testing.expectEqual(@as(usize, 2), r.events.len);
+        try std.testing.expectEqualSlices(u8, &ab2, &r.events[0].id);
+        try std.testing.expectEqualSlices(u8, &ba, &r.events[1].id);
+    }
+    // An unrelated pair has no conversation.
+    {
+        var r = try store.queryConversation(gpa, kp_b.public_key, kp_c.public_key, null);
+        defer r.deinit();
+        try std.testing.expectEqual(@as(usize, 0), r.events.len);
+    }
+
+    // Deleting a message drops it from the conversation index too.
+    {
+        const id_hex = std.fmt.bytesToHex(ab1, .lower);
+        const del = try event.create(gpa, signer, kp_a, 400, 5, &[_]Tag{&[_][]const u8{ "e", id_hex[0..] }}, "", null);
+        _ = try store.ingest(gpa, del, .{});
+        var r = try store.queryConversation(gpa, kp_a.public_key, kp_b.public_key, null);
+        defer r.deinit();
+        try std.testing.expectEqual(@as(usize, 2), r.events.len);
+    }
+}
+
+// -- local-first / cache tests ----------------------------------------------
+
+test "store: local-first snapshot, then reconcile with newer events" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "reconcile.mdb", &buf);
+    defer store.deinit();
+
+    const a = [_]u8{0xA1} ** 32;
+    const by_a = Filter{ .authors = &[_][32]u8{a} };
+
+    // A prior sync populated the cache.
+    _ = try store.putEvent(gpa, qEvent(1, a, 1, 100, &[_]Tag{}));
+    _ = try store.putEvent(gpa, qEvent(2, a, 1, 200, &[_]Tag{}));
+
+    // The UI renders straight from the cache with no network involved.
+    {
+        var r = try store.query(gpa, by_a);
+        defer r.deinit();
+        try std.testing.expectEqual(@as(usize, 2), r.events.len);
+    }
+    try std.testing.expectEqual(@as(?i64, 200), try store.newestMatching(gpa, by_a));
+
+    // The reconcile filter only asks the relay for events at/after the newest
+    // cached one.
+    {
+        const rf = try store.reconcileFilter(gpa, by_a);
+        try std.testing.expectEqual(@as(?i64, 200), rf.since);
+    }
+
+    // A relay delivers a newer event, which we ingest; the next query reflects
+    // the reconciled state and the watermark advances.
+    _ = try store.putEvent(gpa, qEvent(3, a, 1, 300, &[_]Tag{}));
+    {
+        var r = try store.query(gpa, by_a);
+        defer r.deinit();
+        try std.testing.expectEqual(@as(usize, 3), r.events.len);
+        try std.testing.expectEqual(@as(u8, 3), r.events[0].id[0]); // newest first
+    }
+    {
+        const rf = try store.reconcileFilter(gpa, by_a);
+        try std.testing.expectEqual(@as(?i64, 300), rf.since);
+    }
+
+    // A caller's stricter `since` is preserved.
+    {
+        const rf = try store.reconcileFilter(gpa, .{ .authors = &[_][32]u8{a}, .since = 1000 });
+        try std.testing.expectEqual(@as(?i64, 1000), rf.since);
+    }
+
+    // No local matches -> no watermark.
+    try std.testing.expectEqual(
+        @as(?i64, null),
+        try store.newestMatching(gpa, .{ .authors = &[_][32]u8{[_]u8{0xFF} ** 32} }),
+    );
+}
+
+test "store: a search matches content as a case-insensitive substring" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "search.mdb", &buf);
+    defer store.deinit();
+
+    const a = [_]u8{0xA1} ** 32;
+    const contents = [_][]const u8{ "Writing a relay in Zig", "nothing to see", "zig fmt saved me", "ZIGZAG" };
+    for (contents, 0..) |content, i| {
+        var ev = qEvent(@intCast(i + 1), a, 1, @intCast(100 * (i + 1)), &[_]Tag{});
+        ev.content = content;
+        _ = try store.putEvent(gpa, ev);
+    }
+    var seeds: [8]u8 = undefined;
+
+    // Every index path applies it: the time index, the author index, and an
+    // explicit id list.
+    {
+        var r = try store.query(gpa, .{ .search = "ZIG" });
+        defer r.deinit();
+        try std.testing.expectEqualSlices(u8, &[_]u8{ 4, 3, 1 }, resultSeeds(r, &seeds));
+    }
+    {
+        var r = try store.query(gpa, .{ .authors = &[_][32]u8{a}, .search = "zig ", .limit = 5 });
+        defer r.deinit();
+        try std.testing.expectEqualSlices(u8, &[_]u8{3}, resultSeeds(r, &seeds));
+    }
+    {
+        var r = try store.query(gpa, .{ .ids = &[_][32]u8{ [_]u8{1} ** 32, [_]u8{2} ** 32 }, .search = "relay" });
+        defer r.deinit();
+        try std.testing.expectEqualSlices(u8, &[_]u8{1}, resultSeeds(r, &seeds));
+    }
+    // The limit counts matches, not the events read on the way.
+    {
+        var r = try store.query(gpa, .{ .search = "zig", .limit = 2 });
+        defer r.deinit();
+        try std.testing.expectEqualSlices(u8, &[_]u8{ 4, 3 }, resultSeeds(r, &seeds));
+    }
+    {
+        var r = try store.query(gpa, .{ .search = "rust" });
+        defer r.deinit();
+        try std.testing.expectEqual(@as(usize, 0), r.events.len);
+    }
+
+    // A search filter is not advanced past the newest local match: the
+    // relays' older results are the point of asking them.
+    {
+        const rf = try store.reconcileFilter(gpa, .{ .kinds = &[_]u16{1}, .search = "zig" });
+        try std.testing.expectEqual(@as(?i64, null), rf.since);
+    }
+}
+
+test "store: evictToCap removes the oldest events and their indexes" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "evict.mdb", &buf);
+    defer store.deinit();
+
+    const a = [_]u8{0xA1} ** 32;
+    // Seeds 1..5 at times 100..500.
+    for (1..6) |i| {
+        const seed: u8 = @intCast(i);
+        _ = try store.putEvent(gpa, qEvent(seed, a, 1, @as(i64, @intCast(i)) * 100, &[_]Tag{}));
+    }
+    try std.testing.expectEqual(@as(usize, 5), try store.eventCount());
+
+    // Cap at 3: the two oldest (seeds 1, 2) are evicted.
+    try std.testing.expectEqual(@as(usize, 2), try store.evictToCap(gpa, 3));
+    try std.testing.expectEqual(@as(usize, 3), try store.eventCount());
+    try std.testing.expect(!(try store.hasEvent([_]u8{1} ** 32)));
+    try std.testing.expect(!(try store.hasEvent([_]u8{2} ** 32)));
+    try std.testing.expect(try store.hasEvent([_]u8{3} ** 32));
+    try std.testing.expect(try store.hasEvent([_]u8{5} ** 32));
+
+    // Indexes were cleaned too: the query sees only the survivors, newest-first.
+    {
+        var r = try store.query(gpa, .{ .authors = &[_][32]u8{a} });
+        defer r.deinit();
+        try std.testing.expectEqual(@as(usize, 3), r.events.len);
+        try std.testing.expectEqual(@as(u8, 5), r.events[0].id[0]);
+        try std.testing.expectEqual(@as(u8, 3), r.events[2].id[0]);
+    }
+
+    // Already under the cap: nothing to do.
+    try std.testing.expectEqual(@as(usize, 0), try store.evictToCap(gpa, 10));
+}
+
+test "store: remove takes one event and every index entry that points at it" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "remove.mdb", &buf);
+    defer store.deinit();
+
+    const a = [_]u8{0xA1} ** 32;
+    const t_tag = [_]Tag{&[_][]const u8{ "t", "zig" }};
+    for (1..4) |i| {
+        const seed: u8 = @intCast(i);
+        _ = try store.putEvent(gpa, qEvent(seed, a, 1, @as(i64, @intCast(i)) * 100, &t_tag));
+    }
+
+    try std.testing.expect(try store.remove(gpa, [_]u8{2} ** 32));
+    try std.testing.expect(!try store.remove(gpa, [_]u8{2} ** 32));
+    try std.testing.expect(!try store.hasEvent([_]u8{2} ** 32));
+    try std.testing.expectEqual(@as(usize, 2), try store.eventCount());
+
+    // Every index that could have produced it no longer does.
+    const t_values = [_][]const u8{"zig"};
+    const t_filter = [_]filter_mod.TagFilter{.{ .letter = 't', .values = &t_values }};
+    const filters = [_]Filter{
+        .{ .authors = &[_][32]u8{a} },
+        .{ .authors = &[_][32]u8{a}, .kinds = &[_]u16{1} },
+        .{ .kinds = &[_]u16{1} },
+        .{ .tags = &t_filter },
+        .{},
+    };
+    for (filters) |f| {
+        var r = try store.query(gpa, f);
+        defer r.deinit();
+        try std.testing.expectEqual(@as(usize, 2), r.events.len);
+        try std.testing.expectEqual(@as(u8, 3), r.events[0].id[0]);
+        try std.testing.expectEqual(@as(u8, 1), r.events[1].id[0]);
+    }
+
+    // Not a deletion: the same event can come back.
+    try std.testing.expectEqual(IngestResult.added, try store.ingest(gpa, qEvent(2, a, 1, 200, &t_tag), .{}));
+}
+
+test "store: removing the current replaceable event lets an older one take its place" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "remove-repl.mdb", &buf);
+    defer store.deinit();
+
+    const a = [_]u8{0xA2} ** 32;
+    try std.testing.expectEqual(IngestResult.added, try store.ingest(gpa, qEvent(9, a, 0, 900, &[_]Tag{}), .{}));
+    try std.testing.expect(try store.remove(gpa, [_]u8{9} ** 32));
+    try std.testing.expectEqual(IngestResult.added, try store.ingest(gpa, qEvent(8, a, 0, 800, &[_]Tag{}), .{}));
+    var r = try store.query(gpa, .{ .authors = &[_][32]u8{a}, .kinds = &[_]u16{0} });
+    defer r.deinit();
+    try std.testing.expectEqual(@as(usize, 1), r.events.len);
+    try std.testing.expectEqual(@as(u8, 8), r.events[0].id[0]);
+}
+
+test "store: removeMatching removes what the filter selects and nothing else" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "remove-matching.mdb", &buf);
+    defer store.deinit();
+
+    const a = [_]u8{0xA3} ** 32;
+    const b = [_]u8{0xB3} ** 32;
+    for (1..5) |i| {
+        const seed: u8 = @intCast(i);
+        _ = try store.putEvent(gpa, qEvent(seed, if (i % 2 == 0) a else b, 1, @as(i64, @intCast(i)) * 100, &[_]Tag{}));
+    }
+    try std.testing.expectEqual(@as(usize, 2), try store.removeMatching(gpa, .{ .authors = &[_][32]u8{a} }));
+    try std.testing.expectEqual(@as(usize, 2), try store.eventCount());
+    try std.testing.expect(try store.hasEvent([_]u8{1} ** 32));
+    try std.testing.expect(try store.hasEvent([_]u8{3} ** 32));
+
+    // A limit bounds it like a query: the newest one only.
+    try std.testing.expectEqual(@as(usize, 1), try store.removeMatching(gpa, .{ .authors = &[_][32]u8{b}, .limit = 1 }));
+    try std.testing.expect(!try store.hasEvent([_]u8{3} ** 32));
+    try std.testing.expect(try store.hasEvent([_]u8{1} ** 32));
+}
+
+test "store: a profile is found without reading the notes written since" {
+    // The shape every Nostr client asks for constantly: one account's kind:0,
+    // which they set once and have posted over ever since. Answered from the
+    // author index it means walking back through the whole timeline and
+    // decoding each note to find out it is the wrong kind, so the cost of
+    // reading somebody's name grows with how much they have written.
+    //
+    // Asserted on entries examined rather than elapsed time: a stopwatch on a
+    // loaded machine cannot tell a wasted walk from a busy CPU, and this can.
+    const gpa = std.testing.allocator;
+    var signer = try keys.Signer.initRandomized(std.testing.io);
+    defer signer.deinit();
+    const kp = try signer.generateKeyPair(std.testing.io);
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "author-kind.mdb", &buf);
+    defer store.deinit();
+
+    var arena_state = std.heap.ArenaAllocator.init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    // The profile first, then everything they have said since.
+    const profile = try event.create(arena, signer, kp, 1_000, 0, &.{}, "{\"name\":\"me\"}", null);
+    _ = try store.ingest(arena, profile, .{});
+    const notes = 500;
+    for (0..notes) |i| {
+        const body = try std.fmt.allocPrint(arena, "note {d}", .{i});
+        const ev = try event.create(arena, signer, kp, 2_000 + @as(i64, @intCast(i)), 1, &.{}, body, null);
+        _ = try store.ingest(arena, ev, .{});
+    }
+
+    var r = try store.query(gpa, .{ .authors = &[_][32]u8{kp.public_key}, .kinds = &[_]u16{0} });
+    defer r.deinit();
+    try std.testing.expectEqual(@as(usize, 1), r.events.len);
+    try std.testing.expectEqualStrings("{\"name\":\"me\"}", r.events[0].content);
+    // One entry: the profile itself. Anything near `notes` means the query
+    // walked the timeline to get here.
+    try std.testing.expectEqual(@as(usize, 1), r.examined);
+}
+
+test "store: a feed does not re-scan the follow list it was answered from" {
+    // The home feed of somebody who follows a lot of people. Every note comes
+    // back through its own author's index, so the author constraint is already
+    // decided by the time the record is read; checking it again means walking
+    // the whole follow list, per note, for an answer that cannot be no.
+    //
+    // Asserted on list entries rather than elapsed time, for the same reason
+    // `examined` is: a stopwatch cannot tell a quadratic scan from a busy
+    // machine, and this can.
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "wide-feed.mdb", &buf);
+    defer store.deinit();
+
+    const follows = 300;
+    var authors: [follows][32]u8 = undefined;
+    for (&authors, 0..) |*a, i| {
+        a.* = [_]u8{0} ** 32;
+        std.mem.writeInt(u64, a[0..8], i, .big);
+        // One note each, so no stream in the merge dies before the pick.
+        var id = [_]u8{0} ** 32;
+        std.mem.writeInt(u64, id[0..8], 1_000 + i, .big);
+        _ = try store.putEvent(gpa, Event{
+            .id = id,
+            .pubkey = a.*,
+            .created_at = @intCast(i),
+            .kind = 1,
+            .tags = &.{},
+            .content = "",
+            .sig = [_]u8{0} ** 64,
+        });
+    }
+
+    var r = try store.query(gpa, .{ .authors = &authors, .kinds = &[_]u16{1}, .limit = 20 });
+    defer r.deinit();
+    try std.testing.expectEqual(@as(usize, 20), r.events.len);
+    try std.testing.expectEqual(@as(usize, 20), r.examined);
+    // Zero, not "small": the composite index proves both the author and the
+    // kind. Twenty notes times three hundred follows is the number this used
+    // to be, and it grows with both.
+    try std.testing.expectEqual(@as(usize, 0), r.list_checks);
+}
+
+test "store: naming ids does not re-scan the ids" {
+    // The other half of the same rule, and the one a client refreshing a feed
+    // it already holds depends on: reading an event because its id was named
+    // already proves the id matches.
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "by-id.mdb", &buf);
+    defer store.deinit();
+
+    const a = [_]u8{0xAA} ** 32;
+    const named = 200;
+    var ids: [named][32]u8 = undefined;
+    for (&ids, 0..) |*id, i| {
+        id.* = [_]u8{0} ** 32;
+        std.mem.writeInt(u64, id[0..8], 500 + i, .big);
+        _ = try store.putEvent(gpa, Event{
+            .id = id.*,
+            .pubkey = a,
+            .created_at = @intCast(i),
+            .kind = 1,
+            .tags = &.{},
+            .content = "",
+            .sig = [_]u8{0} ** 64,
+        });
+    }
+
+    var r = try store.query(gpa, .{ .ids = &ids, .kinds = &[_]u16{1} });
+    defer r.deinit();
+    try std.testing.expectEqual(@as(usize, named), r.events.len);
+    try std.testing.expectEqual(@as(usize, 0), r.list_checks);
+}
+
+test "store: a constraint no index proved is still enforced" {
+    // The control for the two above. Dropping a constraint is only sound when
+    // the index really did decide it, so this drives a shape where it did not:
+    // the author index picks the candidates, and the tag is the only thing that
+    // can reject one. If the residual were emptied wholesale, the note without
+    // the tag comes back too.
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "residual.mdb", &buf);
+    defer store.deinit();
+
+    const mine = [_]u8{0x11} ** 32;
+    const tagged = [_]Tag{&.{ "e", "beef" }};
+    _ = try store.putEvent(gpa, qEvent(1, mine, 1, 100, &tagged));
+    _ = try store.putEvent(gpa, qEvent(2, mine, 1, 200, &[_]Tag{}));
+    _ = try store.putEvent(gpa, qEvent(3, mine, 7, 300, &tagged));
+
+    {
+        var r = try store.query(gpa, .{
+            .authors = &[_][32]u8{mine},
+            .tags = &[_]filter_mod.TagFilter{.{ .letter = 'e', .values = &[_][]const u8{"beef"} }},
+        });
+        defer r.deinit();
+        try std.testing.expectEqual(@as(usize, 2), r.events.len);
+        try std.testing.expectEqual(@as(u8, 3), r.events[0].id[0]);
+        try std.testing.expectEqual(@as(u8, 1), r.events[1].id[0]);
+        // Three candidates off the author index; the untagged one was rejected
+        // by a check the index could not make. No id or author list was walked
+        // to do it, which is what this counts.
+        try std.testing.expectEqual(@as(usize, 3), r.examined);
+        try std.testing.expectEqual(@as(usize, 0), r.list_checks);
+    }
+
+    // And a kind the author index cannot prove, for the same reason.
+    {
+        var r = try store.query(gpa, .{ .authors = &[_][32]u8{mine}, .kinds = &[_]u16{7} });
+        defer r.deinit();
+        try std.testing.expectEqual(@as(usize, 1), r.events.len);
+        try std.testing.expectEqual(@as(u8, 3), r.events[0].id[0]);
+        try std.testing.expectEqual(@as(usize, 0), r.list_checks);
+    }
+}
+
+test "store: an id named by the wrong author is still rejected" {
+    // Naming an id skips the id comparison, not the rest of the filter. A
+    // client asking "these ids, from these authors" is asking a real question
+    // and the second half has to hold.
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "id-author.mdb", &buf);
+    defer store.deinit();
+
+    const mine = [_]u8{0x11} ** 32;
+    const stranger = [_]u8{0x22} ** 32;
+    _ = try store.putEvent(gpa, qEvent(1, mine, 1, 100, &[_]Tag{}));
+    _ = try store.putEvent(gpa, qEvent(2, stranger, 1, 200, &[_]Tag{}));
+    _ = try store.putEvent(gpa, qEvent(3, mine, 7, 300, &[_]Tag{}));
+
+    var r = try store.query(gpa, .{
+        .ids = &[_][32]u8{ [_]u8{1} ** 32, [_]u8{2} ** 32, [_]u8{3} ** 32 },
+        .authors = &[_][32]u8{mine},
+        .kinds = &[_]u16{1},
+    });
+    defer r.deinit();
+    try std.testing.expectEqual(@as(usize, 1), r.events.len);
+    try std.testing.expectEqual(@as(u8, 1), r.events[0].id[0]);
+    // Three candidates, each checked against the one-name author list. The id
+    // list is not in the count.
+    try std.testing.expectEqual(@as(usize, 3), r.list_checks);
+}
+
+test "store: a database written before the author+kind index still reads" {
+    // An index that does not exist yet and an author who has written nothing
+    // look identical from a query, so an upgrade that skipped the fill would
+    // not fail: it would open to a blank feed, an empty contact list and a
+    // profile with no name, and every one of those reads as the account rather
+    // than as a bug. This drops the index the way an older build leaves it and
+    // asserts the next open repairs it.
+    const gpa = std.testing.allocator;
+    var signer = try keys.Signer.initRandomized(std.testing.io);
+    defer signer.deinit();
+    const kp = try signer.generateKeyPair(std.testing.io);
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const path = testStorePath(&tmp, "legacy.mdb", &buf);
+
+    var arena_state = std.heap.ArenaAllocator.init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    {
+        var store = try Store.open(path.ptr, .{});
+        defer store.deinit();
+        const profile = try event.create(arena, signer, kp, 1_000, 0, &.{}, "{\"name\":\"me\"}", null);
+        _ = try store.ingest(arena, profile, .{});
+        for (0..8) |i| {
+            const body = try std.fmt.allocPrint(arena, "note {d}", .{i});
+            const ev = try event.create(arena, signer, kp, 2_000 + @as(i64, @intCast(i)), 1, &.{}, body, null);
+            _ = try store.ingest(arena, ev, .{});
+        }
+
+        // Leave it as a database from before this index existed.
+        var txn: ?*c.MDB_txn = null;
+        try check(c.mdb_txn_begin(store.env, null, 0, &txn));
+        try check(c.mdb_drop(txn, store.idx_author_kind_dbi, 0));
+        try check(c.mdb_txn_commit(txn));
+
+        // The bad path, proven bad: with the index emptied, the same query
+        // this store answers correctly above finds nothing at all.
+        var blind = try store.query(gpa, .{ .authors = &[_][32]u8{kp.public_key}, .kinds = &[_]u16{0} });
+        defer blind.deinit();
+        try std.testing.expectEqual(@as(usize, 0), blind.events.len);
+    }
+
+    var reopened = try Store.open(path.ptr, .{});
+    defer reopened.deinit();
+    var r = try reopened.query(gpa, .{ .authors = &[_][32]u8{kp.public_key}, .kinds = &[_]u16{0} });
+    defer r.deinit();
+    try std.testing.expectEqual(@as(usize, 1), r.events.len);
+    try std.testing.expectEqualStrings("{\"name\":\"me\"}", r.events[0].content);
+
+    var all = try reopened.query(gpa, .{ .authors = &[_][32]u8{kp.public_key}, .kinds = &[_]u16{1} });
+    defer all.deinit();
+    try std.testing.expectEqual(@as(usize, 8), all.events.len);
+}
+
+test "store: authors, kinds and a time window are all applied together" {
+    // The composite index seeks past a 34-byte prefix rather than a 32-byte
+    // one, so an off-by-two there would put the `since`/`until` bounds in the
+    // wrong place and quietly return the wrong window. Nothing else in the
+    // suite asks for authors, kinds and a time range at once.
+    const gpa = std.testing.allocator;
+    var signer = try keys.Signer.initRandomized(std.testing.io);
+    defer signer.deinit();
+    const a = try signer.generateKeyPair(std.testing.io);
+    const b = try signer.generateKeyPair(std.testing.io);
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "window.mdb", &buf);
+    defer store.deinit();
+
+    var arena_state = std.heap.ArenaAllocator.init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    // Both authors write both kinds, once per second from 100 to 109.
+    for (0..10) |i| {
+        const t = 100 + @as(i64, @intCast(i));
+        for ([_]keys.KeyPair{ a, b }) |kp| {
+            for ([_]u16{ 1, 7 }) |kd| {
+                const body = try std.fmt.allocPrint(arena, "k{d} t{d}", .{ kd, t });
+                const ev = try event.create(arena, signer, kp, t, kd, &.{}, body, null);
+                _ = try store.ingest(arena, ev, .{});
+            }
+        }
+    }
+
+    var r = try store.query(gpa, .{
+        .authors = &[_][32]u8{a.public_key},
+        .kinds = &[_]u16{1},
+        .since = 103,
+        .until = 106,
+    });
+    defer r.deinit();
+
+    // One author, one kind, four seconds inclusive: 103, 104, 105, 106.
+    try std.testing.expectEqual(@as(usize, 4), r.events.len);
+    for (r.events) |ev| {
+        try std.testing.expectEqualSlices(u8, &a.public_key, &ev.pubkey);
+        try std.testing.expectEqual(@as(u16, 1), ev.kind);
+        try std.testing.expect(ev.created_at >= 103 and ev.created_at <= 106);
+    }
+    // Newest first, and nothing outside the window was read to get there.
+    try std.testing.expectEqual(@as(i64, 106), r.events[0].created_at);
+    try std.testing.expectEqual(@as(i64, 103), r.events[3].created_at);
+    try std.testing.expectEqual(@as(usize, 4), r.examined);
+}
+
+test "store: the author+kind index stays whole through deletes and replaces" {
+    // The fill triggers on the index not holding one entry per event, so a
+    // write path that maintained the author index but forgot this one would
+    // not fail a query: it would make every open rebuild the whole index, and
+    // on a real store that is a startup pause with nothing to explain it. This
+    // asserts the invariant directly after each kind of write.
+    const gpa = std.testing.allocator;
+    var signer = try keys.Signer.initRandomized(std.testing.io);
+    defer signer.deinit();
+    const kp = try signer.generateKeyPair(std.testing.io);
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "whole.mdb", &buf);
+    defer store.deinit();
+
+    var arena_state = std.heap.ArenaAllocator.init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    const entries = struct {
+        fn f(s: *Store, dbi: c.MDB_dbi) !usize {
+            var txn: ?*c.MDB_txn = null;
+            try check(c.mdb_txn_begin(s.env, null, @intCast(c.MDB_RDONLY), &txn));
+            defer c.mdb_txn_abort(txn);
+            var st: c.MDB_stat = undefined;
+            try check(c.mdb_stat(txn, dbi, &st));
+            return st.ms_entries;
+        }
+    }.f;
+    // Plain events.
+    for (0..5) |i| {
+        const body = try std.fmt.allocPrint(arena, "note {d}", .{i});
+        const ev = try event.create(arena, signer, kp, 1_000 + @as(i64, @intCast(i)), 1, &.{}, body, null);
+        _ = try store.ingest(arena, ev, .{});
+    }
+    try std.testing.expectEqual(
+        try entries(&store, store.events_dbi),
+        try entries(&store, store.idx_author_kind_dbi),
+    );
+
+    // A replaceable event, then a newer one superseding it.
+    const p1 = try event.create(arena, signer, kp, 2_000, 0, &.{}, "{\"name\":\"one\"}", null);
+    _ = try store.ingest(arena, p1, .{});
+    const p2 = try event.create(arena, signer, kp, 2_001, 0, &.{}, "{\"name\":\"two\"}", null);
+    _ = try store.ingest(arena, p2, .{});
+    try std.testing.expectEqual(
+        try entries(&store, store.events_dbi),
+        try entries(&store, store.idx_author_kind_dbi),
+    );
+
+    // A NIP-09 deletion of one of the notes.
+    const victim = blk: {
+        var r = try store.query(gpa, .{ .authors = &[_][32]u8{kp.public_key}, .kinds = &[_]u16{1}, .limit = 1 });
+        defer r.deinit();
+        break :blk r.events[0].id;
+    };
+    const id_hex = try hex.encode(arena, &victim);
+    const tags = [_]Tag{&[_][]const u8{ "e", id_hex }};
+    const del = try event.create(arena, signer, kp, 3_000, 5, &tags, "", null);
+    _ = try store.ingest(arena, del, .{});
+    try std.testing.expectEqual(
+        try entries(&store, store.events_dbi),
+        try entries(&store, store.idx_author_kind_dbi),
+    );
+
+    // And so a reopen finds nothing to fill: the newest profile is still the
+    // one query returns, and it is the second one.
+    var r = try store.query(gpa, .{ .authors = &[_][32]u8{kp.public_key}, .kinds = &[_]u16{0} });
+    defer r.deinit();
+    try std.testing.expectEqual(@as(usize, 1), r.events.len);
+    try std.testing.expectEqualStrings("{\"name\":\"two\"}", r.events[0].content);
+    try std.testing.expectEqual(@as(usize, 1), r.examined);
+}
+
+/// The pick the merge used before it had a heap, kept as the reference: scan
+/// every live stream and take the newest, the lowest index on a tie.
+fn linearPick(streams: []const RevStream) ?usize {
+    var best: ?usize = null;
+    for (streams, 0..) |s, i| {
+        if (!s.live) continue;
+        if (best == null or linearNewer(s, streams[best.?])) best = i;
+    }
+    return best;
+}
+
+fn linearNewer(a: RevStream, b: RevStream) bool {
+    return switch (std.mem.order(u8, &a.tk, &b.tk)) {
+        .gt => true,
+        .lt => false,
+        .eq => std.mem.order(u8, &a.id, &b.id) == .gt,
+    };
+}
+
+test "store: the heap merge picks in the same order as the linear scan" {
+    const gpa = std.testing.allocator;
+    var prng = std.Random.DefaultPrng.init(0x6d65_7267_65);
+    const rnd = prng.random();
+
+    // Each case is a set of streams, every one a newest-first list of
+    // (time-key, id) entries. Times and ids are drawn from small ranges so
+    // that ties on time are common and the same entry shows up in several
+    // streams, which is the case the tie-break exists for.
+    var case: usize = 0;
+    while (case < 300) : (case += 1) {
+        const n_streams = rnd.intRangeAtMost(usize, 0, 40);
+        const time_range = rnd.intRangeAtMost(i64, 1, 12);
+        const id_range = rnd.intRangeAtMost(u8, 1, 6);
+
+        const lists = try gpa.alloc([]RevStream, n_streams);
+        defer gpa.free(lists);
+        var made: usize = 0;
+        defer for (lists[0..made]) |l| gpa.free(l);
+        for (lists) |*l| {
+            const len = rnd.intRangeAtMost(usize, 0, 12);
+            const entries = try gpa.alloc(RevStream, len);
+            for (entries) |*e| {
+                e.* = .{ .live = true };
+                e.tk = orderKey(rnd.intRangeAtMost(i64, -time_range, time_range));
+                @memset(&e.id, 0);
+                e.id[31] = rnd.intRangeAtMost(u8, 0, id_range);
+            }
+            // Newest first, as a reverse cursor walks them.
+            std.mem.sort(RevStream, entries, {}, struct {
+                fn newer(_: void, a: RevStream, b: RevStream) bool {
+                    return linearNewer(a, b);
+                }
+            }.newer);
+            l.* = entries;
+            made += 1;
+        }
+
+        const ref = try gpa.alloc(RevStream, n_streams);
+        defer gpa.free(ref);
+        const fast = try gpa.alloc(RevStream, n_streams);
+        defer gpa.free(fast);
+        const ref_pos = try gpa.alloc(usize, n_streams);
+        defer gpa.free(ref_pos);
+        const fast_pos = try gpa.alloc(usize, n_streams);
+        defer gpa.free(fast_pos);
+        for (lists, 0..) |l, i| {
+            ref_pos[i] = 0;
+            fast_pos[i] = 0;
+            ref[i] = if (l.len > 0) l[0] else .{};
+            fast[i] = ref[i];
+        }
+
+        const buf = try gpa.alloc(u32, n_streams);
+        defer gpa.free(buf);
+        var heap = MergeHeap.init(buf, fast);
+
+        while (true) {
+            const want = linearPick(ref);
+            const got = heap.top();
+            try std.testing.expectEqual(want == null, got == null);
+            if (want == null) break;
+            const w = want.?;
+            const g: usize = got.?;
+            try std.testing.expectEqual(w, g);
+            try std.testing.expectEqualSlices(u8, &ref[w].id, &fast[g].id);
+            try std.testing.expectEqualSlices(u8, &ref[w].tk, &fast[g].tk);
+
+            ref_pos[w] += 1;
+            ref[w] = if (ref_pos[w] < lists[w].len) lists[w][ref_pos[w]] else .{};
+            fast_pos[g] += 1;
+            fast[g] = if (fast_pos[g] < lists[g].len) lists[g][fast_pos[g]] else .{};
+            heap.settleTop(fast);
+        }
+    }
+}
+
+test "store: syncItems lists (created_at, id) ascending for nip77" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "sync.mdb", &buf);
+    defer store.deinit();
+
+    const gpa = std.testing.allocator;
+    // seed, author, kind, created_at
+    _ = try store.putEvent(gpa, qEvent(9, author_a, 1, 200, &.{}));
+    _ = try store.putEvent(gpa, qEvent(3, author_b, 7, 200, &.{}));
+    _ = try store.putEvent(gpa, qEvent(5, author_a, 1, 100, &.{}));
+    _ = try store.putEvent(gpa, qEvent(7, author_b, 1, 300, &.{}));
+    _ = try store.putEvent(gpa, qEvent(1, author_a, 1, -5, &.{}));
+
+    const Case = struct { filter: Filter, want: []const SyncItem };
+    const s = struct {
+        fn item(t: u64, seed: u8) SyncItem {
+            return .{ .created_at = t, .id = [_]u8{seed} ** 32 };
+        }
+    };
+    const cases = [_]Case{
+        // Everything, from the time index alone; the negative timestamp is dropped.
+        .{ .filter = .{}, .want = &.{ s.item(100, 5), s.item(200, 3), s.item(200, 9), s.item(300, 7) } },
+        // since/until are inclusive.
+        .{ .filter = .{ .since = 200, .until = 200 }, .want = &.{ s.item(200, 3), s.item(200, 9) } },
+        .{ .filter = .{ .since = 301 }, .want = &.{} },
+        .{ .filter = .{ .since = 300, .until = 100 }, .want = &.{} },
+        // A filter with other constraints goes through query and is sorted.
+        .{ .filter = .{ .kinds = &.{1} }, .want = &.{ s.item(100, 5), s.item(200, 9), s.item(300, 7) } },
+        .{ .filter = .{ .authors = &.{author_b} }, .want = &.{ s.item(200, 3), s.item(300, 7) } },
+        // Several authors and kinds, named twice, are merged without repeats.
+        .{ .filter = .{ .authors = &.{ author_a, author_b, author_a } }, .want = &.{ s.item(100, 5), s.item(200, 3), s.item(200, 9), s.item(300, 7) } },
+        .{ .filter = .{ .authors = &.{ author_a, author_b }, .kinds = &.{ 1, 1 }, .since = 150 }, .want = &.{ s.item(200, 9), s.item(300, 7) } },
+        .{ .filter = .{ .kinds = &.{ 7, 1 }, .until = 200 }, .want = &.{ s.item(100, 5), s.item(200, 3), s.item(200, 9) } },
+        // limit keeps the newest matches, still returned ascending.
+        .{ .filter = .{ .limit = 2 }, .want = &.{ s.item(200, 9), s.item(300, 7) } },
+    };
+    for (cases) |case| {
+        const got = try store.syncItems(gpa, case.filter, .{});
+        defer gpa.free(got);
+        try std.testing.expectEqual(case.want.len, got.len);
+        for (case.want, got) |w, g| {
+            try std.testing.expectEqual(w.created_at, g.created_at);
+            try std.testing.expectEqualSlices(u8, &w.id, &g.id);
+        }
+    }
+}
+
+test "store: syncItems stops at max_items instead of collecting everything" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "sync-cap.mdb", &buf);
+    defer store.deinit();
+    const gpa = std.testing.allocator;
+    for (1..6) |i| {
+        const seed: u8 = @intCast(i);
+        _ = try store.putEvent(gpa, qEvent(seed, if (i % 2 == 0) author_a else author_b, 1, @as(i64, @intCast(i)) * 100, &.{}));
+    }
+    const filters = [_]Filter{
+        .{},
+        .{ .kinds = &.{1} },
+        .{ .authors = &.{ author_a, author_b } },
+        .{ .authors = &.{ author_a, author_b }, .kinds = &.{1} },
+        .{ .ids = &.{ [_]u8{1} ** 32, [_]u8{2} ** 32, [_]u8{3} ** 32, [_]u8{4} ** 32 } },
+    };
+    for (filters) |f| {
+        try std.testing.expectError(error.TooManyItems, store.syncItems(gpa, f, .{ .max_items = 3 }));
+        const all = try store.syncItems(gpa, f, .{ .max_items = 5 });
+        gpa.free(all);
+    }
+    // A limit under the cap keeps the set under it.
+    const capped = try store.syncItems(gpa, .{ .ids = &.{ [_]u8{1} ** 32, [_]u8{2} ** 32, [_]u8{3} ** 32, [_]u8{4} ** 32 }, .limit = 3 }, .{ .max_items = 3 });
+    defer gpa.free(capped);
+    try std.testing.expectEqual(@as(usize, 3), capped.len);
+}
+
+test "store: syncItems by author or kind reads index keys, not events" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    var store = try openTempStore(&tmp, "sync-keys.mdb", &buf);
+    defer store.deinit();
+    const gpa = std.testing.allocator;
+    _ = try store.putEvent(gpa, qEvent(4, author_a, 1, 400, &.{}));
+
+    // Overwrite the record behind the indexes with bytes no decoder accepts.
+    // Anything that decodes it fails; a walk over the index keys does not.
+    {
+        var txn: ?*c.MDB_txn = null;
+        try check(c.mdb_txn_begin(store.env, null, 0, &txn));
+        errdefer c.mdb_txn_abort(txn);
+        const id = [_]u8{4} ** 32;
+        var k = val(&id);
+        var v = val("junk");
+        try check(c.mdb_put(txn, store.events_dbi, &k, &v, 0));
+        try check(c.mdb_txn_commit(txn));
+    }
+    const filters = [_]Filter{ .{ .kinds = &.{1} }, .{ .authors = &.{author_a} }, .{ .authors = &.{author_a}, .kinds = &.{1} } };
+    for (filters) |f| {
+        const got = try store.syncItems(gpa, f, .{});
+        defer gpa.free(got);
+        try std.testing.expectEqual(@as(usize, 1), got.len);
+        try std.testing.expectEqual(@as(u64, 400), got[0].created_at);
+    }
+}
+
+test "store: every durability opens, keeps what it commits, and sets its flag" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const gpa = std.testing.allocator;
+    const cases = [_]struct { d: Store.Durability, flag: c_uint }{
+        .{ .d = .full, .flag = 0 },
+        .{ .d = .no_meta_sync, .flag = @intCast(c.MDB_NOMETASYNC) },
+        .{ .d = .no_sync, .flag = @intCast(c.MDB_NOSYNC) },
+    };
+    for (cases, 0..) |case, i| {
+        var name_buf: [32]u8 = undefined;
+        const name = try std.fmt.bufPrint(&name_buf, "durability-{d}.mdb", .{i});
+        var buf: [std.fs.max_path_bytes]u8 = undefined;
+        const path = testStorePath(&tmp, name, &buf);
+        {
+            var store = try Store.open(path.ptr, .{ .durability = case.d });
+            defer store.deinit();
+            var flags: c_uint = 0;
+            try check(c.mdb_env_get_flags(store.env, &flags));
+            const sync_bits: c_uint = @intCast(c.MDB_NOSYNC | c.MDB_NOMETASYNC);
+            try std.testing.expectEqual(case.flag, flags & sync_bits);
+            _ = try store.putEvent(gpa, qEvent(1, author_a, 1, 100, &.{}));
+        }
+        // Committed is committed as far as the next open is concerned; the
+        // setting only decides when the disk hears of it.
+        var again = try Store.open(path.ptr, .{});
+        defer again.deinit();
+        try std.testing.expect(try again.hasEvent([_]u8{1} ** 32));
+    }
+}

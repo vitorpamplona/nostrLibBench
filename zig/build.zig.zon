@@ -3,6 +3,20 @@
     .version = "0.1.0",
     .fingerprint = 0x1ac80bff5b3faa37,
     .minimum_zig_version = "0.16.0",
-    .dependencies = .{},
+    // Pinned by commit (URL) and content hash. run.sh pre-fetches every package, transitive
+    // ones included, into the Zig cache (curl, or `git archive` of the same commit when the
+    // tarball host is unreachable); `zig fetch` then checks each against these hashes.
+    .dependencies = .{
+        // zig-nostr/nostr v0.16.0 (tag v0.16.0 = commit dfa0e4b3)
+        .zig_nostr = .{
+            .url = "https://github.com/zig-nostr/nostr/archive/dfa0e4b36f78400969800407d7cf3589fc48594c.tar.gz",
+            .hash = "nostr-0.16.0-CMyPzYmkEQBqRKpV_8jJYu769GBnHVzyZELHxbblGk0V",
+        },
+        // privkeyio/libnostr-z v0.5.0 (tag v0.5.0 = commit 5accad27)
+        .libnostr_z = .{
+            .url = "https://github.com/privkeyio/libnostr-z/archive/5accad27a7ad71d503cd3c8152ea9540d2c23cda.tar.gz",
+            .hash = "nostr-0.5.0-JY6OcKMgEABIisCx3kmE4ybZbmnO5PyWyodAGjukxEJs",
+        },
+    },
     .paths = .{ "build.zig", "build.zig.zon", "src" },
 }
