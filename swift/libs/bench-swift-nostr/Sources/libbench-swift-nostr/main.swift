@@ -118,7 +118,7 @@ final class WebSocketKitSession: WebSocketSession, @unchecked Sendable {
         WebSocket.connect(to: url, configuration: config, on: nioGroup) { [weak self] ws in
             ws.onText { _, text in continuation.yield(.string(text)) }
             ws.onBinary { _, buf in continuation.yield(.data(Data(buf.readableBytesView))) }
-            ws.onPong { [weak self] _ in self?.pong(nil) }
+            ws.onPong { [weak self] _, _ in self?.pong(nil) }
             ws.onClose.whenComplete { _ in continuation.finish(throwing: Closed()) }
             socket.succeed(ws)
         }.whenFailure { [weak self] error in
