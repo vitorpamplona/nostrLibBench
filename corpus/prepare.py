@@ -299,7 +299,27 @@ def main():
 
     os.makedirs(args.out, exist_ok=True)
     workloads = []
-    for name, desc, pred in WORKLOADS:
+    # `smoke`: a small slice of `all` for checking that every harness gets the same answer
+    # before the long runs. Every 32nd event, plus every event a client can get wrong: the
+    # ambiguous and the expired ones, created_at 0, every 4th invalid one.
+    invalid_seen = [0]
+
+    def smoke(i, raw, e):
+        if i % 32 == 0 or e["id"] in invalid and invalid[e["id"]] == AMBIGUOUS:
+            return True
+        if e["created_at"] == 0 or (e["id"] not in invalid and is_expired(e)):
+            return True
+        if e["id"] in invalid:
+            invalid_seen[0] += 1
+            return invalid_seen[0] % 4 == 1
+        return False
+
+    smoke_ids = {e["id"] for i, (raw, e) in enumerate(events) if smoke(i, raw, e)}
+    workloads_def = WORKLOADS + [
+        ("smoke", "a ~1,400-event slice of all with every edge case, to check harnesses quickly",
+         lambda e: e["id"] in smoke_ids),
+    ]
+    for name, desc, pred in workloads_def:
         chosen = [(raw, e) for raw, e in events if pred(e)]
         if not chosen:
             continue
