@@ -82,6 +82,13 @@ def check_accepted(r, w):
     return False, f"accepted {acc:,} (right count) but the wrong set"
 
 
+def cpu_us(r):
+    """CPU time per event sent, all threads of the client process."""
+    if r.get("cpu_ms") is None or not r.get("events"):
+        return None
+    return r["cpu_ms"] * 1000 / r["events"]
+
+
 def lang_label(run):
     lang = run.get("language", run["harness"])
     if run["harness"] in RUNTIME_HARNESSES:
@@ -170,20 +177,36 @@ def main():
         )
         L.append(
             "| # | language | client | version | verify | crypto | websocket | events/s | µs/event | "
-            "median ms | first run ms | CPU ms | CPU/wall | peak RSS MB | ambiguous | expired |"
+            "median ms | first run ms | CPU ms | CPU µs/event | CPU/wall | peak RSS MB | ambiguous | expired |"
         )
-        L.append("|---:|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|---|")
+        L.append("|---:|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|")
         for i, r in enumerate(ranked, 1):
             util = r["cpu_ms"] / r["median_ms"] if r.get("cpu_ms") and r.get("median_ms") else None
             L.append(
                 f"| {i} | {r['language']} | `{r['client']}` | {r.get('version', '')} | {r.get('verify', '')} | "
                 f"{r.get('crypto', '')} | {r.get('websocket', '')} | {fmt(r.get('events_per_s'))} | "
                 f"{fmt(r.get('us_per_event'), 1)} | {fmt(r.get('median_ms'))} | {fmt(r.get('first_run_ms'))} | "
-                f"{fmt(r.get('cpu_ms'))} | {fmt(util, 2)} | {fmt(r.get('peak_rss_mb'))} | "
+                f"{fmt(r.get('cpu_ms'))} | {fmt(cpu_us(r), 1)} | {fmt(util, 2)} | {fmt(r.get('peak_rss_mb'))} | "
                 f"{'accepted' if r.get('ambiguous_accepted') else 'rejected'} | "
                 f"{'dropped' if r.get('expired_accepted') == 0 else 'delivered'} |"
             )
         L.append("")
+
+        by_cpu = sorted((r for r in ranked if cpu_us(r)), key=cpu_us)
+        if by_cpu:
+            L.append("### By CPU time\n")
+            L.append(
+                "The same rows ranked by CPU time per event (all threads): the cost of the job "
+                "regardless of how many cores a library spreads it over.\n"
+            )
+            L.append("| # | language | client | CPU µs/event | wall µs/event | CPU/wall |")
+            L.append("|---:|---|---|---:|---:|---:|")
+            for i, r in enumerate(by_cpu, 1):
+                L.append(
+                    f"| {i} | {r['language']} | `{r['client']}` | {fmt(cpu_us(r), 1)} | "
+                    f"{fmt(r.get('us_per_event'), 1)} | {fmt(r['cpu_ms'] / r['median_ms'], 2)} |"
+                )
+            L.append("")
 
     others = [r for r in rows if r["ok"] and (r["harness"], r["client"]) not in head_ids and r["workload"] == head_wl]
     if others:

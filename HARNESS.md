@@ -22,6 +22,56 @@ model, id hashing, signature verification and the library's own subscription
 bookkeeping (dedup, filter matching, queues, threads). The harness only counts what the
 library delivers.
 
+## Fairness: the same job for every library
+
+The ranking is only meaningful if every row did the same work. Every client, in every
+language:
+
+1. **Receives** every frame over the library's own WebSocket client (or, for a library
+   with no client, the one its real users pair it with: a variant).
+2. **Parses** every event fully into the library's own event type: all seven fields
+   decoded, escapes resolved. No lazy shortcut that skips fields the app would read.
+3. **Verifies every event**: recomputes the id from the decoded fields (SHA-256 of the
+   NIP-01 serialization) and compares it with the `id` field, and checks the BIP-340
+   signature. If the library skips either half, the harness adds the library's own
+   function for it. No sampling, no "already verified" cache carried over from an earlier
+   run, no trusting the relay.
+4. **Delivers** each valid event to the app as the library's event object and drops the
+   invalid ones. Each library may deliver or drop the expired events, and accept or reject
+   the ambiguous one; the report shows which.
+5. **Does the same app work per event**: the harness callback only counts the event and
+   XORs its id into the accepted set. Nothing else, in every language.
+
+Every client uses one relay and one subscription, through the library's streaming API
+(callback, channel, flow, iterator). Pools, fetch-all APIs and multi-relay setups are
+variants (`variant: true`), shown but not ranked.
+
+**Configuration.** Library defaults, except what is needed to do the job above correctly,
+each named in `notes`:
+
+- turn verification on (or to 100 %) if the default skips or samples it;
+- raise timers that would cut a long download short (fake EOSE after N seconds, idle
+  timeouts) and limits that would drop events (`max_events`, channel sizes); never lower
+  anything;
+- silence per-event logging to the console (an app configures its logger), keeping the
+  library's own work.
+
+A build option or setting the library documents for speed (a libsecp256k1 backend behind
+a build tag, a native verifier plugin) is a client entry of its own, not a variant: the
+ranking shows each library at its fastest documented configuration, and the
+default-configuration row is listed next to it. A row may not use a patched copy of a
+library; a library that only works with a patch gets an `error` row and the patch is
+described in the harness README.
+
+**Threads.** A library may verify on as many threads as it uses by default (that is its
+design), but the harness never adds threads. The ranking is by wall time, `cpu_ms` sits
+next to it, and the report also ranks by CPU time per event, so a library that is fast
+only because it uses every core is visible as such.
+
+**Same conditions.** One relay, one machine, the same workload bytes, warm-up runs, one
+client at a time in a fresh process, runtime flags as a typical app ships them (recorded
+in `runtime`).
+
 ## The relay
 
 `relay/` (Rust, `blast-relay`) answers every `REQ` with every event of a workload, in file
@@ -210,12 +260,6 @@ not: rejecting an invalid event is work too). `cpu_ms` is the median of the runs
 times. A client that fails (throws, never sees EOSE, crashes) still gets a row with
 `error` set and null timings; `errors` is the number of runs that failed (a harness stops
 at the first, so it is 0 or 1).
-
-A build option or setting the library documents (a faster crypto backend behind a build
-tag, a bigger buffer) is a client entry of its own, not a variant: the ranking shows each
-library at its fastest documented configuration, and `notes` say which it is. Another API
-of the same library (a pool instead of a single relay, fetch instead of subscribe) is a
-variant.
 
 Streams can end early without an error (a library that drops events when the app falls
 behind its reader); "every run must deliver the same set as the first" is what catches it,
