@@ -71,7 +71,8 @@ function clients(): array
                 'frame; the callback pauses the connection on EOSE (the library never stops on its own). ' .
                 'PersistentConnection also keeps every RelayResponse in an array for the life of the connection. ' .
                 'Teardown ignores the ConnectionFailureException that PersistentConnection::close() throws on some runs ' .
-                '(it disconnects, then sends a close frame on the closed connection).',
+                '(it disconnects, then sends a close frame on the closed connection). Config: the WebSocket client\'s read ' .
+                'timeout (default 60 s) is raised to --timeout-ms so a slow download is not cut short; otherwise defaults.',
         ],
         [
             'id' => 'nostr-php-request', 'library' => 'swentel/nostr-php', 'package' => 'swentel/nostr-php',
@@ -79,7 +80,8 @@ function clients(): array
             'api' => 'Relay::connect + Request(relay, RequestMessage)->send() (fetch-all: returns every response after EOSE)',
             'websocket' => $ws, 'crypto' => $crypto,
             'notes' => $common . 'Request::send() reads until EOSE, sends CLOSE, disconnects and returns the responses; ' .
-                'EOSE reaches the app when send() returns, and the events are verified after it.',
+                'EOSE reaches the app when send() returns, and the events are verified after it. Config: Request::setTimeout ' .
+                '(default 60 s) raised to --timeout-ms; otherwise defaults.',
         ],
     ];
 }

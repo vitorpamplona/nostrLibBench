@@ -182,7 +182,8 @@ val CLIENTS: List<ClientSpec> =
                     "(kotlinx.serialization) and validates it (Event.isValid: id, then Schnorr), throwing on invalid " +
                     "events (and printing a line for each to stdout). Connects lazily inside request(): the connect " +
                     "is in the timed part. Its filter always carries \"kinds\":[] (no way to leave it out); the relay " +
-                    "ignores filters.",
+                    "ignores filters. Its Tag holds 2-4 strings and deserialization throws on any other length, so " +
+                    "valid events with a 1-element or 5+-element tag (imeta, ...) are rejected.",
             variant = false,
             create = { RhodiumClient() },
         ),
