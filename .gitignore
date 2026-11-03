@@ -26,3 +26,8 @@ dart/.dart_tool/
 __pycache__/
 *.class
 hs_err_pid*
+zig/zig-pkg/
+zig/.zig-cache/
+zig/zig-out/
+swift/.build/
+swift/.swiftpm/
