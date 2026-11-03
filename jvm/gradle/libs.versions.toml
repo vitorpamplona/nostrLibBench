@@ -1,0 +1,28 @@
+# Versions of every library the JVM harness benchmarks. The harness writes the versions it
+# reports into each result row from this file (see build.gradle.kts), so keep them here.
+# Gradle's dependency lock file (gradle.lockfile) pins every transitive version on top.
+[versions]
+kotlin = "2.4.21"
+# Amethyst's Nostr library (NostrClient + BasicOkHttpWebSocket + Kite parser).
+quartz = "2.13.0"
+# rust-nostr's nostr-sdk through its UniFFI Kotlin/JVM bindings (now published by nostrdevkit).
+nostrSdkJvm = "0.45.1"
+# NostrGameEngine's pure-Java library.
+nostr4j = "0.4.1"
+# tcheeric's nostr-java (Spring WebSocket client).
+nostrJava = "2.4.2"
+# KotlinGeekDev's Kotlin Multiplatform library (Ktor client).
+rhodium = "1.0-rc"
+kotlinxCoroutines = "1.11.0"
+
+[libraries]
+quartz = { group = "com.vitorpamplona.quartz", name = "quartz", version.ref = "quartz" }
+nostr-sdk-jvm = { group = "org.nostrdevkit", name = "nostr-sdk-jvm", version.ref = "nostrSdkJvm" }
+nostr4j = { group = "org.ngengine", name = "nostr4j", version.ref = "nostr4j" }
+nostr-java-api = { group = "xyz.tcheeric", name = "nostr-java-api", version.ref = "nostrJava" }
+nostr-java-client = { group = "xyz.tcheeric", name = "nostr-java-client", version.ref = "nostrJava" }
+rhodium = { group = "io.github.kotlingeekdev.rhodium", name = "rhodium", version.ref = "rhodium" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

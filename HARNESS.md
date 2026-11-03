@@ -40,7 +40,7 @@ harness; a harness connects to `<relay>/<workload>`.
 
 `.corpus/` (built by `corpus/prepare.py`, git-ignored): the 31,161 events of
 nostrJsonBench, one per line, and `manifest.json` with, per workload: `name`, `file`,
-`events`, `bytes`, `valid_events`, `valid_id_xor` and `ambiguous_ids`.
+`events`, `bytes`, `valid_events`, `valid_id_xor`, `ambiguous_ids` and `expired_ids`.
 
 The corpus is real: 1,547 of its events are **invalid** and must be dropped by every
 client. Most are unsigned NIP-17 rumors (`"sig":""`, kinds 14, 7, 2044, 1) that a client
@@ -49,16 +49,24 @@ U+0000, and its id matches only when the serializer writes it as `\u0000` (what
 `JSON.stringify` and serde_json do) instead of verbatim (the letter of NIP-01). Either
 outcome is correct for an ambiguous event; the report shows which way each library went.
 
+66 valid events are **expired**: a NIP-40 `expiration` tag that passed in 2024 (kinds 15,
+30315 and 1). Some libraries drop expired events (rust-nostr does, unconditionally). A
+library may deliver all of them or none of them; the report shows which. They are part of
+`valid_events` and `valid_id_xor`.
+
 ## Correctness: the accepted set
 
 The harness counts every event the library delivers as valid (`accepted`) and XORs their
 32-byte ids (`accepted_xor`, lowercase hex of the 32-byte XOR, taken from the id field of
 the library's own event object). A row is correct (`accepted_ok: true`) when
 
-    accepted     == valid_events + ambiguous_accepted
-    accepted_xor == valid_id_xor XOR (ids of the ambiguous events it accepted)
+    expired_accepted is 0 or len(expired_ids)
+    accepted     == valid_events - len(expired_ids) + expired_accepted + ambiguous_accepted
+    accepted_xor == valid_id_xor XOR (ids of the expired events it dropped)
+                                 XOR (ids of the ambiguous events it accepted)
 
-`ambiguous_accepted` is how many of `ambiguous_ids` the library delivered. Every run must
+`ambiguous_accepted` and `expired_accepted` are how many of `ambiguous_ids` and
+`expired_ids` the library delivered. Every run must
 deliver the same set as the first; a run that doesn't is an error. A row with
 `accepted_ok: false` (it accepted an invalid event, rejected a valid one, delivered a
 duplicate, or stopped early) is still reported but not ranked.
@@ -174,6 +182,7 @@ builds its project from pinned versions (lockfile) before running.
       "accepted": 29614,
       "accepted_xor": "…",
       "ambiguous_accepted": 1,
+      "expired_accepted": 66,
       "accepted_ok": true,
       "errors": 0, "error": null,
       "warmup_runs": 2, "runs": 5,

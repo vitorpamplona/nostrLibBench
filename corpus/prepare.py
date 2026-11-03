@@ -21,6 +21,7 @@ import hashlib
 import json
 import os
 import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -215,6 +216,18 @@ def check(e):
 AMBIGUOUS = "ambiguous: id matches only with control characters escaped as \\u00XX"
 
 
+def is_expired(e):
+    """NIP-40: an `expiration` tag whose timestamp has passed (every one in the bundled
+    corpus expired in 2024, so the set doesn't change with the date of the run)."""
+    for t in e["tags"]:
+        if len(t) >= 2 and t[0] == "expiration":
+            try:
+                return int(t[1]) < time.time()
+            except ValueError:
+                return False
+    return False
+
+
 # ------------------------------------------------------------------ main
 
 
@@ -299,6 +312,7 @@ def main():
                 size += len(raw)
         valid_ids = [e["id"] for _, e in chosen if e["id"] not in invalid]
         ambiguous = [e["id"] for _, e in chosen if invalid.get(e["id"]) == AMBIGUOUS]
+        expired = [e["id"] for _, e in chosen if e["id"] not in invalid and is_expired(e)]
         workloads.append(
             {
                 "name": name,
@@ -311,9 +325,12 @@ def main():
                 "valid_id_xor": xor_ids(valid_ids),
                 # Either outcome is correct for these: a client may accept or reject them.
                 "ambiguous_ids": ambiguous,
+                # Valid, but their NIP-40 expiration has passed: a client may drop them all or
+                # deliver them all. These are included in valid_events and valid_id_xor.
+                "expired_ids": expired,
             }
         )
-        print(f"{name:10s} {len(chosen):6d} events {size / 1e6:7.2f} MB  {len(chosen) - len(valid_ids) - len(ambiguous)} invalid, {len(ambiguous)} ambiguous")
+        print(f"{name:10s} {len(chosen):6d} events {size / 1e6:7.2f} MB  {len(chosen) - len(valid_ids) - len(ambiguous)} invalid, {len(ambiguous)} ambiguous, {len(expired)} expired")
 
     manifest = {
         "version": 1,

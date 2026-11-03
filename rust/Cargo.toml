@@ -1,0 +1,16 @@
+[package]
+name = "libbench-rust"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+nostr-sdk = "0.45.6"
+nostr-relay-pool = "0.44.3"
+nostro2-relay = "0.10.0"
+nostr_rust = "0.20.3"
+nostrdb = "0.9.0"
+tokio = { version = "1", features = ["full"] }
+serde_json = "1"
+libc = "0.2"

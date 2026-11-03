@@ -55,16 +55,26 @@ def check_accepted(r, w):
     if w is None:
         return bool(r.get("accepted_ok")), "workload not in manifest"
     amb = w.get("ambiguous_ids", [])
-    for k in range(len(amb) + 1):
-        if acc != w["valid_events"] + k:
-            continue
-        for subset in itertools.combinations(amb, k):
-            x = w["valid_id_xor"]
-            for i in subset:
-                x = xor_hex(x, i)
-            if x == axor.lower():
-                return True, ""
+    exp = w.get("expired_ids", [])
+    # Expired events: all delivered or all dropped. Ambiguous events: any subset.
+    for exp_kept in ([True, False] if exp else [True]):
+        base = w["valid_events"] - (0 if exp_kept else len(exp))
+        base_xor = w["valid_id_xor"]
+        if not exp_kept:
+            for i in exp:
+                base_xor = xor_hex(base_xor, i)
+        for k in range(len(amb) + 1):
+            if acc != base + k:
+                continue
+            for subset in itertools.combinations(amb, k):
+                x = base_xor
+                for i in subset:
+                    x = xor_hex(x, i)
+                if x == axor.lower():
+                    return True, ""
     diff = acc - w["valid_events"]
+    if exp and r.get("expired_accepted") not in (None, 0, len(exp)):
+        return False, f"delivered {r['expired_accepted']} of the {len(exp)} expired events (all or none)"
     if diff > len(amb):
         return False, f"accepted {acc:,}: {diff - len(amb):,}+ invalid events delivered (or duplicates)"
     if diff < 0:
@@ -160,9 +170,9 @@ def main():
         )
         L.append(
             "| # | language | client | version | verify | crypto | websocket | events/s | µs/event | "
-            "median ms | first run ms | CPU ms | CPU/wall | peak RSS MB | ambiguous |"
+            "median ms | first run ms | CPU ms | CPU/wall | peak RSS MB | ambiguous | expired |"
         )
-        L.append("|---:|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|")
+        L.append("|---:|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|---|")
         for i, r in enumerate(ranked, 1):
             util = r["cpu_ms"] / r["median_ms"] if r.get("cpu_ms") and r.get("median_ms") else None
             L.append(
@@ -170,7 +180,8 @@ def main():
                 f"{r.get('crypto', '')} | {r.get('websocket', '')} | {fmt(r.get('events_per_s'))} | "
                 f"{fmt(r.get('us_per_event'), 1)} | {fmt(r.get('median_ms'))} | {fmt(r.get('first_run_ms'))} | "
                 f"{fmt(r.get('cpu_ms'))} | {fmt(util, 2)} | {fmt(r.get('peak_rss_mb'))} | "
-                f"{'accepted' if r.get('ambiguous_accepted') else 'rejected'} |"
+                f"{'accepted' if r.get('ambiguous_accepted') else 'rejected'} | "
+                f"{'dropped' if r.get('expired_accepted') == 0 else 'delivered'} |"
             )
         L.append("")
 
