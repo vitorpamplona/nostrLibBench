@@ -1,0 +1,232 @@
+#!/usr/bin/env python3
+"""
+Merges results/<harness>.json files into one Markdown report.
+
+    python3 report/report.py                    # results/*.json -> results/report.md
+    python3 report/report.py --results DIR --out FILE
+
+A row is ranked only when the events it delivered are exactly the valid events of the
+workload (checked here again against the corpus manifest, not taken from the harness),
+the library verified them itself (`verify` library or explicit), and it is the library's
+fastest such row. Everything else is listed below the ranking with the reason.
+"""
+import argparse
+import glob
+import itertools
+import json
+import math
+import os
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+BENCH = os.path.dirname(HERE)
+RUNTIME_HARNESSES = ("node", "bun", "deno")
+
+
+def load(results_dir):
+    runs = []
+    for path in sorted(glob.glob(os.path.join(results_dir, "*.json"))):
+        try:
+            with open(path) as f:
+                run = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(run, dict) and "results" in run and "harness" in run:
+            runs.append(run)
+    return runs
+
+
+def fmt(v, digits=0):
+    if v is None or (isinstance(v, float) and math.isnan(v)):
+        return "–"
+    return f"{v:,.{digits}f}"
+
+
+def xor_hex(a, b):
+    return "%064x" % (int(a, 16) ^ int(b, 16))
+
+
+def check_accepted(r, w):
+    """(ok, why) for a row against its manifest workload."""
+    if r.get("error"):
+        return False, r["error"]
+    acc, axor = r.get("accepted"), r.get("accepted_xor")
+    if acc is None or axor is None:
+        return False, "no accepted set reported"
+    if w is None:
+        return bool(r.get("accepted_ok")), "workload not in manifest"
+    amb = w.get("ambiguous_ids", [])
+    for k in range(len(amb) + 1):
+        if acc != w["valid_events"] + k:
+            continue
+        for subset in itertools.combinations(amb, k):
+            x = w["valid_id_xor"]
+            for i in subset:
+                x = xor_hex(x, i)
+            if x == axor.lower():
+                return True, ""
+    diff = acc - w["valid_events"]
+    if diff > len(amb):
+        return False, f"accepted {acc:,}: {diff - len(amb):,}+ invalid events delivered (or duplicates)"
+    if diff < 0:
+        return False, f"accepted {acc:,}: {-diff:,} valid events missing"
+    return False, f"accepted {acc:,} (right count) but the wrong set"
+
+
+def lang_label(run):
+    lang = run.get("language", run["harness"])
+    if run["harness"] in RUNTIME_HARNESSES:
+        return f"{lang} ({run['harness'].capitalize()})"
+    return lang
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--results", default=os.path.join(BENCH, "results"))
+    ap.add_argument("--manifest", default=os.path.join(BENCH, ".corpus", "manifest.json"))
+    ap.add_argument("--out", default=None)
+    args = ap.parse_args()
+    out = args.out or os.path.join(args.results, "report.md")
+
+    runs = load(args.results)
+    with open(args.manifest) as f:
+        manifest = json.load(f)
+    by_name = {w["name"]: w for w in manifest["workloads"]}
+
+    rows = []
+    for run in runs:
+        for r in run["results"]:
+            r = dict(r)
+            r["harness"] = run["harness"]
+            r["language"] = lang_label(run)
+            w = by_name.get(r["workload"])
+            r["ok"], r["why"] = check_accepted(r, w)
+            if r["ok"] and not r.get("median_ms"):
+                r["ok"], r["why"] = False, "no timing"
+            if r["ok"] and r.get("accepted_ok") is False:
+                r["why"] = "harness and report disagree on the accepted set"
+                r["ok"] = False
+            rows.append(r)
+    workloads = [w["name"] for w in manifest["workloads"] if any(r["workload"] == w["name"] for r in rows)]
+
+    def rankable(r):
+        return r["ok"] and r.get("verify") in ("library", "explicit") and not r.get("variant")
+
+    # The headline row of each library: its fastest rankable row on `all` (else its first workload).
+    head_wl = "all" if "all" in workloads else (workloads[0] if workloads else None)
+    headline = {}
+    for r in rows:
+        if r["workload"] != head_wl or not rankable(r):
+            continue
+        key = (r["harness"], r["library"])
+        if key not in headline or r["median_ms"] < headline[key]["median_ms"]:
+            headline[key] = r
+    ranked = sorted(headline.values(), key=lambda r: r["median_ms"])
+    head_ids = {(r["harness"], r["client"]) for r in ranked}
+
+    L = []
+    L.append("# nostrLibBench report\n")
+    L.append(
+        f"Corpus `{manifest['source']}`: {manifest['events']:,} events, fingerprint "
+        f"`{manifest['fingerprint'][:16]}`. Every REQ gets every event of the workload from the "
+        f"local blast-relay; a client must deliver exactly the valid ones.\n"
+    )
+    L.append("| workload | events | MB | valid | invalid | ambiguous |")
+    L.append("|---|---:|---:|---:|---:|---:|")
+    for name in workloads:
+        w = by_name[name]
+        amb = len(w.get("ambiguous_ids", []))
+        L.append(
+            f"| {name} | {w['events']:,} | {w['bytes'] / 1e6:.1f} | {w['valid_events']:,} | "
+            f"{w['events'] - w['valid_events'] - amb:,} | {amb} |"
+        )
+    L.append("")
+    L.append("| harness | runtime | host | settings |")
+    L.append("|---|---|---|---|")
+    for run in runs:
+        h = run.get("host", {})
+        s = run.get("settings", {})
+        L.append(
+            f"| {run['harness']} | {run.get('runtime', '')} | {h.get('cpu', '')}, {h.get('cores', '')} cores | "
+            f"warmup {s.get('warmup_runs')}, min {s.get('min_runs')} runs / {s.get('min_time_ms')} ms |"
+        )
+    L.append("")
+
+    if ranked:
+        L.append(f"## Ranking (`{head_wl}` workload)\n")
+        L.append(
+            "One row per library and runtime: its fastest correct row. Time is one subscription, "
+            "REQ to the last valid event and EOSE, over every event the relay sent. "
+            "CPU is all threads of the client process.\n"
+        )
+        L.append(
+            "| # | language | client | version | verify | crypto | websocket | events/s | µs/event | "
+            "median ms | first run ms | CPU ms | CPU/wall | peak RSS MB | ambiguous |"
+        )
+        L.append("|---:|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|")
+        for i, r in enumerate(ranked, 1):
+            util = r["cpu_ms"] / r["median_ms"] if r.get("cpu_ms") and r.get("median_ms") else None
+            L.append(
+                f"| {i} | {r['language']} | `{r['client']}` | {r.get('version', '')} | {r.get('verify', '')} | "
+                f"{r.get('crypto', '')} | {r.get('websocket', '')} | {fmt(r.get('events_per_s'))} | "
+                f"{fmt(r.get('us_per_event'), 1)} | {fmt(r.get('median_ms'))} | {fmt(r.get('first_run_ms'))} | "
+                f"{fmt(r.get('cpu_ms'))} | {fmt(util, 2)} | {fmt(r.get('peak_rss_mb'))} | "
+                f"{'accepted' if r.get('ambiguous_accepted') else 'rejected'} |"
+            )
+        L.append("")
+
+    others = [r for r in rows if r["ok"] and (r["harness"], r["client"]) not in head_ids and r["workload"] == head_wl]
+    if others:
+        L.append(f"## Other correct rows (`{head_wl}`)\n")
+        L.append(
+            "Variants (another API, option or crypto backend of a ranked library), rows whose "
+            "verification is the harness's rather than the library's, and slower rows of a ranked library.\n"
+        )
+        L.append("| language | client | version | verify | crypto | events/s | µs/event | median ms | CPU ms | peak RSS MB | notes |")
+        L.append("|---|---|---|---|---|---:|---:|---:|---:|---:|---|")
+        for r in sorted(others, key=lambda r: r["median_ms"]):
+            L.append(
+                f"| {r['language']} | `{r['client']}` | {r.get('version', '')} | {r.get('verify', '')} | "
+                f"{r.get('crypto', '')} | {fmt(r.get('events_per_s'))} | {fmt(r.get('us_per_event'), 1)} | "
+                f"{fmt(r.get('median_ms'))} | {fmt(r.get('cpu_ms'))} | {fmt(r.get('peak_rss_mb'))} | "
+                f"{(r.get('notes') or '').replace('|', '/')} |"
+            )
+        L.append("")
+
+    if len(workloads) > 1:
+        L.append("## Per workload (µs/event, correct rows)\n")
+        clients = sorted({(r["language"], r["client"]) for r in rows if r["ok"]})
+        L.append("| language | client | " + " | ".join(workloads) + " |")
+        L.append("|---|---|" + "---:|" * len(workloads))
+        cell = {(r["language"], r["client"], r["workload"]): r for r in rows if r["ok"]}
+        for lang, client in clients:
+            vals = [fmt(cell[(lang, client, w)]["us_per_event"], 1) if (lang, client, w) in cell else "–" for w in workloads]
+            L.append(f"| {lang} | `{client}` | " + " | ".join(vals) + " |")
+        L.append("")
+
+    bad = [r for r in rows if not r["ok"]]
+    if bad:
+        L.append("## Not ranked: wrong events, errors\n")
+        L.append("| language | client | workload | verify | accepted | median ms | why |")
+        L.append("|---|---|---|---|---:|---:|---|")
+        for r in sorted(bad, key=lambda r: (r["language"], r["client"], r["workload"])):
+            L.append(
+                f"| {r['language']} | `{r['client']}` | {r['workload']} | {r.get('verify', '')} | "
+                f"{fmt(r.get('accepted'))} | {fmt(r.get('median_ms'))} | {str(r['why']).replace('|', '/')[:300]} |"
+            )
+        L.append("")
+
+    notes = [r for r in rows if r.get("notes") and r["workload"] == head_wl and (r["harness"], r["client"]) in head_ids]
+    if notes:
+        L.append("## Notes on the ranked rows\n")
+        for r in sorted(notes, key=lambda r: r["median_ms"]):
+            L.append(f"- **{r['language']} `{r['client']}`** ({r.get('api', '')}): {r['notes']}")
+        L.append("")
+
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with open(out, "w") as f:
+        f.write("\n".join(L))
+    print(f"report: {out} ({len(ranked)} ranked, {len(bad)} not ranked)")
+
+
+if __name__ == "__main__":
+    main()

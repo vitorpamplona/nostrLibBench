@@ -1,0 +1,17 @@
+[package]
+name = "blast-relay"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "nostrLibBench relay: streams a corpus of Nostr events to every REQ as fast as the socket takes them"
+
+[dependencies]
+sha1_smol = "1.0.1"
+base64 = "0.22.1"
+serde_json = "1.0.145"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"

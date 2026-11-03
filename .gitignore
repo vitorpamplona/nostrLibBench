@@ -1,0 +1,28 @@
+# Built corpus, relay log, locally installed toolchains
+/.corpus/
+/.relay.log
+/.tools/
+/.cache/
+
+# Results of local runs; published runs live under results/reference/
+/results/*.json
+/results/report.md
+
+# Build outputs
+relay/target/
+rust/target/
+go/libbench
+jvm/build/
+jvm/.gradle/
+.kotlin/
+node/node_modules/
+python/.venv/
+ruby/vendor/
+ruby/.bundle/
+php/vendor/
+dotnet/bin/
+dotnet/obj/
+dart/.dart_tool/
+__pycache__/
+*.class
+hs_err_pid*
