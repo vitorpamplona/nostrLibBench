@@ -309,6 +309,8 @@ def main():
             return True
         if e["created_at"] == 0 or (e["id"] not in invalid and is_expired(e)):
             return True
+        if b"\\\\u" in raw:  # the text "\u" itself (an escaped backslash before a u)
+            return True
         if e["id"] in invalid:
             invalid_seen[0] += 1
             return invalid_seen[0] % 4 == 1

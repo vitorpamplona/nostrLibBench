@@ -92,9 +92,9 @@ harness; a harness connects to `<relay>/<workload>`.
 nostrJsonBench, one per line, and `manifest.json` with, per workload: `name`, `file`,
 `events`, `bytes`, `valid_events`, `valid_id_xor`, `ambiguous_ids` and `expired_ids`.
 
-`smoke` (1,416 events, 1.1 MB) is a slice of `all` that keeps every case a client can get
-wrong: every 32nd event plus the ambiguous one, all expired ones, the `created_at: 0` one
-and a quarter of the invalid ones. Run it first (`./run.sh --quick --workloads smoke`) to
+`smoke` (1,417 events, 1.1 MB) is a slice of `all` that keeps every case a client can get
+wrong: every 32nd event plus the ambiguous one, all expired ones, the `created_at: 0` one,
+the one whose text contains a literal `\u0000`, and a quarter of the invalid ones. Run it first (`./run.sh --quick --workloads smoke`) to
 check that every client delivers the same set before the long runs.
 
 The corpus is real: 1,547 of its events are **invalid** and must be dropped by every
