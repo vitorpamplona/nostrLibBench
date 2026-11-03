@@ -26,6 +26,7 @@ pub const META_NEXT: Meta = Meta {
             json! serialization) with the event's id. EOSE detected by the harness (frame prefix), \
             the library has no EOSE helper on this path. Unmaintained since 2023.",
     variant: false,
+    binary: None,
 };
 
 pub const META_FETCH: Meta = Meta {
@@ -40,6 +41,7 @@ pub const META_FETCH: Meta = Meta {
             per message, O(n^2)), then parses them. Harness verifies each returned event with \
             Event::verify() + get_content_id() == id.",
     variant: true,
+    binary: None,
 };
 
 pub struct NostrRust {

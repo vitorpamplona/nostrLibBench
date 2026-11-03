@@ -6,7 +6,14 @@ import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.crypto.verify
 import com.vitorpamplona.quartz.nip01Core.relay.client.NostrClient
 import com.vitorpamplona.quartz.nip01Core.relay.client.accessories.ParallelEventVerifier
+import com.vitorpamplona.quartz.nip01Core.relay.client.listeners.RelayConnectionListener
 import com.vitorpamplona.quartz.nip01Core.relay.client.reqs.SubscriptionListener
+import com.vitorpamplona.quartz.nip01Core.relay.client.single.IRelayClient
+import com.vitorpamplona.quartz.nip01Core.relay.client.single.basic.BasicRelayClient
+import com.vitorpamplona.quartz.nip01Core.relay.client.single.standalone.StandaloneRelayClient
+import com.vitorpamplona.quartz.nip01Core.relay.commands.toClient.EoseMessage
+import com.vitorpamplona.quartz.nip01Core.relay.commands.toClient.EventMessage
+import com.vitorpamplona.quartz.nip01Core.relay.commands.toClient.Message
 import com.vitorpamplona.quartz.nip01Core.relay.filters.Filter
 import com.vitorpamplona.quartz.nip01Core.relay.normalizer.NormalizedRelayUrl
 import com.vitorpamplona.quartz.nip01Core.relay.normalizer.RelayUrlNormalizer
@@ -38,7 +45,7 @@ class QuartzClient(
         const val SETTLE_MS = 1000L
 
         /** One OkHttpClient per process, as an app holds one; the same socket factory as amy. */
-        private val okHttp: OkHttpClient by lazy {
+        val okHttp: OkHttpClient by lazy {
             OkHttpClient.Builder().socketFactory(TcpNoDelaySocketFactory).build()
         }
     }
@@ -105,5 +112,57 @@ class QuartzClient(
         client.disconnect()
         client.close()
         scope.cancel()
+    }
+}
+
+/**
+ * Quartz's single-relay client, [StandaloneRelayClient] (a [BasicRelayClient] plus the REQs
+ * to replay on reconnect), over the same [BasicOkHttpWebSocket]. Events reach the app as
+ * decoded relay messages through its [RelayConnectionListener]; verified as in [QuartzClient].
+ */
+class QuartzStandaloneClient : BenchClient {
+    private lateinit var client: StandaloneRelayClient
+    private val subId = "bench" + System.nanoTime().toString(36)
+
+    @Volatile private var sink: EventSink? = null
+
+    override fun setup(url: String) {
+        val relay = RelayUrlNormalizer.normalizeOrNull(url) ?: error("Quartz could not normalize $url")
+        val listener =
+            object : RelayConnectionListener {
+                override suspend fun onIncomingMessage(
+                    relay: IRelayClient,
+                    msgStr: String,
+                    msg: Message,
+                ) {
+                    val s = sink ?: return
+                    when (msg) {
+                        is EventMessage -> if (msg.subId == subId && msg.event.verify()) s.event(msg.event.id)
+                        is EoseMessage -> if (msg.subId == subId) s.eose()
+                        else -> {}
+                    }
+                }
+            }
+        client = StandaloneRelayClient(relay, BasicOkHttpWebSocket.Builder { QuartzClient.okHttp }, listener)
+        client.connect()
+        val deadline = System.nanoTime() + 30_000_000_000L
+        while (!client.isConnected()) {
+            check(System.nanoTime() < deadline) { "Quartz did not connect to $url" }
+            Thread.sleep(5)
+        }
+        Thread.sleep(QuartzClient.SETTLE_MS)
+    }
+
+    override fun subscribe(
+        limit: Int,
+        sink: EventSink,
+    ) {
+        this.sink = sink
+        client.sendRequest(subId, listOf(Filter(limit = limit)))
+    }
+
+    override fun teardown() {
+        client.close(subId)
+        client.disconnect()
     }
 }

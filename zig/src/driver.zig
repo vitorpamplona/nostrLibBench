@@ -28,7 +28,12 @@ fn splitList(arena: Allocator, s: []const u8) ![]const []const u8 {
 }
 
 fn cpuModel(arena: Allocator, io: Io) []const u8 {
-    const text = Io.Dir.cwd().readFileAlloc(io, "/proc/cpuinfo", arena, .limited(1 << 20)) catch return "unknown";
+    // procfs reports size 0, so read it as a stream rather than with readFileAlloc.
+    const file = Io.Dir.cwd().openFile(io, "/proc/cpuinfo", .{}) catch return "unknown";
+    defer file.close(io);
+    var buf: [4096]u8 = undefined;
+    var reader = file.readerStreaming(io, &buf);
+    const text = reader.interface.allocRemaining(arena, .limited(1 << 20)) catch return "unknown";
     var lines = std.mem.splitScalar(u8, text, '\n');
     while (lines.next()) |line| {
         if (std.mem.startsWith(u8, line, "model name")) {

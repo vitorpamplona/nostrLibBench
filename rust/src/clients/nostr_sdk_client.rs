@@ -14,34 +14,63 @@ use crate::sink::Sink;
 
 const WS: &str = "tokio-tungstenite 0.28 (via async-wsocket 0.17)";
 const CRYPTO: &str = "libsecp256k1 0.4.1 (C, via secp256k1 0.30 / secp256k1-sys 0.10.1)";
-const NOTES: &str = "Verifies id + signature of every event (always on; per-Client LRU cache of verified ids, \
-     new Client per run). Drops events whose NIP-40 expiration has passed before verifying them \
-     (unconditional), so expired_accepted is 0. Default limits (5 MB message, 2000 tags) left on.";
+const NOTES: &str = "Verifies id + signature of every event (always on; per-Client LRU cache of verified \
+     ids, new Client per run). Drops events whose NIP-40 expiration has passed, before verifying \
+     them (unconditional), so expired_accepted is 0. Default limits (5 MB message, 2000 tags) \
+     left on.";
+
+/// Channel size for the relay's internal notification broadcast (default 2048) and the
+/// client's (default 2048), raised so no event of a workload can be lost to a lagging reader.
+const CHANNEL: usize = 131_072;
 
 pub const META_STREAM: Meta = Meta {
     id: "nostr-sdk-stream",
     library: "nostr-sdk",
     library_name: "nostr-sdk",
-    api: "Client::add_relay + try_connect, then Client::stream_events(filter) (ReqExitPolicy::ExitOnEOSE; the stream ends at EOSE)",
+    api: "Client::add_relay(url).notification_channel_size(131072) + try_connect, then \
+          Client::stream_events(filter) (ReqExitPolicy::ExitOnEOSE; the stream ends at EOSE)",
+    websocket: WS,
+    crypto: CRYPTO,
+    verify: "library",
+    notes: "Verifies id + signature of every event (always on; per-Client LRU cache of verified \
+            ids, new Client per run). Drops events whose NIP-40 expiration has passed, before \
+            verifying them (unconditional), so expired_accepted is 0. The relay's notification \
+            channel is raised from 2048 to 131072 (AddRelay::notification_channel_size): at the \
+            default, a reader slower than the relay task makes the subscription's handler lag \
+            the broadcast, and the stream then ends early as if EOSE had come (no error item); \
+            see nostr-sdk-stream-default.",
+    variant: false,
+    binary: None,
+};
+
+pub const META_STREAM_DEFAULT: Meta = Meta {
+    id: "nostr-sdk-stream-default",
+    library: "nostr-sdk",
+    library_name: "nostr-sdk",
+    api: "Client::add_relay(url) + try_connect, then Client::stream_events(filter) (all defaults)",
     websocket: WS,
     crypto: CRYPTO,
     verify: "library",
     notes: NOTES,
-    variant: false,
+    variant: true,
+    binary: None,
 };
 
 pub const META_NOTIFICATIONS: Meta = Meta {
     id: "nostr-sdk-notifications",
     library: "nostr-sdk",
     library_name: "nostr-sdk",
-    api: "Client::notifications() + Client::subscribe(filter); ClientNotification::Event per event, \
+    api: "Client::builder().notification_channel_size(131072) + add_relay(url).notification_channel_size(131072); \
+          Client::notifications() + Client::subscribe(filter): ClientNotification::Event per event, \
           ClientNotification::Message(EndOfStoredEvents) for EOSE",
     websocket: WS,
     crypto: CRYPTO,
     verify: "library",
-    notes: "Same pipeline as nostr-sdk-stream, delivered through the client's broadcast notification \
-            channel (default size 2048: a reader that lags loses events). Drops expired events (NIP-40).",
+    notes: "Same pipeline as nostr-sdk-stream, delivered through the client's broadcast \
+            notification channel; both broadcast channels raised from 2048 to 131072 (a reader \
+            that lags at the default silently loses events). Drops expired events (NIP-40).",
     variant: true,
+    binary: None,
 };
 
 pub const META_FETCH: Meta = Meta {
@@ -56,11 +85,13 @@ pub const META_FETCH: Meta = Meta {
             max_events raised from its default 10,000 (which fails the request) to the workload size. \
             Drops expired events (NIP-40).",
     variant: true,
+    binary: None,
 };
 
 #[derive(Clone, Copy)]
 pub enum Mode {
     Stream,
+    StreamDefault,
     Notifications,
     Fetch,
 }
@@ -81,15 +112,25 @@ impl HarnessClient for Sdk {
         let mode = self.mode;
         self.rt.block_on(async move {
             // Setup: a new client, connected.
-            let client = Client::default();
-            client.add_relay(url).await.map_err(|e| e.to_string())?;
+            let raise = !matches!(mode, Mode::StreamDefault);
+            let client = if matches!(mode, Mode::Notifications) {
+                Client::builder().notification_channel_size(std::num::NonZeroUsize::new(CHANNEL).unwrap()).build()
+            } else {
+                Client::default()
+            };
+            if raise {
+                client.add_relay(url).notification_channel_size(CHANNEL).await
+            } else {
+                client.add_relay(url).await
+            }
+            .map_err(|e| e.to_string())?;
             let out = client.try_connect().timeout(Duration::from_secs(10)).await;
             if !out.failed.is_empty() {
                 return Err(format!("connect: {:?}", out.failed));
             }
             let filter = Filter::new().limit(limit);
             let res = match mode {
-                Mode::Stream => {
+                Mode::Stream | Mode::StreamDefault => {
                     sink.start();
                     let mut stream = client.stream_events(filter).await.map_err(|e| e.to_string())?;
                     let mut err = None;

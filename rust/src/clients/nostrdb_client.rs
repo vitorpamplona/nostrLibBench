@@ -31,6 +31,7 @@ pub const META: Meta = Meta {
             ends at the last note delivered after it. The app's read path (subscription poll + \
             read transaction + get_note_by_key) is timed.",
     variant: true,
+    binary: None,
 };
 
 pub struct NostrDb {

@@ -21,9 +21,11 @@ group :nostrb do
   gem 'async-websocket'         # nostrb's Client requires it but the gem does not declare it
 end
 
-# Only on the load path of the nostrb-rbsecp256k1 variant: schnorr_sig switches to
-# libsecp256k1 whenever rbsecp256k1 can be required. Builds against the system
+# nostrb's documented optional speed-ups (Nostrb::Optional::GEMS), only on the load path of
+# the nostrb-fast client: schnorr_sig switches to libsecp256k1 whenever rbsecp256k1 can be
+# required, and nostrb to Oj whenever oj can. rbsecp256k1 builds against the system
 # libsecp256k1 (Debian/Ubuntu: libsecp256k1-dev); run.sh skips the group when it can't.
 group :fast do
   gem 'rbsecp256k1'
+  gem 'oj'
 end

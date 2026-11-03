@@ -4,6 +4,7 @@ import com.vitorpamplona.libbench.clients.Nostr4jClient
 import com.vitorpamplona.libbench.clients.NostrJavaClient
 import com.vitorpamplona.libbench.clients.NostrSdkClient
 import com.vitorpamplona.libbench.clients.QuartzClient
+import com.vitorpamplona.libbench.clients.QuartzStandaloneClient
 import com.vitorpamplona.libbench.clients.RhodiumClient
 
 private val V = Versions
@@ -29,8 +30,9 @@ val CLIENTS: List<ClientSpec> =
             notes =
                 "Quartz's client delivers events unverified; Amethyst verifies in LocalCache.justVerify with Quartz's " +
                     "Event.verify() (id via EventHasher.hashIdCheck, then Schnorr), and the listener does the same, inline on " +
-                    "the relay's delivery coroutine. Parser: Kite (KiteReader, Quartz's own). keepConnected() opens the " +
-                    "socket in setup.",
+                    "the relay's delivery coroutine. Parser: Kite (KiteReader, Quartz's own). NostrClient is Quartz's " +
+                    "pool, used here with one relay, as Amethyst uses it. keepConnected() opens the socket in setup, " +
+                    "then 1 s to settle: a REQ sent while the new connection replays its filters can go out twice.",
             variant = false,
             create = { QuartzClient(parallel = false) },
         ),
@@ -48,6 +50,22 @@ val CLIENTS: List<ClientSpec> =
                     "parallelism 8), which fans Event.verify() out over Dispatchers.Default and delivers in order.",
             variant = true,
             create = { QuartzClient(parallel = true) },
+        ),
+        ClientSpec(
+            id = "quartz-standalone",
+            library = "Quartz",
+            version = V["com.vitorpamplona.quartz:quartz-jvm"],
+            license = "MIT",
+            api = "StandaloneRelayClient(url, BasicOkHttpWebSocket.Builder, RelayConnectionListener).sendRequest(subId, [filter])",
+            websocket = OKHTTP,
+            crypto = SECP_KMP,
+            verify = "explicit",
+            notes =
+                "Quartz's single-relay client, without the pool: EVENT/EOSE messages (decoded by Kite) reach the " +
+                    "listener's onIncomingMessage, which runs Event.verify() inline as quartz-nostrclient does. Same 1 s " +
+                    "settle after connect.",
+            variant = true,
+            create = { QuartzStandaloneClient() },
         ),
         ClientSpec(
             id = "nostr-sdk-subscribe",

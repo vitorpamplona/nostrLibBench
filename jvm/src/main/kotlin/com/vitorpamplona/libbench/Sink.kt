@@ -58,9 +58,11 @@ class EventSink(
 
     fun close() = synchronized(lock) { closed = true }
 
+    // Clocks are read inside the lock, so their order is the order the lock was taken in:
+    // an event counted after the EOSE always has a later time (and a CPU sample).
     fun event(idHex: String) {
-        val now = System.nanoTime()
         synchronized(lock) {
+            val now = System.nanoTime()
             if (closed) {
                 late++
                 return
@@ -88,10 +90,10 @@ class EventSink(
     }
 
     fun eose() {
-        val now = System.nanoTime()
-        val cpu = Cpu.nanos()
         synchronized(lock) {
             if (eoseSeen || closed) return
+            val now = System.nanoTime()
+            val cpu = Cpu.nanos()
             eoseSeen = true
             eoseNanos = now
             eoseCpu = cpu

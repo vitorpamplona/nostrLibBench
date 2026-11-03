@@ -26,6 +26,7 @@ pub const META: Meta = Meta {
             Unreleased git version (crates.io has only 0.4.0 from 2023); gossip itself uses its own \
             relay code (tokio-tungstenite) with this crate's types.",
     variant: false,
+    binary: None,
 };
 
 pub struct NostrTypes {

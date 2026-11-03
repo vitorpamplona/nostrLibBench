@@ -6,6 +6,9 @@ publish = false
 license = "MIT"
 description = "nostrLibBench Rust harness: which Rust Nostr client library gets a relay's events through its WebSocket client, parser and verification fastest"
 
+[workspace]
+members = [".", "nostro2-secp"]
+
 [dependencies]
 # The libraries under test (latest releases; nostr-types from git, see README).
 nostr-sdk = "=0.45.6"

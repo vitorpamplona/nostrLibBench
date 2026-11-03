@@ -4,8 +4,8 @@ import Foundation
 /// process, for every selected workload, and writes one row per workload (JSON lines) to
 /// --child-out. The parent (libbench) starts one such process per client.
 ///
-/// The harness runs on a background thread while the main thread runs the main dispatch
-/// queue, as in an app: some libraries deliver on the main queue or the main actor.
+/// The harness runs on a background thread while the main thread runs the main run loop and
+/// dispatch queue, as in an app: some libraries deliver on the main queue or the main actor.
 public func childMain(openers: [String: Opener]) -> Never {
     let o = Options.parse(Array(CommandLine.arguments.dropFirst()))
     if o.list {
@@ -34,7 +34,13 @@ public func childMain(openers: [String: Opener]) -> Never {
     }
     thread.stackSize = 8 << 20
     thread.start()
-    dispatchMain()
+    // The main thread runs the main run loop (which also drains the main dispatch queue),
+    // as an app's would. A far-off timer keeps the loop from returning for lack of sources.
+    let keepAlive = Timer(timeInterval: 86_400, repeats: true) { _ in }
+    RunLoop.main.add(keepAlive, forMode: .default)
+    while true {
+        _ = RunLoop.main.run(mode: .default, before: .distantFuture)
+    }
 }
 
 private func writeLines(_ lines: [String], to path: String) {

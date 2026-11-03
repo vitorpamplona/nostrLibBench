@@ -142,6 +142,13 @@ class RunCtx {
   final Uint32List _x = Uint32List(8);
   Object? failure;
 
+  /// Debugging aid: LIBBENCH_DUMP=<file> writes the accepted ids of each run to that file.
+  final List<String>? _dump = Platform.environment['LIBBENCH_DUMP'] != null ? <String>[] : null;
+  void writeDump() {
+    final f = Platform.environment['LIBBENCH_DUMP'];
+    if (f != null) File(f).writeAsStringSync('${_dump!.join('\n')}\n');
+  }
+
   RunCtx(Workload w)
       : _ambiguous = w.ambiguousIds.toSet(),
         _expired = w.expiredIds.toSet(),
@@ -169,6 +176,7 @@ class RunCtx {
     }
     lastEventUs = now;
     lastActivityUs = now;
+    _dump?.add(id);
     if (_ambiguous.contains(id)) ambiguousAccepted++;
     if (_expired.contains(id)) expiredAccepted++;
     if (eoseSeen) eventAfterEose = true;
@@ -321,6 +329,7 @@ Future<_RunResult> _oneRun(BenchClient client, Workload w, Uri url, Settings s) 
     if (now - ctx.t0 > s.timeoutMs * 1000) break;
   }
   final cpuDetect = cpuMs();
+  ctx.writeDump();
   final tEnd = ctx.eoseUs > ctx.lastEventUs ? ctx.eoseUs : ctx.lastEventUs;
   final cpuEnd = ctx.cpuDoneSet ? ctx.cpuDone : (ctx.eventAfterEose ? cpuDetect : ctx.cpuEose);
   final r = _RunResult((tEnd - ctx.t0) / 1000.0, cpuEnd - ctx.cpu0, ctx.accepted, ctx.ambiguousAccepted,

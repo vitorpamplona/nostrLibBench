@@ -4,7 +4,7 @@ using NostrNet.Relay;
 
 public static class Program
 {
-    public static Task<int> Main(string[] args) => ChildMain.Run(args, [new NostrNetPool(), new NostrNetRelayClient()]);
+    public static Task<int> Main(string[] args) => ChildMain.Run(args, [new NostrNetRelayClient(), new NostrNetPool()]);
 }
 
 public abstract class NostrNetBase : BenchClient
@@ -36,9 +36,10 @@ public abstract class NostrNetBase : BenchClient
 
 public sealed class NostrNetPool : NostrNetBase
 {
-    public override string Id => "nostrnet";
+    public override string Id => "nostrnet-pool";
+    public override bool Variant => true;
     public override string Api => "RelayPool.ConnectAsync + pool.SubscribeAsync (IAsyncEnumerable<SubscriptionEvent>), one relay";
-    public override string Notes => VerifyNote + " Auto-reconnect/resubscribe are the pool's defaults (no reconnect happens).";
+    public override string Notes => VerifyNote + " A pool (multi-relay layer) with one relay: a variant. Auto-reconnect/resubscribe are its defaults (no reconnect happens).";
     RelayPool? _pool;
 
     public override async Task SetupAsync(Uri url, RunCtx ctx)
@@ -59,8 +60,7 @@ public sealed class NostrNetPool : NostrNetBase
 
 public sealed class NostrNetRelayClient : NostrNetBase
 {
-    public override string Id => "nostrnet-relayclient";
-    public override bool Variant => true;
+    public override string Id => "nostrnet";
     public override string Api => "RelayClient.ConnectAsync + client.SubscribeAsync (IAsyncEnumerable<SubscriptionEvent>), single relay, no pool";
     public override string Notes => VerifyNote;
     RelayClient? _client;

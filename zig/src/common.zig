@@ -57,7 +57,7 @@ pub const clients = [_]ClientMeta{
         .websocket = libnostr_z_ws,
         .crypto = libnostr_z_crypto,
         .verify = .explicit,
-        .notes = "Relay.receive parses but does not verify; the harness calls Event.validate (recomputes the id, then noscrypt NCVerifyDigest; also rejects created_at > now+900 s) on every delivered event, as the noz CLI does. auto_reconnect off; read_timeout_ms (SO_RCVTIMEO) set to --timeout-ms. Relay.receive parses every message twice with std.json.Value besides the event scanner.",
+        .notes = "Relay.receive parses but does not verify; the harness calls Event.validate (id check, then noscrypt NCVerifyDigest; also rejects created_at > now+900 s) on every delivered event, as the noz CLI does. auto_reconnect off; read_timeout_ms (SO_RCVTIMEO, default 60 s) raised to --timeout-ms. Event.validate hashes the RAW JSON text of tags and content as the relay sent it instead of re-serializing the decoded fields, so every valid event whose JSON uses escapes the canonical form does not (\\uD83C surrogate pairs, \\u2019, \\/) fails IdMismatch and is dropped (82 of 993 valid events on smoke): accepted_ok is false. The Event is lazy (offsets into the raw JSON; content/tags decoded on access). Relay.receive also parses every message twice with std.json.Value besides the event scanner.",
         .variant = false,
     },
     .{
@@ -70,7 +70,7 @@ pub const clients = [_]ClientMeta{
         .websocket = libnostr_z_ws,
         .crypto = libnostr_z_crypto,
         .verify = .explicit,
-        .notes = "Fetch-all API; a reader thread per relay parses each event for dedup and queues the raw message, queryParallel parses it again into an Event; the harness then calls Event.validate on each returned event (after EOSE, inside the timed part). Default PoolOptions (queue_size 10000, dedup_cache_size 10000). Setup sets a 200 ms SO_RCVTIMEO on the pool's socket (RelayHandle.client.setReadTimeout): without it the reader thread blocks in read() after EOSE and Pool.deinit/stopReceiving never return.",
+        .notes = "Variant: fetch-all API. A reader thread per relay (the library's own) parses each event for dedup and queues the raw message; queryParallel parses it again into an Event and returns the list after EOSE; the harness then calls Event.validate on each (inside the timed part), so it shares libnostr-z-relay's IdMismatch on escaped JSON. PoolOptions.queue_size raised from 10000 to the workload size (a full queue silently drops its oldest message). Setup sets a 200 ms SO_RCVTIMEO on the pool's socket (RelayHandle.client.setReadTimeout, public API): with the default (none) the reader thread stays blocked in read() once the relay is quiet after EOSE, and queryParallel (stopReceiving) and Pool.deinit join it forever. The consumer side polls the queue with 1 ms sleeps.",
         .variant = true,
     },
 };

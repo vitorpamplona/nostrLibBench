@@ -1613,6 +1613,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "libbench-rust-nostro2-secp256k1"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "nostro2-relay",
+ "serde_json",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2019,6 +2028,7 @@ dependencies = [
  "js-sys",
  "k256",
  "nostro2-traits",
+ "secp256k1 0.31.1",
  "serde",
  "serde_json",
  "sha2 0.11.1",

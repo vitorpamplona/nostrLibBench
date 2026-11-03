@@ -1,0 +1,19 @@
+[package]
+name = "libbench-rust-nostro2-secp256k1"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+description = "nostrLibBench Rust harness: nostro2-relay built with its `secp256k1` feature (libsecp256k1) instead of the default `k256`"
+
+# Its own binary because nostro2's `k256` (default) and `secp256k1` features cannot be enabled
+# in one build; run.sh builds this package in a separate cargo invocation so features do not
+# unify with the main binary's.
+[[bin]]
+name = "libbench-rust-nostro2-secp256k1"
+path = "src/main.rs"
+
+[dependencies]
+nostro2-relay = { version = "=0.10.0", default-features = false, features = ["rustls-ring", "serde", "secp256k1"] }
+serde_json = "1"
+libc = "0.2"

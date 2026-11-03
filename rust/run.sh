@@ -12,7 +12,10 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BENCH="$(dirname "$HERE")"
 
 export RUSTFLAGS="${RUSTFLAGS:--C target-cpu=native}"
-cargo build --release --locked --quiet --manifest-path "$HERE/Cargo.toml" >&2
+# Two invocations, so cargo features do not unify across them: nostro2's `k256` (default, main
+# binary) and `secp256k1` (sibling binary) features cannot be built together.
+cargo build --release --locked --quiet --manifest-path "$HERE/Cargo.toml" -p libbench-rust >&2
+cargo build --release --locked --quiet --manifest-path "$HERE/Cargo.toml" -p libbench-rust-nostro2-secp256k1 >&2
 
 if [[ ! -f "$BENCH/.corpus/manifest.json" ]]; then
     python3 "$BENCH/corpus/prepare.py" >&2

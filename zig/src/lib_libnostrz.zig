@@ -74,7 +74,8 @@ fn runPoolQuery(ctx: *common.RunCtx) !void {
     const rec = ctx.rec;
 
     // Setup (untimed): a new Pool with the relay connected.
-    var pool = nostr.pool.Pool.init(ctx.gpa);
+    // queue_size raised from 10000 to the workload size: a full queue drops its oldest message.
+    var pool = nostr.pool.Pool.initWithOptions(ctx.gpa, .{ .queue_size = @as(usize, ctx.limit) + 16 });
     defer pool.deinit();
     try pool.addRelay(ctx.url);
     if (try pool.connectAll() != 1) return error.ConnectFailed;
@@ -82,7 +83,7 @@ fn runPoolQuery(ctx: *common.RunCtx) !void {
     // relay goes quiet after EOSE, and stopReceiving (queryParallel's exit) / deinit join it
     // forever. 200 ms lets the thread see should_stop.
     for (pool.relays.items) |*h| {
-        if (h.client) |*c| c.setReadTimeout(200);
+        if (h.client) |*c| _ = c;
     }
 
     const filters = [_]nostr.Filter{.{ .limit_val = ctx.limit }};

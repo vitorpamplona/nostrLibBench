@@ -31,6 +31,7 @@ pub const META: Meta = Meta {
             ring to 65536 with DriverConfig::with_capacities. In-order delivery: nothing can \
             arrive after EOSE.",
     variant: false,
+    binary: None,
 };
 
 pub const META_DEFAULT: Meta = Meta {
@@ -43,8 +44,26 @@ pub const META_DEFAULT: Meta = Meta {
     verify: "library",
     notes: "Library defaults, including the 1024-slot inbound ring that drops events when the reader \
             falls behind: a run can lose events (then the row is an error: a run delivered a \
-            different set).",
+            different set), and when the dropped message is the EOSE the reader waits forever (a \
+            timeout error).",
     variant: true,
+    binary: None,
+};
+
+pub const META_SECP: Meta = Meta {
+    id: "nostro2-relay-secp256k1",
+    library: "nostro2-relay",
+    library_name: "nostro2-relay",
+    api: "same as nostro2-relay (inbound ring 65536), nostro2 built with its `secp256k1` feature",
+    websocket: WS,
+    crypto: "libsecp256k1 0.6.0 (C, via secp256k1 0.31 / secp256k1-sys 0.11.0; nostro2's `secp256k1` feature)",
+    verify: "library",
+    notes: "nostro2's documented alternative curve backend: `default-features = false, features = \
+            [\"rustls-ring\", \"serde\", \"secp256k1\"]` (k256 and secp256k1 cannot share a build, \
+            so this client runs in its own binary, libbench-rust-nostro2-secp256k1). Same verification \
+            (id + signature, on the driver thread) and the same raised inbound ring as nostro2-relay.",
+    variant: false,
+    binary: Some("libbench-rust-nostro2-secp256k1"),
 };
 
 pub struct Nostro2 {

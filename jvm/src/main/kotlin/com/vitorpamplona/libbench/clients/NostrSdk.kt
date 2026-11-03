@@ -22,7 +22,8 @@ import java.time.Duration
  *
  * [stream] = false: `Client.subscribe` + `Client.notifications()` (the long-lived feed API,
  * read with `ClientNotificationStream.next()`); true: `Client.streamEvents`, the short-lived
- * stream that ends at EOSE.
+ * stream that ends at EOSE. Either way the app reads on the thread that subscribed, until
+ * EOSE: the harness adds no thread.
  */
 class NostrSdkClient(
     private val stream: Boolean,
@@ -32,9 +33,6 @@ class NostrSdkClient(
     private lateinit var client: Client
     private lateinit var relay: RelayUrl
     private var notifications: ClientNotificationStream? = null
-    private var consumer: Thread? = null
-
-    @Volatile private var sink: EventSink? = null
 
     override fun setup(url: String) {
         client =
@@ -48,76 +46,55 @@ class NostrSdkClient(
         }
         val status = runBlocking { client.relay(relay)?.status() }
         check(status == RelayStatus.CONNECTED) { "nostr-sdk did not connect to $url (status $status)" }
-        if (!stream) {
-            // Subscribed to the notification channel before the REQ, as the docs require.
-            val n = client.notifications()
-            notifications = n
-            consumer =
-                Thread({
-                    runBlocking {
-                        while (true) {
-                            val item = n.next() ?: break
-                            handle(item)
-                        }
-                    }
-                }, "nostr-sdk-notifications").apply {
-                    isDaemon = true
-                    start()
-                }
-        }
-    }
-
-    private fun handle(item: ClientNotification) {
-        val s = sink
-        when (item) {
-            is ClientNotification.NewEvent -> {
-                if (s != null) {
-                    val id = item.event.id()
-                    s.event(id.toHex())
-                    id.destroy()
-                }
-            }
-            is ClientNotification.Message -> {
-                val e = item.message.asEnum()
-                if (e is RelayMessageEnum.EndOfStoredEvents) s?.eose()
-                e.destroy()
-            }
-            else -> {}
-        }
-        item.destroy()
+        // Subscribed to the notification channel before the REQ, as the docs require.
+        if (!stream) notifications = client.notifications()
     }
 
     override fun subscribe(
         limit: Int,
         sink: EventSink,
     ) {
-        this.sink = sink
         val target = ReqTarget.single(relay, listOf(Filter().limit(limit.toULong())))
-        if (!stream) {
-            runBlocking { client.subscribe(target) }
-        } else {
-            val events = runBlocking { client.streamEvents(target) }
-            // The stream ends at EOSE (default exit policy); read it on its own thread so the
-            // call returns as soon as the REQ is out, like subscribe.
-            consumer =
-                Thread({
-                    runBlocking {
-                        while (true) {
-                            val item = events.next() ?: break
-                            item.event?.let { ev ->
-                                val id = ev.id()
-                                sink.event(id.toHex())
-                                id.destroy()
-                            }
-                            item.destroy()
+        runBlocking {
+            if (!stream) {
+                val n = notifications!!
+                client.subscribe(target)
+                var eose = false
+                while (!eose) {
+                    val item = n.next() ?: break
+                    when (item) {
+                        is ClientNotification.NewEvent -> {
+                            val id = item.event.id()
+                            sink.event(id.toHex())
+                            id.destroy()
                         }
+                        is ClientNotification.Message -> {
+                            val e = item.message.asEnum()
+                            if (e is RelayMessageEnum.EndOfStoredEvents) {
+                                sink.eose()
+                                eose = true
+                            }
+                            e.destroy()
+                        }
+                        else -> {}
                     }
-                    sink.eose()
-                    events.destroy()
-                }, "nostr-sdk-stream").apply {
-                    isDaemon = true
-                    start()
+                    item.destroy()
                 }
+            } else {
+                // The stream ends at EOSE (default exit policy ExitOnEOSE).
+                val events = client.streamEvents(target)
+                while (true) {
+                    val item = events.next() ?: break
+                    item.event?.let { ev ->
+                        val id = ev.id()
+                        sink.event(id.toHex())
+                        id.destroy()
+                    }
+                    item.destroy()
+                }
+                sink.eose()
+                events.destroy()
+            }
         }
     }
 
@@ -126,7 +103,6 @@ class NostrSdkClient(
             client.unsubscribeAll()
             client.shutdown()
         }
-        consumer?.join(5_000)
         notifications?.destroy()
         relay.destroy()
         client.destroy()

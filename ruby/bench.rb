@@ -13,7 +13,7 @@
 # is a default gem: loading the stdlib copy first would clash with the locked one).
 CHILD_GROUPS = {
   'nostr-client' => %i[nostr], 'nostr_ruby-client' => %i[nostr_ruby],
-  'nostrb-client' => %i[nostrb], 'nostrb-rbsecp256k1' => %i[nostrb fast]
+  'nostrb-client' => %i[nostrb], 'nostrb-fast' => %i[nostrb fast]
 }.freeze
 if (ci = ARGV.index('--child'))
   begin
@@ -58,7 +58,8 @@ CLIENTS = [
     notes: 'The client hands the app each text frame as a String (on :message) and does nothing else with it: the ' \
            'app JSON.parses the frame and builds a Nostr::Event, as the README does. Nothing is verified by default; ' \
            'the harness calls Event#verify_signature (signature only) and checks the id with the library\'s own ' \
-           'Nostr::Crypto#hash_event (private; SHA-256 of JSON.dump(event.serialize)). verify_signature raises ' \
+           'Nostr::Crypto#hash_event (private; SHA-256 of JSON.dump(event.serialize)). Config: Client.new(logger: nil) ' \
+           '(the default ColorLogger prints every frame to the console). verify_signature raises ' \
            'Schnorr::InvalidSignatureError on "sig":"" instead of returning false (counted as rejected). Client has ' \
            'no disconnect: teardown unsubscribes and stops the process-global EventMachine reactor; the next run\'s ' \
            'connect starts a new one.'
@@ -73,7 +74,7 @@ CLIENTS = [
            'no verify function at all: it signs with bip-schnorr and never verifies. The harness verifies with the ' \
            'library\'s own crypto dependency: id = SHA-256 of JSON.dump(event.serialize) (the library\'s ' \
            'serialize), signature with Schnorr.valid_sig? (bip-schnorr). on(:event) fires for every subscription ' \
-           '(the event carries no subscription id).'
+           '(the event carries no subscription id). Config: defaults.'
   },
   {
     id: 'nostrb-client', library: 'nostrb', gem: 'nostrb', license: 'LGPL-2.1-only',
@@ -81,27 +82,33 @@ CLIENTS = [
     verify: 'explicit', variant: false,
     websocket: -> { "async-websocket #{gem_version('async-websocket')} (async #{gem_version('async')}, fibers)" },
     crypto: -> { "schnorr_sig #{gem_version('schnorr_sig')} pure (ecdsa_ext #{gem_version('ecdsa_ext')} / ecdsa #{gem_version('ecdsa')}, pure Ruby)" },
-    notes: 'subscribe yields each event as a plain Hash (JSON.parse with the gem\'s NIP-01 options; Oj is used ' \
-           'only when installed, and it is not) and verifies nothing. The harness calls the library\'s ' \
+    notes: 'Default configuration (stdlib json, pure-Ruby schnorr_sig; nostrb-fast is the documented fast ' \
+           'one). subscribe yields each event as a plain Hash (JSON.parse with the gem\'s NIP-01 options) and ' \
+           'verifies nothing. The harness calls the library\'s ' \
            'Nostrb::SignedEvent.validate! + SignedEvent.verify(check_id: true) (signature, then id) and drops ' \
            'events that raise (validate! then verify is the order the gem\'s own Relay uses). validate! caps a tag ' \
            'at 99 values (Nostrb.tags!), so it drops one valid event of the corpus (kind 9734 zap request ' \
            'eff6ff2f..., a 104-value relays tag): accepted_ok is false for that reason. subscribe connects lazily, so the WebSocket handshake is inside the timed part, ' \
            'and EOSE reaches the app when subscribe returns. The gem does not declare its async-websocket ' \
-           'dependency (Gemfile adds it).'
+           'dependency (Gemfile adds it). Config: CONSOLE_LEVEL=error silences async-pool\'s per-connection ' \
+           '"Attempt to unlock a mutex which is not locked" warning on close.'
   },
   {
-    id: 'nostrb-rbsecp256k1', library: 'nostrb', gem: 'nostrb', license: 'LGPL-2.1-only',
+    id: 'nostrb-fast', library: 'nostrb', gem: 'nostrb', license: 'LGPL-2.1-only',
     api: 'Nostrb::Client#subscribe(filter) { |event_hash| } (blocks until EOSE; rickhull/nostrb)',
-    verify: 'explicit', variant: true,
+    verify: 'explicit', variant: false,
     websocket: -> { "async-websocket #{gem_version('async-websocket')} (async #{gem_version('async')}, fibers)" },
     crypto: lambda {
       lib = (`pkg-config --modversion libsecp256k1 2>/dev/null`.strip rescue '')
       "libsecp256k1 #{lib.empty? ? '(system)' : lib} (C, system library, via rbsecp256k1 #{gem_version('rbsecp256k1')}; schnorr_sig #{gem_version('schnorr_sig')} fast path)"
     },
-    notes: 'Same as nostrb-client with the optional rbsecp256k1 gem installed, which schnorr_sig documents as its ' \
-           '"fast" implementation and switches to automatically. rbsecp256k1 is built against the system ' \
-           'libsecp256k1 (libsecp256k1-dev), since its bundled download is unavailable here.'
+    notes: -> { "nostrb at its documented fastest: the optional gems it lists (Nostrb::Optional::GEMS) installed, " \
+                "rbsecp256k1 #{gem_version('rbsecp256k1')} (schnorr_sig switches to libsecp256k1, its documented \"fast\" " \
+                "implementation) and oj #{gem_version('oj')} (nostrb.rb uses Oj for parse and for the id serialization " \
+                'when it loads). Otherwise as nostrb-client: SignedEvent.validate! + verify(check_id: true) by the ' \
+                'harness, the 99-value tag cap drops one valid event of all. rbsecp256k1 is built against the system ' \
+                'libsecp256k1 (libsecp256k1-dev), since its bundled source download is unavailable here. Config: ' \
+                'CONSOLE_LEVEL=error (see nostrb-client).' }
   }
 ].freeze
 
@@ -248,7 +255,7 @@ class NostrRubyDriver
   end
 
   def setup(tally)
-    @client = Nostr::Client.new(relay: @url, context: Context.new(timeout: 30))
+    @client = Nostr::Client.new(relay: @url)
     sub = @sub = []
     @client.on(:event) do |ev|
       ok = begin
@@ -289,6 +296,7 @@ class NostrbDriver
     require 'nostrb/client'
     want = fast ? SchnorrSig::Fast : SchnorrSig::Pure
     raise "schnorr_sig picked the wrong implementation (wanted #{want})" unless SchnorrSig.singleton_class.include?(want)
+    raise "nostrb JSON: Oj loaded=#{defined?(::Oj) ? true : false}, wanted #{fast}" unless !!defined?(::Oj) == fast
 
     @url = url
     @events = events
@@ -297,31 +305,26 @@ class NostrbDriver
   def setup(tally)
     @tally = tally
     @client = Nostrb::Client.new(@url)
-    @client.define_singleton_method(:log) { |_msg| nil } # sid-mismatch warnings
     @filter = Nostrb::Filter.new
     @filter.limit = @events
   end
 
+  # Blocks until EOSE, on the calling thread (the harness adds no thread).
   def subscribe
     tally = @tally
-    @thread = Thread.new do
-      @client.subscribe(@filter) do |h|
-        ok = begin
-          Nostrb::SignedEvent.verify(Nostrb::SignedEvent.validate!(h), check_id: true)
-          true
-        rescue StandardError
-          false
-        end
-        tally.add(h['id']) if ok
+    @client.subscribe(@filter) do |h|
+      ok = begin
+        Nostrb::SignedEvent.verify(Nostrb::SignedEvent.validate!(h), check_id: true)
+        true
+      rescue StandardError
+        false
       end
-      tally.eose!
+      tally.add(h['id']) if ok
     end
-    @thread.report_on_exception = false
+    tally.eose!
   end
 
-  def teardown
-    @thread&.join(10)
-  end
+  def teardown; end
 end
 
 # ------------------------------------------------------------------ child
@@ -350,10 +353,10 @@ def child_main(opts)
            when 'nostr-client' then NostrGemDriver.new(url, w['events'])
            when 'nostr_ruby-client' then NostrRubyDriver.new(url, w['events'])
            when 'nostrb-client' then NostrbDriver.new(url, w['events'], fast: false)
-           when 'nostrb-rbsecp256k1' then NostrbDriver.new(url, w['events'], fast: true)
+           when 'nostrb-fast' then NostrbDriver.new(url, w['events'], fast: true)
            end
   emit.call(type: 'meta', version: gem_version(client[:gem]), websocket: client[:websocket].call,
-            crypto: client[:crypto].call)
+            crypto: client[:crypto].call, notes: client[:notes].respond_to?(:call) ? client[:notes].call : client[:notes])
 
   timeout_s = opts[:timeout_ms] / 1000.0
   warm = opts[:warmup_runs]
@@ -364,18 +367,29 @@ def child_main(opts)
     tally = Tally.new(amb, exp, complete)
     driver.setup(tally)
     GC.start
-    c0 = cpu_now
-    t0 = mono
-    driver.subscribe
-    unless tally.wait(t0 + timeout_s)
-      emit.call(type: 'error', run: i,
+    # The per-run timeout: a sleeping watchdog (no work of its own) that reports how far the
+    # run got and ends the child. Drivers whose subscribe call blocks run it on this thread.
+    cancel = Queue.new
+    started = mono
+    run_i = i
+    watchdog = Thread.new do
+      next if cancel.pop(timeout: timeout_s)
+
+      emit.call(type: 'error', run: run_i,
                 error: "timeout: no EOSE within #{opts[:timeout_ms]} ms " \
-                       "(#{tally.accepted} events accepted by then, #{((mono - t0) * 1e6 / [tally.accepted, 1].max).round} us per accepted event)",
+                       "(#{tally.accepted} events accepted by then, " \
+                       "#{((mono - started) * 1e6 / [tally.accepted, 1].max).round} us per accepted event)",
                 accepted: tally.accepted, peak_rss_mb: peak_rss_mb)
       out.flush
       exit!(3)
     end
+    c0 = cpu_now
+    t0 = mono
+    driver.subscribe
+    tally.wait(t0 + timeout_s + 5) or sleep # the watchdog ends the process
     c1 = cpu_now
+    cancel << true
+    watchdog.join
     t_end = [tally.eose_t, tally.last_t].compact.max
     driver.teardown
     emit.call(type: 'run', run: i, warmup: i < warm, ms: ((t_end - t0) * 1000).round(3),
@@ -474,7 +488,7 @@ def build_row(client, w, lines, kill_err, status)
   row = {
     client: client[:id], library: client[:library], version: meta['version'] || '?', license: client[:license],
     api: client[:api], websocket: meta['websocket'] || '?', crypto: meta['crypto'] || '?', verify: client[:verify],
-    notes: client[:notes], variant: client[:variant], workload: w['name'], events: w['events'], bytes: w['bytes'],
+    notes: meta['notes'] || (client[:notes].is_a?(String) ? client[:notes] : ''), variant: client[:variant], workload: w['name'], events: w['events'], bytes: w['bytes'],
     accepted: nil, accepted_xor: nil, ambiguous_accepted: nil, expired_accepted: nil, accepted_ok: false,
     errors: 0, error: nil, warmup_runs: 0, runs: 0, first_run_ms: nil, median_ms: nil, min_ms: nil, p90_ms: nil,
     run_ms: [], events_per_s: nil, us_per_event: nil, cpu_ms: nil,

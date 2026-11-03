@@ -100,12 +100,25 @@ function hexWords(hex) {
   return w;
 }
 
-// The id set a correct client delivers, given which of the optional events it took.
-function expectedSet(w, ambiguousAccepted, expiredAccepted) {
-  const x = hexWords(w.valid_id_xor);
+// If (accepted, xor) is a correct set (HARNESS.md "Correctness"), which of the optional events
+// it holds: { amb, exp } with exp 0 or every expired id, amb the size of a subset of the
+// ambiguous ids (every subset when there are few). Null when it is not a correct set.
+function explainSet(w, accepted, xor) {
+  const amb = w.ambiguous_ids;
   const expired = w.expired_ids ?? [];
-  if (expiredAccepted === 0) for (const id of expired) xorInto(x, id);
-  return x;
+  const subsets = amb.length <= 4 ? 1 << amb.length : 2;
+  for (const expAll of [true, false]) {
+    for (let m = 0; m < subsets; m++) {
+      const pick = amb.length <= 4 ? amb.filter((_, i) => m & (1 << i)) : m ? amb : [];
+      const n = w.valid_events - (expAll ? 0 : expired.length) + pick.length;
+      if (n !== accepted) continue;
+      const x = hexWords(w.valid_id_xor);
+      if (!expAll) for (const id of expired) xorInto(x, id);
+      for (const id of pick) xorInto(x, id);
+      if (wordsHex(x) === xor) return { amb: pick.length, exp: expAll ? expired.length : 0 };
+    }
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------- one run
@@ -116,23 +129,31 @@ const cpuMs = (u) => (u.user + u.system) / 1000;
 // A library exception that escapes to the event loop (a throw in a socket callback or a
 // microtask) ends the current run as an error instead of killing the process.
 let activeSink = null;
+const seenOutside = new Set();
 function trapUncaught() {
   const h = (e) => {
     if (activeSink) activeSink.error(new Error(`uncaught exception in library code: ${e?.name ?? 'Error'}: ${e?.message ?? e}${e?.stack?.split('\n').find((l) => l.trim().startsWith('at '))?.trim().replace(/^at /, ' (at ').concat(')') ?? ''}`));
-    else process.stderr.write(`    ! uncaught outside a run: ${e?.message ?? e}\n`);
+    else if (!seenOutside.has(String(e?.message ?? e))) {
+      seenOutside.add(String(e?.message ?? e));
+      process.stderr.write(`    ! uncaught outside a run: ${e?.message ?? e}\n`);
+    }
   };
   process.on('uncaughtException', h);
   process.on('unhandledRejection', h);
 }
 
 // Runs one subscription end to end (HARNESS.md "A run"). Returns
-// { ms, cpu, accepted, xor, amb, exp, eoseSeen } or throws.
-async function oneRun(C, ctx, url, w, special, opts) {
+// { ms, cpu, accepted, xor, ids } or throws. HARNESS.md "Fairness" 5: the per-event callback
+// only counts the event and XORs its id; the clock and the CPU are read only for events that
+// arrive after the EOSE (they move the end of the run). With `collect` (an extra untimed
+// diagnostic run, see runChild) it also keeps the ids.
+async function oneRun(C, ctx, url, w, opts, collect = false) {
   // 1. setup, untimed
   const inst = await withTimeout(C.setup(ctx, url, w, opts), opts.timeoutMs, 'setup (connect) timed out');
 
   const words = new Uint32Array(8);
-  let accepted = 0, amb = 0, exp = 0;
+  const ids = collect ? [] : null;
+  let accepted = 0;
   let eoseAt = -1, lastAt = -1, endAt = -1, cpuEnd = null;
   const maxAccept = w.valid_events + w.ambiguous_ids.length;
   let finish;
@@ -144,32 +165,33 @@ async function oneRun(C, ctx, url, w, special, opts) {
       if (now() - Math.max(lastAt, eoseAt) >= 1000) finish({ how: 'idle' });
     }, 50);
   };
+  const afterEose = () => {
+    // events delivered after the EOSE (verification on another thread, a timer, a later
+    // microtask) move the end of the run
+    cpuEnd = process.cpuUsage();
+    endAt = lastAt = now();
+    if (accepted >= maxAccept) finish({ how: 'complete' });
+  };
 
   const sink = {
-    event(id) {
-      accepted++;
-      xorInto(words, id);
-      const k = special.get(id);
-      if (k !== undefined) {
-        if (k === 1) amb++;
-        else exp++;
-      }
-      const t = now();
-      lastAt = t;
-      if (eoseAt >= 0) {
-        // events delivered after the EOSE (verification on another thread or a later
-        // microtask) move the end of the run
-        cpuEnd = process.cpuUsage();
-        endAt = t;
-        if (accepted >= maxAccept) finish({ how: 'complete' });
-      }
-    },
+    event: collect
+      ? (id) => {
+          accepted++;
+          xorInto(words, id);
+          ids.push(id);
+          if (eoseAt >= 0) afterEose();
+        }
+      : (id) => {
+          accepted++;
+          xorInto(words, id);
+          if (eoseAt >= 0) afterEose();
+        },
     eose() {
       if (eoseAt >= 0) return;
       cpuEnd = process.cpuUsage();
       const t = now();
       eoseAt = t;
-      endAt = Math.max(t, lastAt);
+      endAt = t;
       if (accepted >= maxAccept) finish({ how: 'complete' });
       else armIdle();
     },
@@ -208,8 +230,7 @@ async function oneRun(C, ctx, url, w, special, opts) {
     cpu: cpuMs(cpuEnd) - cpuMs(cpu0),
     accepted,
     xor: wordsHex(words),
-    amb,
-    exp,
+    ids,
   };
 }
 
@@ -297,9 +318,6 @@ async function runChild(opts, workloads) {
       continue;
     }
     const url = `${opts.relay}/${w.name}`;
-    const special = new Map();
-    for (const id of w.ambiguous_ids) special.set(id, 1);
-    for (const id of w.expired_ids ?? []) special.set(id, 2);
 
     let ref = null; // the first run's set
     const runMs = [];
@@ -310,7 +328,7 @@ async function runChild(opts, workloads) {
       for (;;) {
         const warm = row.warmup_runs < opts.warmupRuns;
         if (!warm && (row.runs >= opts.maxRuns || (row.runs >= opts.minRuns && measuredMs >= opts.minTimeMs))) break;
-        const r = await oneRun(C, ctx, url, w, special, opts);
+        const r = await oneRun(C, ctx, url, w, opts);
         if (!ref) {
           ref = r;
           row.first_run_ms = r1(r.ms);
@@ -328,7 +346,7 @@ async function runChild(opts, workloads) {
           measuredMs += r.ms;
         }
         process.stderr.write(
-          `    ${warm ? 'warmup' : 'run   '} ${String(total()).padStart(2)}: ${r.ms.toFixed(1).padStart(9)} ms  cpu ${r.cpu.toFixed(0).padStart(6)} ms  accepted ${r.accepted} (ambiguous ${r.amb}, expired ${r.exp})\n`,
+          `    ${warm ? 'warmup' : 'run   '} ${String(total()).padStart(2)}: ${r.ms.toFixed(1).padStart(9)} ms  cpu ${r.cpu.toFixed(0).padStart(6)} ms  accepted ${r.accepted}\n`,
         );
       }
     } catch (e) {
@@ -339,20 +357,26 @@ async function runChild(opts, workloads) {
     if (ref) {
       row.accepted = ref.accepted;
       row.accepted_xor = ref.xor;
-      row.ambiguous_accepted = ref.amb;
-      row.expired_accepted = ref.exp;
-      const nExp = (w.expired_ids ?? []).length;
-      const want = w.valid_events - nExp + ref.exp + ref.amb;
-      const x = expectedSet(w, ref.amb, ref.exp);
-      // the ambiguous ids it accepted are XORed into its own set: XOR them into the expected one
-      const got = hexWords(ref.xor);
-      if (ref.amb > 0) for (const id of w.ambiguous_ids) xorInto(x, id);
-      row.accepted_ok =
-        (ref.exp === 0 || ref.exp === nExp) &&
-        ref.amb <= w.ambiguous_ids.length &&
-        ref.accepted === want &&
-        wordsHex(got) === wordsHex(x) &&
-        (ref.amb === 0 || ref.amb === w.ambiguous_ids.length);
+      const how = explainSet(w, ref.accepted, ref.xor);
+      if (how) {
+        // a correct set: which optional events it took follows from the count and the XOR
+        row.accepted_ok = true;
+        row.ambiguous_accepted = how.amb;
+        row.expired_accepted = how.exp;
+      } else {
+        // not a correct set: one extra, untimed diagnostic run that keeps the ids says which
+        // of the optional events it delivered
+        row.accepted_ok = false;
+        try {
+          const d = await oneRun(C, ctx, url, w, opts, true);
+          const got = new Set(d.ids);
+          row.ambiguous_accepted = w.ambiguous_ids.filter((id) => got.has(id)).length;
+          row.expired_accepted = (w.expired_ids ?? []).filter((id) => got.has(id)).length;
+          process.stderr.write(`    diagnostic run: ${d.accepted} events, ${d.accepted - got.size} duplicates, ambiguous ${row.ambiguous_accepted}, expired ${row.expired_accepted}\n`);
+        } catch (e) {
+          process.stderr.write(`    ! diagnostic run: ${e?.message ?? e}\n`);
+        }
+      }
     }
     if (row.error === null && runMs.length) {
       const sorted = [...runMs].sort((a, b) => a - b);
@@ -372,7 +396,7 @@ async function runChild(opts, workloads) {
     process.stderr.write(
       `  ${RT} ${C.id.padEnd(28)} ${w.name.padEnd(9)} ` +
         (row.median_ms == null ? `ERROR ${row.error}` : `${row.median_ms.toFixed(1).padStart(9)} ms  cpu ${String(row.cpu_ms).padStart(8)} ms`) +
-        `  accepted ${row.accepted} ok=${row.accepted_ok} rss ${row.peak_rss_mb} MB\n`,
+        `  accepted ${row.accepted} (ambiguous ${row.ambiguous_accepted}, expired ${row.expired_accepted}) ok=${row.accepted_ok} rss ${row.peak_rss_mb} MB\n`,
     );
   }
   process.stdout.write('@@ROWS ' + JSON.stringify(rows) + '\n');
@@ -391,7 +415,7 @@ function childCommand(args) {
 // Runs a child, streaming its stderr: the harness's own lines pass through; library output
 // (some libraries log a warning, with a stack, for every invalid event) is shown for the
 // first 12 lines, then only counted.
-const HARNESS_LINE = /^(    (warmup|run |! )|  (node|bun|deno) )/;
+const HARNESS_LINE = /^(    (warmup|run |! |diagnostic)|  (node|bun|deno) )/;
 function runProcess(cmd, args, capMs) {
   return new Promise((resolve) => {
     const child = spawn(cmd, args, { cwd: HERE, stdio: ['ignore', 'pipe', 'pipe'] });

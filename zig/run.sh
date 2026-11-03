@@ -71,7 +71,7 @@ packages=(
 
 prefetch() {
     local hash="$1" url="$2" repo="$3" ref="$4" tmp got
-    [[ -d "$ZIG_GLOBAL_CACHE_DIR/p/$hash" ]] && return 0
+    [[ -e "$ZIG_GLOBAL_CACHE_DIR/p/$hash.tar.gz" || -d "$ZIG_GLOBAL_CACHE_DIR/p/$hash" || -d "$here/zig-pkg/$hash" ]] && return 0
     tmp="$(mktemp -d)"
     if ! curl -fsSL -o "$tmp/pkg.tar.gz" "$url" 2>/dev/null; then
         if [[ "$repo" == "-" ]]; then
