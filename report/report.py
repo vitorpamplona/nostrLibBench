@@ -72,14 +72,17 @@ def check_accepted(r, w):
                     x = xor_hex(x, i)
                 if x == axor.lower():
                     return True, ""
-    diff = acc - w["valid_events"]
     if exp and r.get("expired_accepted") not in (None, 0, len(exp)):
         return False, f"delivered {r['expired_accepted']} of the {len(exp)} expired events (all or none)"
-    if diff > len(amb):
-        return False, f"accepted {acc:,}: {diff - len(amb):,}+ invalid events delivered (or duplicates)"
+    # What the row should have delivered, given its own choices on the optional events.
+    expected = w["valid_events"] - len(exp) + (r.get("expired_accepted") if r.get("expired_accepted") is not None else len(exp))
+    expected += r.get("ambiguous_accepted") or 0
+    diff = acc - expected
+    if diff > 0:
+        return False, f"accepted {acc:,}, expected {expected:,}: {diff:,} invalid events delivered (or duplicates)"
     if diff < 0:
-        return False, f"accepted {acc:,}: {-diff:,} valid events missing"
-    return False, f"accepted {acc:,} (right count) but the wrong set"
+        return False, f"accepted {acc:,}, expected {expected:,}: {-diff:,} valid events missing"
+    return False, f"accepted {acc:,} (the expected count) but not the expected set"
 
 
 def cpu_us(r):
