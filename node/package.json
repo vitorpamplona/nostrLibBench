@@ -17,7 +17,6 @@
     "@welshman/util": "0.14.0-pre5",
     "applesauce-core": "7.0.3",
     "applesauce-relay": "7.0.0",
-    "nostr-fetch": "0.17.0",
     "nostr-tools": "2.25.5",
     "nostr-wasm": "0.1.0",
     "rx-nostr": "3.7.8",

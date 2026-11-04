@@ -26,8 +26,7 @@ Every HARNESS.md flag is accepted (`--relay --corpus --out --workloads --clients
   profile, heap, module state and library-global caches), and merges the rows. A child
   prints its rows as one `@@ROWS <json>` line; a child that crashes or is killed still
   gets a row with `error` set. Library output on stderr (rx-nostr prints a stack trace for
-  every invalid event, nostr-fetch a line) is shown for the first 12 lines per client and
-  then only counted.
+  every invalid event) is shown for the first 12 lines per client and then only counted.
 - `clients.mjs`: one entry per client: how to load the library, build a new client, open
   the subscription and tear it down, plus the row's `api`, `websocket`, `crypto`, `verify`
   and `notes`.
@@ -40,14 +39,18 @@ Per HARNESS.md "A run":
 
 1. **Setup, untimed**: a new client instance (relay, pool, NDK, system, ...), connected and
    open when the API lets the app connect explicitly. The libraries that only connect on the
-   first subscription (applesauce, nostrify-pool, nostr-fetch) say so in `notes`.
+   first subscription (applesauce, nostrify-pool) say so in `notes`. Where the connect call
+   returns before the socket is open (snort), setup waits for the open socket.
 2. **Timed**: `t0 = performance.now()` right before the library's subscription call with
    `{"limit": <events>}`. The library's own callbacks (or async iterator) feed a sink that
    only does what HARNESS.md "Fairness" 5 allows: `accepted += 1` and the XOR of the id taken
-   from the library's event object (as 8 uint32 words). The clock and the CPU counter are
-   read at the EOSE and, only after it, for each further event (those move the end). The run
-   ends at `max(EOSE delivered to the app, last event)`. CPU is `process.cpuUsage()` (user +
-   system, every thread of the process) at `t0` and at that end point.
+   from the library's event object (as 8 uint32 words). The clock is read at the EOSE and,
+   only after it, for each further event (those move the end). The run ends at
+   `max(EOSE delivered to the app, last event)`. CPU is `process.cpuUsage()` (user + system,
+   every thread of the process) at `t0` and at that end point, never in the per-event
+   callback: it is read at the EOSE, then, if events still come, once when the set is
+   complete or, for a library that leaves events out, by the 50 ms idle-check timer after
+   the last event (that adds the idle rest of one tick).
 3. The harness then waits, untimed, until the EOSE has been seen and either every possible
    event is in (valid + ambiguous) or nothing has arrived for 1 s (a library that drops the
    expired or ambiguous events always takes this 1 s). No EOSE within `--timeout-ms` is an
@@ -83,15 +86,18 @@ calls applesauce-core's `verifyEvent`).
 **Configuration** (HARNESS.md "Fairness"): library defaults, except, each named in the row's
 `notes`: verification turned on or to 100 % (snort `checkSigs`, NDK validation ratios);
 timers that would cut a long stream short raised to `--timeout-ms` (nostr-tools
-`eoseTimeout`/`maxWait`, rx-nostr `eoseTimeout`, nostr-fetch `abortSubBeforeEoseTimeoutMs`,
-snort's 30 s query timeout through `leaveOpen`); one relay (NDK outbox model off);
-per-event console logging silenced (rx-nostr's `console.warn` stack trace and nostr-fetch's
-`console.error` line for each invalid event: `console.warn`/`console.error` are replaced by
-no-ops in those two child processes); verification caches that would carry over between runs
-cleared (NDK). A documented speed option is its own non-variant client
-(`nostr-tools-relay-wasm`, `qntx-nostr-wasm`, `snort-system-wasm`); pools, fetch-all APIs
-and diagnostic settings are variants. The harness adds no threads (NDK's verification worker
-is therefore not a client; see NDK below).
+`eoseTimeout`/`maxWait`, rx-nostr `eoseTimeout`, snort's 30 s query timeout through
+`leaveOpen`); one relay (NDK outbox model off); work outside the job that a documented
+option turns off, turned off (rx-nostr `skipFetchNip11` and `skipValidateFilterMatching`,
+snort `groupingDelay: 0`); per-event console logging silenced (rx-nostr's `console.warn`
+stack trace for each invalid event: `console.warn` is a no-op in that child process);
+verification caches that would carry over between runs cleared (NDK). Work a library does
+unconditionally (welshman's request tracker and result array, snort's sorted feed store) is
+its cost and named in `notes`. No ranked row stores events (no event store, cache or
+index). A documented speed option is its own ranked client (`nostr-tools-relay-wasm`,
+`qntx-nostr-wasm`, `snort-system-wasm`, `welshman-nodelay`), listed next to the
+default-configuration row; pools are variants. The harness adds no threads (NDK's
+verification worker is therefore not a client; see NDK below).
 
 ## Clients
 
@@ -106,13 +112,11 @@ Versions are the ones `package-lock.json` resolves (latest releases on 2026-11-0
 | `nostrify-relay` | @nostrify/nostrify 0.55.1 (MIT) | `for await (msg of new NRelay1(url).req([filter]))` | library: zod schema, then nostr-tools `verifyEvent` | websocket-ts over global |
 | `nostrify-pool` (variant) | @nostrify/nostrify | `NPool.req([filter])` over one NRelay1 | same, plus pool dedup | websocket-ts over global |
 | `welshman` | @welshman/net + util 0.14.0-pre5 (MIT) | `request({relays, filters, context: {pool}, onEvent, onEose})` | library: `@welshman/util` `verifyEvent` → nostr-tools/wasm (nostr-wasm) | `isomorphic-ws` → `ws` |
-| `welshman-nodelay` (variant) | @welshman/net | as `welshman`, `Socket.recvBatchDelay = 0` | same | same |
+| `welshman-nodelay` | @welshman/net | as `welshman`, `Socket.sendBatchDelay = 0`, `Socket.recvBatchDelay = 0` | same | same |
 | `applesauce-relay` | applesauce-relay 7.0.0 + applesauce-core 7.0.3 (MIT) | `relay.subscription(filter)` (rxjs) | explicit: applesauce-core `verifyEvent` (nostr-tools/pure) | rxjs `webSocket` over global |
-| `applesauce-eventstore` (variant) | same | `relay.subscription(filter)` → `EventStore.add` | library: the EventStore verifies (nostr-tools/pure) | same |
-| `rx-nostr` | rx-nostr 3.7.8 + @rx-nostr/crypto 3.1.6 (MIT) | `rxNostr.use(createRxBackwardReq())`, `emit(filter)`, `over()` | library (sig) + harness id check; @noble/curves 2.4 | global |
-| `snort-system` | @snort/system 2.1.11 (MIT) | `system.Query(RequestBuilder…)` `.on("event"/"eose")` | library with `checkSigs: true` (sig) + harness id check; @noble/curves 2.4 | `isomorphic-ws` → `ws` |
+| `rx-nostr` | rx-nostr 3.7.8 + @rx-nostr/crypto 3.1.6 (MIT) | `rxNostr.use(createRxBackwardReq())`, `emit(filter)`, `over()`; `skipFetchNip11`, `skipValidateFilterMatching` | library (sig) + harness id check; @noble/curves 2.4 | global |
+| `snort-system` | @snort/system 2.1.11 (MIT) | `system.Query(RequestBuilder…)` `.on("event"/"eose")`, `leaveOpen: true`, `groupingDelay: 0` | library with `checkSigs: true` (sig) + harness id check; @noble/curves 2.4 | `isomorphic-ws` → `ws` |
 | `snort-system-wasm` | @snort/system + @snort/system-wasm 2.0.0 | same, with the wasm optimizer the snort app uses | library: `schnorr_verify_batch` (secp256k1-sys 0.10 in wasm) + harness id check | same |
-| `nostr-fetch` (variant) | nostr-fetch 0.17.0 (MIT) | `for await (ev of fetcher.allEventsIterator([url], {}, {}))` | library: `@nostr-fetch/kernel` (id + sig), @noble/curves 1.9 | global |
 | `nostr-sdk-node` | @nostrdevkit/nostr-sdk-node 0.45.1 (MIT) | `client.streamEvents(ReqTarget.single(url, [filter]), ExitOnEose)` + `stream.next()` | library: Rust nostr-sdk, libsecp256k1 (native addon) | the Rust SDK's own (native) |
 | `qntx-nostr` | @qntx/nostr 0.15.3 (MIT OR Apache-2.0) | `relay.subscribe([filter], {onEvent, onEose})` | library: default `verifyEvent` (id + sig), @noble/curves 2.4 | global |
 | `qntx-nostr-wasm` | @qntx/nostr + @qntx/nostr-wasm 0.15.3 | same, `verifyEvent` from `loadNostrWasm()` | library: libsecp256k1 in wasm | global |
@@ -152,30 +156,38 @@ nostr-tools `verifyEvent`; events come out of an async generator. `NRelay1` open
 socket in the constructor. `NPool` adds routing and a per-request dedup; it opens relays on
 the first request.
 
-**welshman.** **Throttles inbound messages by default:** each `Socket` passes received
-messages to subscribers through a `TaskQueue` of `recvBatchSize` 20 per `recvBatchDelay`
-100 ms (a `setTimeout` between batches), i.e. at most ~200 messages per second per relay,
-whatever the CPU. The `welshman` row (library defaults) is therefore bound by that timer
-(the `all` workload takes ~156 s, `cpu_ms` stays low); `welshman-nodelay` sets the public
-static `Socket.recvBatchDelay = 0` to show the processing cost. Verification is
-`@welshman/util` `verifyEvent`: nostr-tools/pure until nostr-wasm (imported dynamically at
-module load) is ready, then nostr-tools/wasm; `load()` waits for the switch. `request()`
-also keeps every event in an array (it resolves with the deduplicated list). Its `isomorphic-ws`
+**welshman.** **Delays both ways by default:** each `Socket` sends through a `TaskQueue`
+that waits `Socket.sendBatchDelay` (100 ms, a `setTimeout`) before each batch, so the `REQ`
+itself leaves 100 ms after `request()`, and passes received messages to subscribers through
+a `TaskQueue` of `recvBatchSize` 20 per `recvBatchDelay` 100 ms, i.e. at most ~200 messages
+per second per relay, whatever the CPU. The `welshman` row (library defaults, the
+default-configuration row) is therefore bound by those timers (the `all` workload takes
+~156 s, `cpu_ms` stays low); `welshman-nodelay`, ranked as welshman's speed configuration,
+sets the public statics `Socket.sendBatchDelay = 0` and `Socket.recvBatchDelay = 0` (the
+queues then drain on a microtask). Verification is `@welshman/util` `verifyEvent`:
+nostr-tools/pure until nostr-wasm (imported dynamically at module load) is ready, then
+nostr-tools/wasm; if the wasm fails to load it only `console.warn`s and stays on pure.
+`load()` therefore checks: it initializes nostr-wasm itself (an error there fails the row)
+and probes `verifyEvent` until it behaves as nostr-tools/wasm (a valid event with its id in
+upper-case hex passes nostr-wasm, which compares id bytes, and fails nostr-tools/pure, which
+compares hex strings); after 10 s it fails the row. `request()` also runs its dedup `Tracker`
+and `matchFilters` on every event and keeps every event in an array (it resolves with the
+deduplicated list): unconditional, named in `notes`. Its `isomorphic-ws`
 import means the `ws` package on Node and Deno. On Deno, `@welshman/util` cannot be imported
 as is: at module load it benchmarks proof of work in a Worker created from a blob URL as a
 classic worker, which Deno rejects (`Classic workers are not supported`); the harness hides
 `globalThis.Worker` during the import.
 
 **applesauce.** `applesauce-relay` does not verify (verification belongs to applesauce-core's
-`EventStore`), so the headline row calls applesauce-core's `verifyEvent` itself (`explicit`).
-`applesauce-eventstore` runs the app path: `EventStore.add` verifies and indexes; it keeps
-only the newest version of replaceable events by default (`keepOldVersions: true` here: that
-is store policy, not verification) and drops expired events (`keepExpired: false`), except
-one whose `expiration` tag is `"0"`: it tests the timestamp for truthiness, so `0` reads as
-"no expiration" and the row ends with a partial expired set (`accepted_ok: false`).
-`EventStore.add` handles kind 5 deletions before verifying: a kind-5 event is applied to the
-delete index without its signature being checked. The rxjs `webSocket` connects lazily on
-the first subscription (inside the timed run).
+`EventStore`), so the row calls applesauce-core's `verifyEvent` itself (`explicit`). The
+rxjs `webSocket` connects lazily on the first subscription (inside the timed run). The app
+path through an `EventStore` is not a row (a store is outside the job). When it was tested
+(as an `applesauce-eventstore` variant, since dropped): `EventStore.add` keeps only the
+newest version of replaceable events by default and drops expired events
+(`keepExpired: false`), except one whose `expiration` tag is `"0"`: it tests the timestamp
+for truthiness, so `0` reads as "no expiration"; and it handles kind 5 deletions before
+verifying, so a kind-5 event is applied to the delete index without its signature being
+checked.
 
 **rx-nostr.** Requires a verifier; `@rx-nostr/crypto`'s `verifier` checks the signature
 against the recomputed hash but not against `event.id` (harness id check with its
@@ -184,7 +196,10 @@ not parse (the 1,547 `"sig":""` events); per HARNESS.md that per-event logging i
 (`console.warn` is a no-op in its process). It drops expired
 events by default (`skipExpirationCheck: false`): `expired_accepted` 0. `eoseTimeout`
 (default 30 s from the REQ) would complete a slow stream early: raised to `--timeout-ms`.
-The backward request completes on EOSE; completion is the EOSE.
+By default each relay connection starts a NIP-11 fetch and the first `REQ` of a process
+waits for it (to read `max_subscriptions`), and every event is matched against the filter
+again: the documented `skipFetchNip11: true` and `skipValidateFilterMatching: true` turn
+both off. The backward request completes on EOSE; completion is the EOSE.
 
 **snort (@snort/system).** Does not verify by default (`checkSigs: false`); the harness sets
 `checkSigs: true`. **With its default optimizer it crashes on the first unsigned event:**
@@ -194,12 +209,19 @@ is an uncaught exception that kills the batch, in Node the process); the `snort-
 reports that error. The snort app wires the WebAssembly optimizer from `@snort/system-wasm`
 (its `schnorr_verify_batch` returns false instead of throwing); `snort-system-wasm` does the
 same and is a headline row. Neither compares the recomputed id with `event.id` (harness id
-check with `EventExt.createId`). With the default `leaveOpen: false` the query closes its
+check with `EventExt.createId`). `Query.start()` waits `groupingDelay` (default 100 ms, a
+`setTimeout`) before it sends the `REQ`, to merge requests: the harness sets
+`groupingDelay: 0`, as snort's own `fetch()` does. `ConnectToRelay` returns before the
+socket is open; setup waits until the pool's connection is open, so the handshake is
+untimed (each connection also fetches NIP-11 at connect, in parallel, cached per process).
+With the default `leaveOpen: false` the query closes its
 trace at the EOSE while the last events of the socket read that carried the EOSE still sit in
 the pool's microtask verify batch, so a tail of ~50 events is lost (a different number each
 run), and a 30 s `QueryFetchTimeout` would cut a longer stream: the harness uses
 `leaveOpen: true` and closes the query in teardown. The query delivers through its feed, a
-`NoteCollection`, which emits new events to listeners on a timer (after the EOSE), keeps
+`NoteCollection`: a sorted in-memory store (a `SortedMap` insert with `splice` per event, an
+unconditional cost) that emits new events to listeners on a timer (`emitInterval` 300 ms,
+so up to 300 ms after the EOSE), keeps
 one event per replaceable key (older kind 0/3/10000+ versions are never delivered) and
 adds an event only if `created_at > (stored?.created_at ?? 0)`, so the `created_at: 0`
 event is never delivered: `snort-system-wasm` misses 2 valid events on `smoke`
@@ -207,15 +229,6 @@ event is never delivered: `snort-system-wasm` misses 2 valid events on `smoke`
 (`export * from "./cache/index"`) that only a bundler or Bun resolves: on Node the harness
 registers `snort-resolve.mjs` (a resolve hook that retries `.js` and `/index.js`, what a
 bundler does); on Deno there is no such hook and the rows report the load error.
-
-**nostr-fetch.** A fetcher of past events with no live subscription. `allEventsIterator`
-pages backwards: each page is a REQ with `until` = the oldest `created_at` seen and
-`limit = min(limitPerReq, 5000)`, until a page brings nothing new. The relay ignores filters,
-so the second page receives the whole workload again (all duplicates, each verified again
-before nostr-fetch's dedup); the row measures two full streams and is a variant (not
-ranked) for that reason. It awaits the verifier once per event and re-arms a `setTimeout`
-for every event (`abortSubBeforeEoseTimeoutMs`, raised to `--timeout-ms`). Its relay pool
-`console.error`s a line for every event that fails its shape check (silenced, as above).
 
 **Nostr Dev Kit nostr-sdk (formerly rust-nostr).** `@nostrdevkit/nostr-sdk-node` is the
 native (uniffi/napi) binding of the Rust SDK: the socket, JSON parsing and verification
@@ -226,8 +239,9 @@ EOSE (`ReqExitPolicy.ExitOnEose`). Runs on Node, Bun and Deno. `streamEvents`' `
 is in milliseconds.
 
 **@qntx/nostr.** A new (2026) TypeScript SDK with a nostr-tools-like `Relay`; verifies id
-and signature by default (WeakSet caches per object), `@qntx/nostr-wasm` injects a
-libsecp256k1-in-wasm verifier (variant).
+and signature by default (WeakSet caches per object). `@qntx/nostr-wasm` injects a
+libsecp256k1-in-wasm verifier: the library's documented speed option, ranked as its own
+client (`qntx-nostr-wasm`) next to the default `qntx-nostr`.
 
 ## Not included
 
@@ -241,6 +255,13 @@ libsecp256k1-in-wasm verifier (variant).
   IndexedDB cache and FlatBuffer views, distributed for Vite; it has no Node entry point
   (its Node export is a relay proxy).
 - **nostr-relaypool**: unmaintained since 2023, built on nostr-tools 1.x.
+- **nostr-fetch**: a fetcher of past events with no live subscription; it cannot do the job
+  once. `allEventsIterator` pages backwards, each page a `REQ` with `until` = the oldest
+  `created_at` seen and `limit = min(limitPerReq, 5000)`, and stops only when a page brings
+  nothing new, so even a relay that honors the filter is asked a second time, and against a
+  relay that returns the whole set (as this one does) the second page streams and verifies
+  every event again before its dedup drops them: two full streams. (It was benchmarked as a
+  variant and dropped.)
 - **@cmdcode/nostr-sdk, @vbyte/nostr-sdk, nostr-websocket-utils, nostr-headless-client,
   nostr-wot-sdk** and the many forks of nostr-tools on npm: small or single-app packages with
   no known use as a client core.
@@ -249,7 +270,7 @@ libsecp256k1-in-wasm verifier (variant).
 
 - Pure-JS verifiers (@noble/curves) run at ~0.6-2k events/s here, so one run of the `all`
   workload takes 15-60 s (welshman with its throttle ~156 s); a `--quick` run of the three
-  runtimes on `all` takes a long while. `--workloads smoke` (1,416 events) takes a few
+  runtimes on `all` takes a long while. `--workloads smoke` (1,417 events) takes a few
   minutes per runtime and has every edge case.
 - Timings on a shared machine are noisy; `cpu_ms` (all threads) is the steadier number.
 - Bun's `node:` compat runs these libraries unmodified; Deno runs them from `node_modules`

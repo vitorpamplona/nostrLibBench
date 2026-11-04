@@ -136,7 +136,7 @@ const nostrToolsPool = {
   id: 'nostr-tools-pool',
   api: 'new SimplePool() + pool.ensureRelay(url), pool.subscribeMany([url], filter, {onevent, oneose})',
   variant: true,
-  notes: `SimplePool: the same AbstractRelay underneath plus the pool's per-subscription dedup (alreadyHaveEvent over a Set of ids read from the raw frame before JSON.parse) and seenOn tracking. verifyEvent from nostr-tools/pure. maxWait (the subscription eoseTimeout) raised to --timeout-ms (default 4400 ms). A new SimplePool per run.`,
+  notes: `SimplePool: the same AbstractRelay underneath plus the pool's per-subscription dedup (alreadyHaveEvent over a Set of ids read from the raw frame before JSON.parse); seenOn tracking stays off (trackRelays defaults to false). verifyEvent from nostr-tools/pure. maxWait (the subscription eoseTimeout) raised to --timeout-ms (default 4400 ms). A new SimplePool per run.`,
   async load() {
     return import('nostr-tools/pool');
   },
@@ -317,6 +317,28 @@ const nostrifyPool = {
 
 // ---------------------------------------------------------------- welshman
 
+// @welshman/util's verifyEvent is nostr-tools/pure until a dynamic import of nostr-wasm
+// resolves at module load; then it switches to nostr-tools/wasm. If the wasm fails to load it
+// only console.warns and stays on pure. This probe tells the two apart: a validly signed event
+// whose id is written in upper-case hex passes nostr-wasm (it compares the id bytes it parses
+// from hex) and fails nostr-tools/pure (it compares hex strings).
+async function welshmanWasmVerifier(util) {
+  const { initNostrWasm } = await import('nostr-wasm');
+  await initNostrWasm(); // throws here if nostr-wasm cannot start in this runtime
+  const { finalizeEvent, generateSecretKey } = await import('nostr-tools/pure');
+  const ev = finalizeEvent({ kind: 1, created_at: 1, tags: [], content: 'probe' }, generateSecretKey());
+  // a fresh plain object each time (finalizeEvent marks its result as verified, and a spread
+  // would copy that mark)
+  const plain = (id) => ({ kind: ev.kind, created_at: ev.created_at, tags: [], content: ev.content, pubkey: ev.pubkey, id, sig: ev.sig });
+  const probe = () => util.verifyEvent(plain(ev.id.toUpperCase()));
+  if (!util.verifyEvent(plain(ev.id))) throw new Error('@welshman/util verifyEvent rejected a valid event');
+  const end = Date.now() + 10000;
+  while (!probe()) {
+    if (Date.now() > end) throw new Error('@welshman/util verifyEvent did not switch to nostr-tools/wasm within 10 s (still nostr-tools/pure)');
+    await sleep(5);
+  }
+}
+
 const welshman = {
   id: 'welshman',
   library: 'welshman (@welshman/net)',
@@ -328,9 +350,9 @@ const welshman = {
   },
   verify: 'library',
   notes:
-    'Library defaults, including the Socket receive throttle: inbound messages reach subscribers through a TaskQueue of recvBatchSize 20 per recvBatchDelay 100 ms, i.e. at most ~200 messages/s per socket, so this row is bound by the timer, not the CPU (see welshman-nodelay). ' +
+    'Library defaults (the default-configuration row; welshman-nodelay is the ranked speed configuration), including the Socket send and receive queues: the REQ itself waits in the send queue for Socket.sendBatchDelay (100 ms, a setTimeout before each batch of sendBatchSize 5), inside the timed run, and inbound messages reach subscribers through a TaskQueue of recvBatchSize 20 per recvBatchDelay 100 ms, i.e. at most ~200 messages/s per socket, so this row is bound by those timers, not the CPU. ' +
     'On Deno, @welshman/util cannot be imported as is (its module-load proof-of-work benchmark starts a classic Worker, which Deno rejects), so the harness hides globalThis.Worker during the import. ' +
-    '@welshman/util verifyEvent: nostr-tools/pure until nostr-wasm finishes loading (it imports it dynamically at module load), then nostr-tools/wasm (id + signature); load() waits for the switch before any run. Every event also goes through the request Tracker (dedup), matchFilters, and is kept in the request\'s result array (request() resolves with the deduplicated list). A new Pool per run (context.pool), socket opened in setup.',
+    '@welshman/util verifyEvent: nostr-tools/pure until nostr-wasm finishes loading (it imports it dynamically at module load), then nostr-tools/wasm (id + signature); load() waits until a probe confirms the wasm verifier is the one in use and fails otherwise. Unconditional library work on every event: the request Tracker (dedup by id), matchFilters, and the request\'s result array (request() resolves with the deduplicated list). A new Pool per run (context.pool), socket opened in setup.',
   async load() {
     // @welshman/util runs a proof-of-work benchmark at module load in a Worker built from a
     // blob URL as a classic worker; Deno only has module workers and throws, which fails the
@@ -344,7 +366,7 @@ const welshman = {
     } finally {
       if (RT === 'deno') globalThis.Worker = W;
     }
-    await sleep(500); // nostr-wasm is imported and initialized in the background
+    await welshmanWasmVerifier(util);
     return { net, util };
   },
   async setup(m, url) {
@@ -352,21 +374,18 @@ const welshman = {
     const socket = pool.get(url);
     socket.open();
     await poll(() => socket.status === m.net.SocketStatus.Open, 10000, 'welshman socket open');
-    return { pool, url };
+    return { pool, url, request: m.net.request };
   },
-  start(inst, filter, sink, opts) {
+  start(inst, filter, sink) {
     inst.ac = new AbortController();
-    inst.net = inst.pool; // keep
-    return import('@welshman/net').then(({ request }) =>
-      request({
-        relays: [inst.url],
-        filters: [filter],
-        context: { pool: inst.pool },
-        signal: inst.ac.signal,
-        onEvent: (e) => sink.event(e.id),
-        onEose: () => sink.eose(),
-      }),
-    );
+    return inst.request({
+      relays: [inst.url],
+      filters: [filter],
+      context: { pool: inst.pool },
+      signal: inst.ac.signal,
+      onEvent: (e) => sink.event(e.id),
+      onEose: () => sink.eose(),
+    });
   },
   teardown(inst) {
     inst.ac?.abort();
@@ -379,11 +398,12 @@ const welshmanNoDelay = {
   ...welshman,
   id: 'welshman-nodelay',
   variant: false,
-  api: 'Socket.recvBatchDelay = 0, then request({relays: [url], filters: [filter], context: {pool}, onEvent, onEose})',
+  api: 'Socket.sendBatchDelay = 0 and Socket.recvBatchDelay = 0, then request({relays: [url], filters: [filter], context: {pool}, onEvent, onEose})',
   notes:
-    'Welshman with its receive throttle off (its public static setting; ranked as the library at its fastest configuration, the `welshman` row is the default). By default every Socket hands inbound messages to subscribers through a TaskQueue of recvBatchSize 20 per recvBatchDelay 100 ms (a setTimeout between batches), so a socket delivers at most ~200 messages per second whatever the CPU; here the public static Socket.recvBatchDelay is set to 0 (the queue then drains on a microtask), which shows the cost of the parsing, verification and bookkeeping alone. Otherwise as the welshman row.',
+    'welshman at its fastest configuration (ranked; the `welshman` row is the default configuration): its send and receive queue delays off through the public static settings. By default every Socket sends through a TaskQueue that waits Socket.sendBatchDelay (100 ms, a setTimeout) before each batch, so the REQ leaves 100 ms after request(), and hands inbound messages to subscribers through a TaskQueue of recvBatchSize 20 per recvBatchDelay 100 ms, so a socket delivers at most ~200 messages per second whatever the CPU; here Socket.sendBatchDelay = 0 and Socket.recvBatchDelay = 0 (the queues then drain on a microtask), which leaves the cost of the parsing, verification and bookkeeping. Otherwise as the welshman row (nostr-tools/wasm verifier confirmed in load(); Tracker dedup, matchFilters and the result array on every event, unconditional).',
   async load(opts) {
     const m = await welshman.load(opts);
+    m.net.Socket.sendBatchDelay = 0;
     m.net.Socket.recvBatchDelay = 0;
     return m;
   },
@@ -402,7 +422,8 @@ const applesauce = {
   },
   verify: 'explicit',
   notes:
-    'applesauce-relay delivers events unverified (verification belongs to applesauce-core\'s EventStore); the harness calls applesauce-core/helpers verifyEvent (nostr-tools/pure: id + signature) on each event. The rxjs WebSocketSubject connects lazily on the first subscription, so the connect is inside the timed run (~1 ms on loopback). A new Relay per run.',
+    'applesauce-relay delivers events unverified (verification belongs to applesauce-core\'s EventStore); the harness calls applesauce-core/helpers verifyEvent (nostr-tools/pure: id + signature) on each event. The rxjs WebSocketSubject connects lazily on the first subscription, so the connect is inside the timed run (~1 ms on loopback). A new Relay per run. ' +
+    'The applesauce app path (relay → EventStore.add, which verifies and indexes) is not a row: a store is outside the job. When it was tested, applesauce-core\'s EventStore dropped expired events (keepExpired false by default) except one whose expiration tag is "0": it tests the timestamp for truthiness, so 0 reads as no expiration.',
   async load() {
     const [relay, helpers] = await Promise.all([import('applesauce-relay'), import('applesauce-core/helpers')]);
     return { Relay: relay.Relay, verifyEvent: helpers.verifyEvent };
@@ -426,48 +447,13 @@ const applesauce = {
   },
 };
 
-const applesauceStore = {
-  ...applesauce,
-  id: 'applesauce-eventstore',
-  variant: true,
-  api: 'new Relay(url) + new EventStore(), relay.subscription(filter) → eventStore.add(event, relay.url)',
-  verify: 'library',
-  notes:
-    'The applesauce app path: every event goes into an applesauce-core EventStore, which verifies it (verifyEvent = nostr-tools/pure, id + signature) and indexes it; an event counts as delivered when add() returns it as newly inserted. keepOldVersions: true so older versions of replaceable events stay (the default keeps only the newest per kind/pubkey/d, which is a store policy, not verification); keepExpired stays false (default), so expired events are dropped, except one whose expiration tag is "0" (it tests the timestamp for truthiness, so 0 means no expiration): a partial expired set, accepted_ok false. A new EventStore and Relay per run; the connect is inside the timed run.',
-  async load() {
-    const [relay, helpers, core] = await Promise.all([import('applesauce-relay'), import('applesauce-core/helpers'), import('applesauce-core')]);
-    return { Relay: relay.Relay, verifyEvent: helpers.verifyEvent, EventStore: core.EventStore };
-  },
-  async setup(m, url) {
-    const store = new m.EventStore({ keepOldVersions: true });
-    store.keepOldVersions = true;
-    return { relay: new m.Relay(url), store };
-  },
-  start(inst, filter, sink) {
-    const store = inst.store;
-    const url = inst.relay.url;
-    inst.sub = inst.relay.subscription(filter).subscribe({
-      next: (m) => {
-        if (m === 'EOSE') sink.eose();
-        else if (store.add(m, url) === m) sink.event(m.id);
-      },
-      error: (e) => sink.error(e),
-    });
-  },
-  teardown(inst) {
-    inst.sub?.unsubscribe();
-    inst.relay.close?.();
-    inst.store.dispose?.();
-  },
-};
-
 // ---------------------------------------------------------------- rx-nostr
 
 const rxNostr = {
   id: 'rx-nostr',
   library: 'rx-nostr',
   pkg: 'rx-nostr',
-  api: 'createRxNostr({verifier}) + setDefaultRelays([url]), rxNostr.use(createRxBackwardReq()).subscribe({next, complete}); req.emit(filter); req.over()',
+  api: 'createRxNostr({verifier, skipFetchNip11, skipValidateFilterMatching}) + setDefaultRelays([url]), rxNostr.use(createRxBackwardReq()).subscribe({next, complete}); req.emit(filter); req.over()',
   websocket: wsGlobal,
   get crypto() {
     return `@noble/curves ${short(nestedVer('@rx-nostr/crypto', '@noble/curves'))} (pure JS) via @rx-nostr/crypto ${ver('@rx-nostr/crypto')} verifier`;
@@ -476,7 +462,8 @@ const rxNostr = {
   notes:
     "createRxNostr requires a verifier; the standard one is @rx-nostr/crypto's verifier (async, on the main thread). It checks the signature against the hash it recomputes and never compares it to event.id, so the harness also calls @rx-nostr/crypto getEventHash(event) and drops events whose id differs (a second serialization + sha256 per event). " +
     '@rx-nostr/crypto verify() calls console.warn with a stack trace for every event whose signature does not parse (the "sig":"" events): console.warn is silenced in this process. ' +
-    'rx-nostr drops expired (NIP-40) events by default (skipExpirationCheck: false). The backward request completes on EOSE: completion is the EOSE delivered to the app. eoseTimeout raised to --timeout-ms (default 30 s: it would complete a slow stream early). connectionStrategy "aggressive" + a wait for the relay state "connected" puts the connect in setup. A new rxNostr per run.',
+    'rx-nostr drops expired (NIP-40) events by default (skipExpirationCheck: false). The backward request completes on EOSE: completion is the EOSE delivered to the app. eoseTimeout raised to --timeout-ms (default 30 s: it would complete a slow stream early). connectionStrategy "aggressive" + a wait for the relay state "connected" puts the connect in setup. ' +
+    'skipFetchNip11: true (documented option; by default each relay connection starts a NIP-11 fetch and the first REQ of a process waits for it, to read max_subscriptions) and skipValidateFilterMatching: true (documented option; by default every event is matched against the REQ filter again). A new rxNostr per run.',
   async load() {
     // @rx-nostr/crypto's verify() console.warns a stack trace for every event whose signature
     // does not parse; an app would route that to its logger: silenced (HARNESS.md "Fairness").
@@ -489,6 +476,8 @@ const rxNostr = {
       verifier: m.crypto.verifier,
       eoseTimeout: opts.timeoutMs,
       connectionStrategy: 'aggressive',
+      skipFetchNip11: true,
+      skipValidateFilterMatching: true,
     });
     rx.setDefaultRelays([url]);
     const norm = Object.keys(rx.getDefaultRelays())[0] ?? url;
@@ -520,7 +509,7 @@ const rxNostr = {
 const snortCommon = {
   library: 'snort (@snort/system)',
   pkg: '@snort/system',
-  api: 'new NostrSystem({checkSigs: true}) + ConnectToRelay(url), system.Query(RequestBuilder.withFilter().limit(n)).on("event"/"eose")',
+  api: 'new NostrSystem({checkSigs: true}) + ConnectToRelay(url), system.Query(RequestBuilder.withOptions({leaveOpen: true, groupingDelay: 0}).withFilter().limit(n)).on("event"/"eose"), query.start()',
   websocket: wsPackage('isomorphic-ws'),
   verify: 'library',
   async setup(m, url) {
@@ -529,12 +518,15 @@ const snortCommon = {
       ...(m.optimizer ? { optimizer: m.optimizer } : {}),
     });
     await sys.ConnectToRelay(url, { read: true, write: false });
+    // ConnectToRelay resolves before the socket is open (Connection.connect(awaitOpen = false)):
+    // wait for the handshake here, untimed
+    await poll(() => sys.pool.getConnection(url)?.isOpen === true, 10000, 'snort relay connection open');
     return { sys, m, url };
   },
   start(inst, filter, sink) {
     const { RequestBuilder, EventExt } = inst.m.sys;
     const rb = new RequestBuilder(`bench-${Math.random().toString(36).slice(2)}`);
-    rb.withOptions({ leaveOpen: true });
+    rb.withOptions({ leaveOpen: true, groupingDelay: 0 });
     rb.withFilter().limit(filter.limit).relay(inst.url);
     const q = inst.sys.Query(rb);
     inst.q = q;
@@ -565,7 +557,11 @@ async function importSnort() {
 }
 
 const SNORT_NOTES =
-  'NostrSystem does not verify by default (checkSigs: false); the harness turns checkSigs on. The request uses leaveOpen: true (the query is closed in teardown): with the default (false) a 30 s QueryFetchTimeout hard timer would cut a long stream, and the trace closes at the EOSE while the last events of the socket read that carried it still wait in the pool\'s queueMicrotask verify batch, so those are dropped (a tail of ~50 events lost, a different number every run). The Query feed (NoteCollection) hands new events to "event" listeners on a timer (emitInterval), so events reach the app after the EOSE; the run ends at the last one. The connection pool batches the events of one microtask turn into one optimizer.batchVerify call; verification checks the signature against an id it recomputes (EventExt.createId) but never compares it to event.id, so the harness also calls EventExt.createId(event) and drops events whose id differs (a second serialization + sha256 per event). The Query delivers through its feed, a NoteCollection, which keeps one event per replaceable key (an older kind 0/3/1xxxx version is never delivered) and adds an event only if created_at > (stored.created_at ?? 0), so an event with created_at 0 is never delivered: on the corpus it drops valid events (accepted_ok false). "event" handlers receive arrays of new events. Other options default (the automatic outbox model only acts on filters with authors). A new NostrSystem per run.';
+  'NostrSystem does not verify by default (checkSigs: false); the harness turns checkSigs on. ' +
+  'Request options: groupingDelay: 0 (the option snort\'s own fetch() sets; by default Query.start waits groupingDelay = 100 ms on a setTimeout before it sends the REQ, to merge requests) and leaveOpen: true (the query is closed in teardown): with the default (false) a 30 s QueryFetchTimeout hard timer would cut a long stream, and the trace closes at the EOSE while the last events of the socket read that carried it still wait in the pool\'s queueMicrotask verify batch, so those are dropped (a tail of ~50 events lost, a different number every run). ' +
+  'ConnectToRelay does not wait for the socket to open; setup waits until the pool\'s connection reports isOpen, so the handshake is untimed. Each connection also starts a NIP-11 fetch at connect (in parallel with the handshake, kept in a module-level cache). ' +
+  'Unconditional library work: the Query delivers through its feed, a NoteCollection, a sorted in-memory store (a SortedMap insert with splice per event) that hands new events to "event" listeners on a timer (emitInterval 300 ms), so events reach the app up to 300 ms after the EOSE and the run ends at the last one. That store keeps one event per replaceable key (an older kind 0/3/1xxxx version is never delivered) and adds an event only if created_at > (stored.created_at ?? 0), so an event with created_at 0 is never delivered: on the corpus it drops valid events (accepted_ok false). ' +
+  'The connection pool batches the events of one microtask turn into one optimizer.batchVerify call; verification checks the signature against an id it recomputes (EventExt.createId) but never compares it to event.id, so the harness also calls EventExt.createId(event) and drops events whose id differs (a second serialization + sha256 per event). "event" handlers receive arrays of new events. Other options default (the automatic outbox model only acts on filters with authors). A new NostrSystem per run. The published dist has extensionless relative ESM imports: on Node the harness registers a module-resolution hook (snort-resolve.mjs: retries .js and /index.js, as a bundler does) to load the unmodified package; Bun resolves them itself; Deno cannot load it.';
 
 const snort = {
   ...snortCommon,
@@ -605,50 +601,6 @@ const snortWasm = {
   },
 };
 
-// ---------------------------------------------------------------- nostr-fetch
-
-const nostrFetch = {
-  id: 'nostr-fetch',
-  library: 'nostr-fetch',
-  pkg: 'nostr-fetch',
-  api: 'NostrFetcher.init(), for await (ev of fetcher.allEventsIterator([url], {}, {}, {limitPerReq}))',
-  websocket: wsGlobal,
-  get crypto() {
-    return `@noble/curves ${short(nestedVer('@nostr-fetch/kernel', '@noble/curves'))} (pure JS) via @nostr-fetch/kernel verifyEventSig`;
-  },
-  verify: 'library',
-  variant: true,
-  notes:
-    'A fetcher of past events, the only JS library here with no live subscription: allEventsIterator pages backwards in time, each page a REQ with until = the oldest created_at seen so far and limit = min(limitPerReq, 5000), until a page brings no new event. The relay ignores filters, so the second page receives the whole workload again (all duplicates, each one still verified before the dedup) and the iterator ends after that second EOSE: this row measures two full streams, hence variant (diagnostic, not ranked); against a relay that honors until the second page would be nearly empty. ' +
-    'Default verifier (@nostr-fetch/kernel verifyEventSig: id compared to the recomputed sha256, then schnorr.verify), awaited once per event, and filter matching on; every event also re-arms a setTimeout (abortSubBeforeEoseTimeoutMs, raised to --timeout-ms from 10 s). There is no EOSE callback: the iterator ending is the EOSE. Its relay pool console.errors a line for every event that fails its shape check (the "sig":"" ones): console.error is silenced in this process. The default relay pool connects lazily inside the iterator, so the connect is in the timed run. A new NostrFetcher per run.',
-  async load() {
-    // the default relay pool console.errors "malformed event in R2C EVENT" for each event its
-    // shape check rejects (the "sig":"" ones): silenced, as an app's logger would
-    console.error = () => {};
-    return import('nostr-fetch');
-  },
-  async setup(m, url) {
-    return { fetcher: m.NostrFetcher.init({}), url };
-  },
-  start(inst, filter, sink, opts) {
-    inst.ac = new AbortController();
-    return (async () => {
-      const it = inst.fetcher.allEventsIterator([inst.url], {}, {}, {
-        limitPerReq: filter.limit,
-        abortSubBeforeEoseTimeoutMs: opts.timeoutMs,
-        connectTimeoutMs: 10000,
-        signal: inst.ac.signal,
-      });
-      for await (const ev of it) sink.event(ev.id);
-      sink.eose();
-    })();
-  },
-  teardown(inst) {
-    inst.ac?.abort();
-    inst.fetcher.shutdown();
-  },
-};
-
 // ---------------------------------------------------------------- Nostr Dev Kit (rust-nostr)
 
 const nostrSdk = {
@@ -661,7 +613,7 @@ const nostrSdk = {
   crypto: 'libsecp256k1 (C, secp256k1-sys 0.10.1 via the Rust secp256k1 0.30 crate, in the native addon; nostr 0.45.3, nostr-sdk 0.45.2)',
   verify: 'library',
   notes:
-    'Native bindings (uniffi, napi) of the Rust nostr-sdk; the timeout argument of streamEvents is left unset (none). Native bindings of the Rust nostr-sdk: socket, JSON parsing, id and signature verification run in Rust on its own threads; each delivered event crosses the FFI as an Event handle and the harness reads its id with event.id().toHex() (an FFI call). The stream ends at EOSE (ReqExitPolicy.ExitOnEose): its end is the EOSE. It drops expired (NIP-40) events unconditionally. Deduplication across relays is by id. A new Client per run.',
+    'Native bindings (uniffi, napi) of the Rust nostr-sdk: socket, JSON parsing, id and signature verification run in Rust on its own threads; each delivered event crosses the FFI as an Event handle and the harness reads its id with event.id().toHex() (an FFI call). The stream ends at EOSE (ReqExitPolicy.ExitOnEose): its end is the EOSE; the timeout argument of streamEvents is left unset (none). It drops expired (NIP-40) events unconditionally. Deduplication across relays is by id. A new Client per run.',
   async load() {
     return import('@nostrdevkit/nostr-sdk-node');
   },
@@ -749,11 +701,9 @@ export const CLIENTS = [
   welshman,
   welshmanNoDelay,
   applesauce,
-  applesauceStore,
   rxNostr,
   snort,
   snortWasm,
-  nostrFetch,
   nostrSdk,
   qntx,
   qntxWasm,

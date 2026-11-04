@@ -144,8 +144,9 @@ function trapUncaught() {
 
 // Runs one subscription end to end (HARNESS.md "A run"). Returns
 // { ms, cpu, accepted, xor, ids } or throws. HARNESS.md "Fairness" 5: the per-event callback
-// only counts the event and XORs its id; the clock and the CPU are read only for events that
-// arrive after the EOSE (they move the end of the run). With `collect` (an extra untimed
+// only counts the event and XORs its id; the clock is read only for events that arrive after
+// the EOSE (they move the end of the run), the CPU counter at the EOSE and once at the end.
+// With `collect` (an extra untimed
 // diagnostic run, see runChild) it also keeps the ids.
 async function oneRun(C, ctx, url, w, opts, collect = false) {
   // 1. setup, untimed
@@ -154,7 +155,7 @@ async function oneRun(C, ctx, url, w, opts, collect = false) {
   const words = new Uint32Array(8);
   const ids = collect ? [] : null;
   let accepted = 0;
-  let eoseAt = -1, lastAt = -1, endAt = -1, cpuEnd = null;
+  let eoseAt = -1, lastAt = -1, endAt = -1, cpuEnd = null, cpuAt = -1;
   const maxAccept = w.valid_events + w.ambiguous_ids.length;
   let finish;
   const done = new Promise((r) => (finish = r));
@@ -162,15 +163,25 @@ async function oneRun(C, ctx, url, w, opts, collect = false) {
   const armIdle = () => {
     if (idleTimer) return;
     idleTimer = setInterval(() => {
+      // the CPU counter for events that came after the EOSE is read here, at most once per
+      // 50 ms tick, never in the per-event callback (it then also counts the idle part of the
+      // tick, a few µs of CPU)
+      if (lastAt > cpuAt) {
+        cpuEnd = process.cpuUsage();
+        cpuAt = lastAt;
+      }
       if (now() - Math.max(lastAt, eoseAt) >= 1000) finish({ how: 'idle' });
     }, 50);
   };
   const afterEose = () => {
     // events delivered after the EOSE (verification on another thread, a timer, a later
-    // microtask) move the end of the run
-    cpuEnd = process.cpuUsage();
+    // microtask) move the end of the run: the clock is read for each of them, the CPU
+    // counter once, when the set is complete (else by the idle timer above)
     endAt = lastAt = now();
-    if (accepted >= maxAccept) finish({ how: 'complete' });
+    if (accepted >= maxAccept) {
+      cpuEnd = process.cpuUsage();
+      finish({ how: 'complete' });
+    }
   };
 
   const sink = {
@@ -190,7 +201,7 @@ async function oneRun(C, ctx, url, w, opts, collect = false) {
       if (eoseAt >= 0) return;
       cpuEnd = process.cpuUsage();
       const t = now();
-      eoseAt = t;
+      eoseAt = cpuAt = t;
       endAt = t;
       if (accepted >= maxAccept) finish({ how: 'complete' });
       else armIdle();
@@ -215,6 +226,8 @@ async function oneRun(C, ctx, url, w, opts, collect = false) {
   activeSink = null;
   clearTimeout(timeout);
   if (idleTimer) clearInterval(idleTimer);
+  // the run's numbers as they stood when it ended (a late event during teardown changes nothing)
+  const out = { ms: endAt - t0, cpu: cpuEnd ? cpuMs(cpuEnd) - cpuMs(cpu0) : null, accepted, xor: wordsHex(words), ids };
 
   // 4. teardown, untimed (bounded: a library that hangs on close must not hang the run)
   try {
@@ -225,13 +238,7 @@ async function oneRun(C, ctx, url, w, opts, collect = false) {
 
   if (res.how === 'error') throw new Error(`error during the run: ${res.error?.message ?? res.error}`);
   if (res.how === 'timeout') throw new Error(`no EOSE within --timeout-ms ${opts.timeoutMs} (accepted ${accepted} events so far)`);
-  return {
-    ms: endAt - t0,
-    cpu: cpuMs(cpuEnd) - cpuMs(cpu0),
-    accepted,
-    xor: wordsHex(words),
-    ids,
-  };
+  return out;
 }
 
 function withTimeout(p, ms, msg) {
