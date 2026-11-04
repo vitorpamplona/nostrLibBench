@@ -32,3 +32,4 @@ zig/zig-out/
 swift/**/.build/
 swift/**/.swiftpm/
 /results/full/
+/results/full-*/
