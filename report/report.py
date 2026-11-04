@@ -128,11 +128,25 @@ def main():
             rows.append(r)
     workloads = [w["name"] for w in manifest["workloads"] if any(r["workload"] == w["name"] for r in rows)]
 
+    # The forged-* workloads check verification itself (forged ids, content, sigs): a client
+    # that fails one is not ranked on any workload, whatever its speed.
+    forged_wls = [w["name"] for w in manifest["workloads"] if w.get("forged")]
+    forged_fail = {}
+    for r in rows:
+        if r["workload"] in forged_wls and not r["ok"]:
+            forged_fail.setdefault((r["harness"], r["client"]), []).append(f"{r['workload']}: {r['why']}")
+
     def rankable(r):
-        return r["ok"] and r.get("verify") in ("library", "explicit") and not r.get("variant")
+        return (
+            r["ok"]
+            and r.get("verify") in ("library", "explicit")
+            and not r.get("variant")
+            and (r["harness"], r["client"]) not in forged_fail
+        )
 
     # The headline row of each library: its fastest rankable row on `all` (else its first workload).
-    head_wl = "all" if "all" in workloads else (workloads[0] if workloads else None)
+    speed_wls = [w for w in workloads if w not in forged_wls]
+    head_wl = "all" if "all" in speed_wls else (speed_wls[0] if speed_wls else None)
     headline = {}
     for r in rows:
         if r["workload"] != head_wl or not rankable(r):
@@ -180,7 +194,7 @@ def main():
         )
         L.append(
             "| # | language | client | version | verify | crypto | websocket | events/s | µs/event | "
-            "median ms | first run ms | CPU ms | CPU µs/event | CPU/wall | peak RSS MB | ambiguous | expired |"
+            "median ms | first run ms | CPU ms | CPU µs/event | cores used | peak RSS MB | ambiguous | expired |"
         )
         L.append("|---:|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|")
         for i, r in enumerate(ranked, 1):
@@ -202,7 +216,7 @@ def main():
                 "The same rows ranked by CPU time per event (all threads): the cost of the job "
                 "regardless of how many cores a library spreads it over.\n"
             )
-            L.append("| # | language | client | CPU µs/event | wall µs/event | CPU/wall |")
+            L.append("| # | language | client | CPU µs/event | wall µs/event | cores used |")
             L.append("|---:|---|---|---:|---:|---:|")
             for i, r in enumerate(by_cpu, 1):
                 L.append(
@@ -225,22 +239,42 @@ def main():
                 f"| {r['language']} | `{r['client']}` | {r.get('version', '')} | {r.get('verify', '')} | "
                 f"{r.get('crypto', '')} | {fmt(r.get('events_per_s'))} | {fmt(r.get('us_per_event'), 1)} | "
                 f"{fmt(r.get('median_ms'))} | {fmt(r.get('cpu_ms'))} | {fmt(r.get('peak_rss_mb'))} | "
-                f"{(r.get('notes') or '').replace('|', '/')} |"
+                f"{('**Fails the forged-event checks, not ranked.** ' if (r['harness'], r['client']) in forged_fail else '') + (r.get('notes') or '').replace('|', '/')} |"
             )
         L.append("")
 
-    if len(workloads) > 1:
-        L.append("## Per workload (µs/event, correct rows)\n")
-        clients = sorted({(r["language"], r["client"]) for r in rows if r["ok"]})
-        L.append("| language | client | " + " | ".join(workloads) + " |")
-        L.append("|---|---|" + "---:|" * len(workloads))
-        cell = {(r["language"], r["client"], r["workload"]): r for r in rows if r["ok"]}
-        for lang, client in clients:
-            vals = [fmt(cell[(lang, client, w)]["us_per_event"], 1) if (lang, client, w) in cell else "–" for w in workloads]
+    if any(r["workload"] in forged_wls for r in rows):
+        L.append("## Verification checks (forged events)\n")
+        L.append(
+            "Each forged workload sends ~200 valid events, each with a forged copy: changed content "
+            "(id and sig kept), a changed id field (content and sig kept), or another event's sig. "
+            "The copy goes first for every other event, so a client that marks an id as seen before "
+            "verifying it loses the genuine event. A client that fails any of them is not ranked.\n"
+        )
+        fw = [w for w in forged_wls if any(r["workload"] == w for r in rows)]
+        L.append("| language | client | " + " | ".join(fw) + " |")
+        L.append("|---|---|" + "---|" * len(fw))
+        cell = {(r["language"], r["client"], r["workload"]): r for r in rows if r["workload"] in fw}
+        for lang, client in sorted({(r["language"], r["client"]) for r in rows if r["workload"] in fw}):
+            vals = []
+            for w in fw:
+                c = cell.get((lang, client, w))
+                vals.append("–" if c is None else ("pass" if c["ok"] else "**fail**: " + str(c["why"]).replace("|", "/")[:120]))
             L.append(f"| {lang} | `{client}` | " + " | ".join(vals) + " |")
         L.append("")
 
-    bad = [r for r in rows if not r["ok"]]
+    if len(speed_wls) > 1:
+        L.append("## Per workload (µs/event, correct rows)\n")
+        clients = sorted({(r["language"], r["client"]) for r in rows if r["ok"] and r["workload"] in speed_wls})
+        L.append("| language | client | " + " | ".join(speed_wls) + " |")
+        L.append("|---|---|" + "---:|" * len(speed_wls))
+        cell = {(r["language"], r["client"], r["workload"]): r for r in rows if r["ok"]}
+        for lang, client in clients:
+            vals = [fmt(cell[(lang, client, w)]["us_per_event"], 1) if (lang, client, w) in cell else "–" for w in speed_wls]
+            L.append(f"| {lang} | `{client}` | " + " | ".join(vals) + " |")
+        L.append("")
+
+    bad = [r for r in rows if not r["ok"] and r["workload"] not in forged_wls]
     if bad:
         L.append("## Not ranked: wrong events, errors\n")
         L.append("| language | client | workload | verify | accepted | median ms | why |")

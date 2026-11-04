@@ -321,6 +321,70 @@ def main():
         ("smoke", "a ~1,400-event slice of all with every edge case, to check harnesses quickly",
          lambda e: e["id"] in smoke_ids),
     ]
+    # The forged workloads: the corpus's invalid events are all invalid the same way (an
+    # empty sig), so they cannot tell whether a client compares the id. Each of these takes
+    # ~200 valid events (every 150th clean one: not expired, not ambiguous, created_at > 0)
+    # and sends each one together with a forged copy:
+    #   forged-content  content changed, id and sig kept: the sig still matches the id, so
+    #                   only recomputing the id catches it;
+    #   forged-id       id field changed, content and sig kept: catches a client that checks
+    #                   the sig against its own recomputed id but never compares the id field;
+    #   forged-sig      sig taken from another event: caught by the signature check.
+    # The copy goes first for every other event, so a client that marks an id as seen
+    # before verifying it loses the genuine event that follows (forged-content, forged-sig).
+    # Only the genuine events are valid.
+    clean = [(raw, e) for raw, e in events
+             if e["id"] not in invalid and not is_expired(e) and e["created_at"] > 0]
+    base = clean[7::150]
+
+    def forge(kind, n, e):
+        f = dict(e)
+        if kind == "content":
+            f["content"] = e["content"] + " (forged)"
+        elif kind == "id":
+            f["id"] = e["id"][:-1] + ("0" if e["id"][-1] != "0" else "1")
+        else:
+            f["sig"] = base[(n + 1) % len(base)][1]["sig"]
+        return json.dumps(f, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
+    forged = {}
+    for kind in ("content", "id", "sig"):
+        lines_k = []
+        for n, (raw, e) in enumerate(base):
+            pair = [forge(kind, n, e), raw]
+            lines_k += pair if n % 2 == 0 else pair[::-1]
+        forged[f"forged-{kind}"] = lines_k
+    forged_desc = {
+        "forged-content": "~200 valid events, each with a copy whose content was changed (id and sig kept)",
+        "forged-id": "~200 valid events, each with a copy whose id field was changed (content and sig kept)",
+        "forged-sig": "~200 valid events, each with a copy carrying another event's sig",
+    }
+    base_ids = [e["id"] for _, e in base]
+    forged_workloads = []
+    for name, raws in forged.items():
+        file = f"{name}.ndjson"
+        with open(os.path.join(args.out, file), "wb") as f:
+            for raw in raws:
+                f.write(raw)
+                f.write(b"\n")
+        size = sum(len(r) for r in raws)
+        forged_workloads.append(
+            {
+                "name": name,
+                "file": file,
+                "description": forged_desc[name],
+                "events": len(raws),
+                "bytes": size,
+                "avg_bytes": round(size / len(raws)),
+                "valid_events": len(base_ids),
+                "valid_id_xor": xor_ids(base_ids),
+                "ambiguous_ids": [],
+                "expired_ids": [],
+                "forged": True,
+            }
+        )
+        print(f"{name:14s} {len(raws):6d} events, {len(base_ids)} valid, {len(raws) - len(base_ids)} forged")
+
     for name, desc, pred in workloads_def:
         chosen = [(raw, e) for raw, e in events if pred(e)]
         if not chosen:
@@ -361,11 +425,13 @@ def main():
         "events": len(events),
         "verifier": verifier,
         "invalid": [{"id": i, "reason": r} for i, r in sorted(invalid.items())],
-        "workloads": workloads,
+        "workloads": workloads + forged_workloads,
     }
-    with open(os.path.join(args.out, "manifest.json"), "w") as f:
+    tmp = os.path.join(args.out, "manifest.json.tmp")
+    with open(tmp, "w") as f:
         json.dump(manifest, f, indent=2)
         f.write("\n")
+    os.replace(tmp, os.path.join(args.out, "manifest.json"))
     n_amb = sum(1 for r in invalid.values() if r == AMBIGUOUS)
     print(f"{len(events)} events, {len(invalid) - n_amb} invalid, {n_amb} ambiguous -> {args.out}")
 

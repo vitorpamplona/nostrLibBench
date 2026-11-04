@@ -142,6 +142,22 @@ U+0000, and its id matches only when the serializer writes it as `\u0000` (what
 `JSON.stringify` and serde_json do) instead of verbatim (the letter of NIP-01). Either
 outcome is correct for an ambiguous event; the report shows which way each library went.
 
+The corpus's invalid events are all invalid the same way (an empty `sig`), so they cannot
+show whether a client compares the id. Three **forged** workloads, built from ~200 clean
+valid events of `all`, check verification itself: each valid event is sent with a forged
+copy, the copy first for every other event (a client that marks an id as seen before
+verifying it then loses the genuine one):
+
+| workload | the forged copy | caught by |
+|---|---|---|
+| `forged-content` | content changed, `id` and `sig` kept | recomputing the id (the sig still matches the `id` field) |
+| `forged-id` | `id` field changed, content and `sig` kept | comparing the recomputed id with the `id` field |
+| `forged-sig` | another event's `sig` | the signature check |
+
+Only the genuine events are valid (`"forged": true` in the manifest). They are correctness
+checks, not speed runs: every client runs them once (`--quick`), and a client that fails
+any of them is not ranked.
+
 66 valid events are **expired**: a NIP-40 `expiration` tag that passed in 2024 (kinds 15,
 30315 and 1). Some libraries drop expired events (rust-nostr does, unconditionally). A
 library may deliver all of them or none of them; the report shows which. They are part of
