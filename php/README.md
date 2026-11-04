@@ -33,7 +33,9 @@ process per client and workload and reads one JSON line per run from it; it wait
 4. Teardown, untimed: close the connection.
 
 `cpu_ms` is `getrusage()` user + system over t0..end; `peak_rss_mb` is `ru_maxrss` at the
-end of the child. The per-run timeout is a `pcntl_alarm`: when it fires, the child reports
+end of the child; `base_rss_mb` is `VmRSS` after the first run's setup and its
+`gc_collect_cycles()`, before the REQ. `alloc_bytes` is `null`: PHP has no cumulative
+allocated-bytes counter (`memory_get_usage()` is the current heap). The per-run timeout is a `pcntl_alarm`: when it fires, the child reports
 how many events it had accepted and the time per accepted event, and the row gets
 `error: "timeout: …"`.
 

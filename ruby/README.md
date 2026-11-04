@@ -42,7 +42,9 @@ Per run (HARNESS.md "A run"):
 4. Teardown, untimed: unsubscribe, close / stop the reactor.
 
 `cpu_ms` is `CLOCK_PROCESS_CPUTIME_ID` (all threads) over t0..end. `peak_rss_mb` is
-`VmHWM` from `/proc/self/status` at the end of the child.
+`VmHWM` from `/proc/self/status` at the end of the child; `base_rss_mb` is `VmRSS` after the
+first run's setup and its `GC.start`, before the REQ. `alloc_bytes` is `null`: Ruby has no
+cumulative allocated-bytes counter (`GC.stat` counts allocated objects, not bytes).
 
 A run that sees no EOSE within `--timeout-ms` (default 300 s) ends the client: the row
 gets `error: "timeout: …"` with how many events had been accepted and the time per

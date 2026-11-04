@@ -66,7 +66,17 @@ ids that matches both); a set that matches none is `accepted_ok: false`, and one
 untimed diagnostic run that keeps the ids says which of the optional events it holds. Measured runs stop once `--min-runs` runs are
 done and their timed milliseconds add up to `--min-time-ms`, or at `--max-runs`.
 `peak_rss_mb` is `process.resourceUsage().maxRSS` (KiB on all three runtimes) at the end of
-the child, over its warm-up and measured runs.
+the child, over its warm-up and measured runs. `base_rss_mb` is `process.memoryUsage().rss`
+right after each workload's first setup, after a full GC (`Bun.gc(true)`; `gc()` on Node and
+Deno, whose children run with `--expose-gc`): one child runs every workload of a client, so a
+later workload's base follows the earlier workloads in that process. `alloc_bytes` is V8's
+cumulative `total_allocated_bytes` from `v8.getHeapStatistics()` (read before `t0` and where
+the run's end CPU time is read; the median run's value, the mean of the two middle runs with
+an even count), which only Deno's V8 has: Node 22's V8 lacks it and Bun's field of that name
+is a current heap size, so both report `null`. It counts the main isolate's JS heap only:
+WebAssembly memory (nostr-wasm), native addons (nostr-sdk-node's Rust), `ArrayBuffer`
+backing stores and Workers are not counted, and V8 adds it per allocation buffer, so it is
+coarse (~100 KB) on small workloads.
 
 **WebSocket.** Each library gets the WebSocket it picks by default in that runtime: the
 global `WebSocket` (Node 22: undici; Bun: its native client; Deno: its Rust client), or the

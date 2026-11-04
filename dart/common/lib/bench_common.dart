@@ -77,6 +77,18 @@ double peakRssMb() {
   return 0;
 }
 
+/// The current resident set (VmRSS), in MB like [peakRssMb].
+double? rssMb() {
+  try {
+    for (final line in File('/proc/self/status').readAsLinesSync()) {
+      if (line.startsWith('VmRSS:')) {
+        return int.parse(line.split(RegExp(r'\s+'))[1]) / 1024.0;
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
 class Workload {
   final String name;
   final int events, validEvents, bytes;
@@ -312,12 +324,21 @@ Future<void> childMain(List<String> args, List<BenchClient> clients) async {
 
 RunCtx? _current;
 
+/// base_rss_mb: VmRSS at the end of the first setup, before the first REQ. Dart has no API to
+/// force a GC, so it is read without one.
+double? _baseRss;
+bool _baseRssRead = false;
+
 Future<_RunResult> _oneRun(BenchClient client, Workload w, Uri url, Settings s) async {
   final ctx = RunCtx(w);
   _current = ctx;
   final timeout = Duration(milliseconds: s.timeoutMs);
   await client.setup(url, ctx).timeout(timeout,
       onTimeout: () => throw TimeoutException('setup (connect) did not finish within ${s.timeoutMs} ms'));
+  if (!_baseRssRead) {
+    _baseRssRead = true;
+    _baseRss = rssMb();
+  }
 
   Future<void> run;
   try {
@@ -433,6 +454,9 @@ Future<Map<String, Object?>> _measure(BenchClient client, Workload w, Uri url, S
     'us_per_event': (median * 1000.0 / w.events * 100).roundToDouble() / 100,
     'cpu_ms': _r1(_median(cpus)),
     'peak_rss_mb': _r1(peakRssMb()),
+    'base_rss_mb': _baseRss == null ? null : _r1(_baseRss!),
+    // the Dart VM has no cumulative allocated-bytes counter outside the VM service (not in AOT)
+    'alloc_bytes': null,
   });
   return row;
 }
@@ -471,6 +495,8 @@ Map<String, Object?> errorRow(BenchClient c, Workload w, String error) => {
       'us_per_event': null,
       'cpu_ms': null,
       'peak_rss_mb': _r1(peakRssMb()),
+      'base_rss_mb': _baseRss == null ? null : _r1(_baseRss!),
+      'alloc_bytes': null,
     };
 
 /// A fresh, unique subscription id.

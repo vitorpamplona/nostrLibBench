@@ -342,6 +342,14 @@ rescue StandardError
   nil
 end
 
+# The current resident set (VmRSS), in MB like peak_rss_mb.
+def rss_mb
+  rss = File.read('/proc/self/status')[/^VmRSS:\s+(\d+)\s+kB/, 1]
+  rss ? (rss.to_i / 1024.0).round(1) : nil
+rescue StandardError
+  nil
+end
+
 def child_main(opts)
   client = CLIENTS.find { |c| c[:id] == opts[:child] } or abort "unknown client #{opts[:child]}"
   out = $stdout
@@ -373,6 +381,8 @@ def child_main(opts)
     tally = Tally.new(amb, exp, complete)
     driver.setup(tally)
     GC.start
+    # base_rss_mb: the end of the first setup (after the full GC above), before the REQ
+    emit.call(type: 'base', base_rss_mb: rss_mb) if i.zero?
     # The per-run timeout: a sleeping watchdog (no work of its own) that reports how far the
     # run got and ends the child. Drivers whose subscribe call blocks run it on this thread.
     cancel = Queue.new
@@ -498,7 +508,10 @@ def build_row(client, w, lines, kill_err, status)
     accepted: nil, accepted_xor: nil, ambiguous_accepted: nil, expired_accepted: nil, accepted_ok: false,
     errors: 0, error: nil, warmup_runs: 0, runs: 0, first_run_ms: nil, median_ms: nil, min_ms: nil, p90_ms: nil,
     run_ms: [], events_per_s: nil, us_per_event: nil, cpu_ms: nil,
-    peak_rss_mb: (done || error_line || {})['peak_rss_mb']
+    peak_rss_mb: (done || error_line || {})['peak_rss_mb'],
+    base_rss_mb: lines.find { |l| l['type'] == 'base' }&.fetch('base_rss_mb', nil),
+    # Ruby has no cumulative allocated-bytes counter (GC.stat counts objects, not bytes)
+    alloc_bytes: nil
   }
   first = runs.first
   if first

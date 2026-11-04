@@ -11,6 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { spawn } from 'node:child_process';
+import v8 from 'node:v8';
 import { fileURLToPath } from 'node:url';
 
 import { CLIENTS, RT, pkgMeta, runtimeInfo } from './clients.mjs';
@@ -18,6 +19,21 @@ import { CLIENTS, RT, pkgMeta, runtimeInfo } from './clients.mjs';
 const SCRIPT = fileURLToPath(import.meta.url);
 const HERE = path.dirname(SCRIPT);
 const BENCH = path.resolve(HERE, '..');
+
+// alloc_bytes: V8's cumulative HeapStatistics.total_allocated_bytes (bytes allocated on the
+// isolate's heap since it started), where the runtime's V8 has it (Deno 2.9, V8 15; Node 22's
+// V8 12.4 does not). Bun's getHeapStatistics() also has a total_allocated_bytes, but it is a
+// current size (it drops after a GC), so Bun reports null like Node.
+const ALLOC_COUNTER = RT !== 'bun' && typeof v8.getHeapStatistics().total_allocated_bytes === 'number';
+const allocNow = () => v8.getHeapStatistics().total_allocated_bytes;
+
+// base_rss_mb: a full GC (Bun.gc(true); globalThis.gc, which the orchestrator exposes in the
+// children with --expose-gc), then the current RSS
+function baseRssMb() {
+  if (RT === 'bun') Bun.gc(true);
+  else if (typeof globalThis.gc === 'function') globalThis.gc();
+  return Math.round((process.memoryUsage().rss / 1048576) * 10) / 10;
+}
 
 // ---------------------------------------------------------------- args
 
@@ -148,14 +164,15 @@ function trapUncaught() {
 // the EOSE (they move the end of the run), the CPU counter at the EOSE and once at the end.
 // With `collect` (an extra untimed
 // diagnostic run, see runChild) it also keeps the ids.
-async function oneRun(C, ctx, url, w, opts, collect = false) {
+async function oneRun(C, ctx, url, w, opts, collect = false, afterSetup = null) {
   // 1. setup, untimed
   const inst = await withTimeout(C.setup(ctx, url, w, opts), opts.timeoutMs, 'setup (connect) timed out');
+  if (afterSetup) afterSetup();
 
   const words = new Uint32Array(8);
   const ids = collect ? [] : null;
   let accepted = 0;
-  let eoseAt = -1, lastAt = -1, endAt = -1, cpuEnd = null, cpuAt = -1;
+  let eoseAt = -1, lastAt = -1, endAt = -1, cpuEnd = null, cpuAt = -1, allocEnd = null;
   const maxAccept = w.valid_events + w.ambiguous_ids.length;
   let finish;
   const done = new Promise((r) => (finish = r));
@@ -168,6 +185,7 @@ async function oneRun(C, ctx, url, w, opts, collect = false) {
       // tick, a few µs of CPU)
       if (lastAt > cpuAt) {
         cpuEnd = process.cpuUsage();
+        if (ALLOC_COUNTER) allocEnd = allocNow();
         cpuAt = lastAt;
       }
       if (now() - Math.max(lastAt, eoseAt) >= 1000) finish({ how: 'idle' });
@@ -180,6 +198,7 @@ async function oneRun(C, ctx, url, w, opts, collect = false) {
     endAt = lastAt = now();
     if (accepted >= maxAccept) {
       cpuEnd = process.cpuUsage();
+      if (ALLOC_COUNTER) allocEnd = allocNow();
       finish({ how: 'complete' });
     }
   };
@@ -201,6 +220,7 @@ async function oneRun(C, ctx, url, w, opts, collect = false) {
       if (eoseAt >= 0) return;
       cpuEnd = process.cpuUsage();
       const t = now();
+      if (ALLOC_COUNTER) allocEnd = allocNow(); // after the clock: the run may end here
       eoseAt = cpuAt = t;
       endAt = t;
       if (accepted >= maxAccept) finish({ how: 'complete' });
@@ -213,7 +233,8 @@ async function oneRun(C, ctx, url, w, opts, collect = false) {
 
   activeSink = sink;
   const timeout = setTimeout(() => finish({ how: 'timeout' }), opts.timeoutMs);
-  // 2. timed
+  // 2. timed (the allocation counter is read where the CPU counter is, before t0 and at the end)
+  const alloc0 = ALLOC_COUNTER ? allocNow() : null;
   const cpu0 = process.cpuUsage();
   const t0 = now();
   try {
@@ -227,7 +248,14 @@ async function oneRun(C, ctx, url, w, opts, collect = false) {
   clearTimeout(timeout);
   if (idleTimer) clearInterval(idleTimer);
   // the run's numbers as they stood when it ended (a late event during teardown changes nothing)
-  const out = { ms: endAt - t0, cpu: cpuEnd ? cpuMs(cpuEnd) - cpuMs(cpu0) : null, accepted, xor: wordsHex(words), ids };
+  const out = {
+    ms: endAt - t0,
+    cpu: cpuEnd ? cpuMs(cpuEnd) - cpuMs(cpu0) : null,
+    alloc: allocEnd != null ? allocEnd - alloc0 : null,
+    accepted,
+    xor: wordsHex(words),
+    ids,
+  };
 
   // 4. teardown, untimed (bounded: a library that hangs on close must not hang the run)
   try {
@@ -298,7 +326,18 @@ function baseRow(C, meta, w) {
     us_per_event: null,
     cpu_ms: null,
     peak_rss_mb: null,
+    base_rss_mb: null,
+    alloc_bytes: null,
   };
+}
+
+// alloc_bytes of the median run: the run whose time is median_ms; with an even number of runs
+// (median_ms is then the mean of the two middle runs) the mean of those two runs' values
+function medianAlloc(runMs, allocs) {
+  if (allocs.some((a) => a == null)) return null;
+  const idx = runMs.map((_, i) => i).sort((a, b) => runMs[a] - runMs[b]);
+  const n = idx.length;
+  return n % 2 ? allocs[idx[(n - 1) >> 1]] : Math.round((allocs[idx[n / 2 - 1]] + allocs[idx[n / 2]]) / 2);
 }
 
 async function runChild(opts, workloads) {
@@ -329,13 +368,16 @@ async function runChild(opts, workloads) {
     let ref = null; // the first run's set
     const runMs = [];
     const cpus = [];
+    const allocs = [];
     let measuredMs = 0;
     const total = () => row.warmup_runs + row.runs;
     try {
       for (;;) {
         const warm = row.warmup_runs < opts.warmupRuns;
         if (!warm && (row.runs >= opts.maxRuns || (row.runs >= opts.minRuns && measuredMs >= opts.minTimeMs))) break;
-        const r = await oneRun(C, ctx, url, w, opts);
+        // base_rss_mb: at the end of this workload's first setup (the first workload's is the
+        // process's first setup; later ones follow the earlier workloads in the same process)
+        const r = await oneRun(C, ctx, url, w, opts, false, total() === 0 ? () => (row.base_rss_mb = baseRssMb()) : null);
         if (!ref) {
           ref = r;
           row.first_run_ms = r1(r.ms);
@@ -350,6 +392,7 @@ async function runChild(opts, workloads) {
           row.runs++;
           runMs.push(r.ms);
           cpus.push(r.cpu);
+          allocs.push(r.alloc);
           measuredMs += r.ms;
         }
         process.stderr.write(
@@ -395,6 +438,7 @@ async function runChild(opts, workloads) {
       row.events_per_s = r1(w.events / (med / 1000));
       row.us_per_event = Math.round((med * 1000 / w.events) * 1000) / 1000;
       row.cpu_ms = r1(median([...cpus].sort((a, b) => a - b)));
+      row.alloc_bytes = medianAlloc(runMs, allocs);
     } else if (row.error !== null) {
       row.run_ms = [];
       row.first_run_ms = null;
@@ -414,9 +458,10 @@ async function runChild(opts, workloads) {
 // ---------------------------------------------------------------- orchestrator
 
 function childCommand(args) {
-  if (RT === 'deno') return [Deno.execPath(), ['run', '-A', SCRIPT, ...args]];
+  // --expose-gc: globalThis.gc for the full GC before base_rss_mb (Bun has Bun.gc)
+  if (RT === 'deno') return [Deno.execPath(), ['run', '-A', '--v8-flags=--expose-gc', SCRIPT, ...args]];
   if (RT === 'bun') return [process.execPath, [SCRIPT, ...args]];
-  return [process.execPath, [...process.execArgv, SCRIPT, ...args]];
+  return [process.execPath, ['--expose-gc', ...process.execArgv, SCRIPT, ...args]];
 }
 
 // Runs a child, streaming its stderr: the harness's own lines pass through; library output

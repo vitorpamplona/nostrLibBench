@@ -48,7 +48,10 @@ rustup the ndk build fails and its rows report the error; the other libraries st
   on the event loop (which would kill an app) ends the run with that error in the row.
 - **CPU**: utime + stime from `/proc/self/stat` (all threads and isolates; clock ticks, 10 ms
   resolution), from `t0` to the moment the run completed.
-- **Memory**: `peak_rss_mb` is `VmHWM` from `/proc/self/status` at the end of the child.
+- **Memory**: `peak_rss_mb` is `VmHWM` from `/proc/self/status` at the end of the child;
+  `base_rss_mb` is `VmRSS` at the end of the first run's setup, before the REQ, without a GC
+  (Dart has no API to force one). `alloc_bytes` is `null`: the VM's allocation counters are
+  only reachable through the VM service, which AOT binaries do not have.
 - **Runtime**: AOT (`dart compile exe`; `dart build cli` for ndk), default VM flags.
 - `LIBBENCH_DUMP=<file>` makes a child write the accepted ids of each run (debugging aid).
 

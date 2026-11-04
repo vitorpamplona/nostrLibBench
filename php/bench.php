@@ -43,6 +43,13 @@ function peak_rss_mb(): ?float
     return isset($r['ru_maxrss']) ? round($r['ru_maxrss'] / 1024, 1) : null; // KiB on Linux
 }
 
+/** The current resident set (VmRSS), in MB like peak_rss_mb. */
+function rss_mb(): ?float
+{
+    $s = @file_get_contents('/proc/self/status');
+    return ($s !== false && preg_match('/^VmRSS:\s+(\d+)\s+kB/m', $s, $m)) ? round((int) $m[1] / 1024, 1) : null;
+}
+
 function pkg_version(string $name): string
 {
     return \Composer\InstalledVersions::isInstalled($name)
@@ -154,6 +161,11 @@ function run_once(string $client, string $url, int $events, Tally $tally, float 
     $relay->connect();
     $relay->getClient()->setTimeout($timeoutS);
     gc_collect_cycles();
+    if ($GLOBALS['base_rss_due'] ?? false) {
+        // base_rss_mb: the end of the row's first setup (after the collection above), before the REQ
+        $GLOBALS['base_rss_due'] = false;
+        emit(['type' => 'base', 'base_rss_mb' => rss_mb()]);
+    }
 
     if ($client === 'nostr-php-persistent') {
         $conn = new PersistentConnection($relay, $req);
@@ -247,6 +259,7 @@ function child_main(array $o): never
         $measured = 0;
         $measuredStart = null;
         pcntl_async_signals(true);
+        $GLOBALS['base_rss_due'] = true;
         for ($i = 0; ; $i++) {
             $tally = new Tally($amb, $exp, $complete);
             $GLOBALS['tally'] = $tally;
@@ -407,6 +420,9 @@ function build_row(array $client, array $w, array $lines, ?string $killErr, int 
         'first_run_ms' => null, 'median_ms' => null, 'min_ms' => null, 'p90_ms' => null, 'run_ms' => [],
         'events_per_s' => null, 'us_per_event' => null, 'cpu_ms' => null,
         'peak_rss_mb' => ($done ?? $errorLine ?? [])['peak_rss_mb'] ?? null,
+        'base_rss_mb' => $pick('base')[0]['base_rss_mb'] ?? null,
+        // PHP has no cumulative allocated-bytes counter (memory_get_usage() is the current heap)
+        'alloc_bytes' => null,
     ];
     $first = $runs[0] ?? null;
     if ($first) {

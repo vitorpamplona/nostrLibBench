@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import gc
 import json
 import os
 import platform
@@ -42,6 +43,18 @@ def cpu_ms():
     return (r.ru_utime + r.ru_stime) * 1000.0
 
 
+def rss_mb():
+    """The current resident set (VmRSS), in MB like peak_rss_mb (ru_maxrss KiB / 1024)."""
+    try:
+        with open("/proc/self/status", encoding="ascii") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return round(int(line.split()[1]) / 1024.0, 1)
+    except OSError:
+        pass
+    return None
+
+
 class RunTimeout(Exception):
     pass
 
@@ -61,12 +74,18 @@ class Ctx:
         self.t_eose = None
         self.cpu_eose = None
         self.t_end = self.cpu_end = None
+        self.want_base = False  # the row's first run: read base_rss_mb in begin()
+        self.base_rss_mb = None
         self.done = threading.Event()
         self._loop = None
         self._aevent = None
 
     # -- timed part
     def begin(self):
+        if self.want_base:
+            # end of the first setup, before the REQ and the clock: a full collection, then VmRSS
+            gc.collect()
+            self.base_rss_mb = rss_mb()
         self.cpu0 = cpu_ms()
         self.t0 = perf()
 
@@ -787,7 +806,8 @@ def run_child(opts, workloads):
         row = dict(base, workload=w["name"], events=w["events"], bytes=w["bytes"], accepted=None, accepted_xor=None,
                    ambiguous_accepted=None, expired_accepted=None, accepted_ok=False, errors=0, error=None,
                    warmup_runs=0, runs=0, first_run_ms=None, median_ms=None, min_ms=None, p90_ms=None, run_ms=[],
-                   events_per_s=None, us_per_event=None, cpu_ms=None, peak_rss_mb=None)
+                   events_per_s=None, us_per_event=None, cpu_ms=None, peak_rss_mb=None, base_rss_mb=None,
+                   alloc_bytes=None)  # CPython has no cumulative allocated-bytes counter: alloc_bytes stays null
         rows.append(row)
         amb = set(w["ambiguous_ids"])
         exp = set(w.get("expired_ids", []))
@@ -801,14 +821,19 @@ def run_child(opts, workloads):
         while True:
             warm = i < opts.warmup_runs
             ctx = Ctx(url, w["events"], opts.timeout_ms / 1000.0, targets)
+            ctx.want_base = i == 0
             try:
                 one_run(c, ctx)
             except BaseException as ex:  # noqa: BLE001 - reported in the row
                 if isinstance(ex, KeyboardInterrupt):
                     raise
+                if i == 0:
+                    row["base_rss_mb"] = ctx.base_rss_mb
                 row["errors"] += 1
                 row["error"] = f"run {i + 1}: {type(ex).__name__}: {ex}"[:500]
                 break
+            if i == 0:
+                row["base_rss_mb"] = ctx.base_rss_mb
             ms = (ctx.t_end - ctx.t0) * 1000.0
             cms = ctx.cpu_end - ctx.cpu0
             ids = ctx.ids
@@ -919,7 +944,8 @@ def failed_rows(c, workloads, why):
                          events=w["events"], bytes=w["bytes"], accepted=None, accepted_xor=None,
                          ambiguous_accepted=None, expired_accepted=None, accepted_ok=False, errors=1, error=why,
                          warmup_runs=0, runs=0, first_run_ms=None, median_ms=None, min_ms=None, p90_ms=None,
-                         run_ms=[], events_per_s=None, us_per_event=None, cpu_ms=None, peak_rss_mb=None))
+                         run_ms=[], events_per_s=None, us_per_event=None, cpu_ms=None, peak_rss_mb=None,
+                         base_rss_mb=None, alloc_bytes=None))
     return rows
 
 

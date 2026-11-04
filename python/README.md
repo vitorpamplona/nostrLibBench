@@ -49,7 +49,11 @@ with `asyncio.run`, so library state bound to a loop never leaks between runs):
 4. **Teardown, untimed.** Close the subscription and the client.
 
 `first_run_ms` is the first warm-up run; `cpu_ms` the median CPU time of the measured runs;
-`peak_rss_mb` is `ru_maxrss` at the end of the child (over warm-up and every run). Every
+`peak_rss_mb` is `ru_maxrss` at the end of the child (over warm-up and every run).
+`base_rss_mb` is `VmRSS` in `ctx.begin()` of each workload's first run (setup done, before
+the REQ and the clock), after `gc.collect()`; one child runs every workload of a client, so a
+later workload's base follows the earlier ones. `alloc_bytes` is `null`: CPython has no
+cumulative allocated-bytes counter (`tracemalloc` traces, it does not count for free). Every
 measured run must deliver the same id set as the first, else the row gets an error.
 
 Library logging is left at Python's defaults (records at WARNING and above are formatted),

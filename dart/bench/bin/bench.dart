@@ -210,6 +210,8 @@ Map<String, Object?> errorRow(Map<String, Object?> meta, dynamic w, String error
       'us_per_event': null,
       'cpu_ms': null,
       'peak_rss_mb': null,
+      'base_rss_mb': null,
+      'alloc_bytes': null,
     };
 
 Map<String, Object?> host() {
