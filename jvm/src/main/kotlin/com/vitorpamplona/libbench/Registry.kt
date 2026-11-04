@@ -51,6 +51,7 @@ val CLIENTS: List<ClientSpec> =
                     "documented speed option (an opt-in accessory; Amethyst still verifies inline on the per-relay " +
                     "coroutine, quartz-nostrclient), so it is a ranked entry of its own, like other libraries' speed " +
                     "options; it verifies on several cores, which the CPU columns show.",
+            variant = false,
             create = { QuartzClient(parallel = true) },
         ),
         ClientSpec(
