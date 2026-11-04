@@ -74,6 +74,12 @@ The harness follows HARNESS.md "A run"; the JVM specifics:
   whose API is a pull stream, the app reads on the thread that subscribed.
 - **Debugging.** `LIBBENCH_DUMP_IDS=<dir>` writes every run's accepted ids, in delivery
   order, to `<dir>/<client>-<workload>-*.ids`.
+- **Profiling.** The child ends with `Runtime.halt()`, which skips JFR's dump on exit, so
+  `-Dlibbench.jfrDump=<file>` makes it dump its recordings first (`%p` becomes its pid).
+  Child JVMs inherit the parent's flags, so for an allocation profile of one client:
+  `JAVA_OPTS="-XX:StartFlightRecording=settings=profile -Dlibbench.jfrDump=/tmp/child-%p.jfr" ./jvm/run.sh --clients quartz-fetch --workloads all`,
+  then `jfr print --events jdk.ObjectAllocationSample /tmp/child-*.jfr`. The parent writes
+  its own recording too; the child's is the one named by the property.
 
 ## Clients
 

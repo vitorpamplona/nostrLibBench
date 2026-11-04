@@ -56,8 +56,23 @@ object Child {
             }
         }
         System.err.flush()
+        dumpFlightRecordings()
         // Libraries leave non-daemon threads behind (OkHttp, Ktor, Tomcat); do not wait for them.
         Runtime.getRuntime().halt(0)
+    }
+
+    /**
+     * Profiling aid: halt() skips JFR's dump on exit, so with -Dlibbench.jfrDump=<file> (and a
+     * recording started by -XX:StartFlightRecording in JAVA_OPTS) the child writes its recordings
+     * to <file> first. `%p` in the name becomes the child's pid. Off unless the property is set.
+     */
+    private fun dumpFlightRecordings() {
+        val target = System.getProperty("libbench.jfrDump") ?: return
+        val path = target.replace("%p", ProcessHandle.current().pid().toString())
+        jdk.jfr.FlightRecorder
+            .getFlightRecorder()
+            .recordings
+            .forEach { it.dump(java.nio.file.Path.of(path)) }
     }
 
     private fun <T> onWorker(
