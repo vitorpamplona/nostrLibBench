@@ -6,7 +6,7 @@ import org.ngengine.nostr4j.NostrFilter
 import org.ngengine.nostr4j.NostrPool
 import org.ngengine.nostr4j.NostrRelay
 import org.ngengine.nostr4j.NostrSubscription
-import org.ngengine.nostr4j.event.tracker.NaiveEventTracker
+import org.ngengine.nostr4j.event.tracker.PassthroughEventTracker
 import org.ngengine.nostr4j.listeners.sub.NostrSubEoseListener
 import org.ngengine.nostr4j.listeners.sub.NostrSubEventListener
 
@@ -16,11 +16,13 @@ import org.ngengine.nostr4j.listeners.sub.NostrSubEventListener
  * see it (`NostrRelay.verifyEvents`, default on): id recomputed with the library's own
  * serializer, BIP-340 in nge-platform-jvm's pure-Java `Schnorr` (BigInteger), run on the
  * common ForkJoinPool (`parallelEvents`, default on).
+ *
+ * The subscription gets the library's [PassthroughEventTracker] (`seen()` is always false: no
+ * dedup set; the pool's default ForwardSlidingWindowEventTracker drops a history sync after
+ * 21 events) and `setVerifyMatchLocally(false)` (no re-matching of every event against the
+ * filter the relay already applied).
  */
-class Nostr4jClient(
-    /** Subscribe with a NaiveEventTracker (dedup by id) instead of the pool's default tracker. */
-    private val naiveTracker: Boolean,
-) : BenchClient {
+class Nostr4jClient : BenchClient {
     companion object {
         init {
             // nge-platform refuses loopback URIs unless told otherwise (its README).
@@ -41,7 +43,8 @@ class Nostr4jClient(
         sink: EventSink,
     ) {
         val filter = NostrFilter().limit(limit)
-        val s = if (naiveTracker) pool.subscribe(filter) { NaiveEventTracker() } else pool.subscribe(filter)
+        val s = pool.subscribe(filter) { PassthroughEventTracker() }
+        s.setVerifyMatchLocally(false)
         s.addEventListener(NostrSubEventListener { _, event, _ -> sink.event(event.id) })
         s.addEoseListener(NostrSubEoseListener { _, _, everywhere -> if (everywhere) sink.eose() })
         sub = s

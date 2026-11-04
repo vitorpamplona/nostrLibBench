@@ -223,18 +223,22 @@ async def run_nostr_sdk_notifications(ctx):
         ctx.begin()
         out = await client.subscribe(ns.ReqTarget.single(url, [filt]))
         sub_id = out.id
-        while not ctx.done.is_set():
-            n = await asyncio.wait_for(notifications.next(), ctx.timeout_s)
-            if n is None:
-                break
-            if n.is_NEW_EVENT():
-                if n.subscription_id == sub_id:
-                    ctx.event(n.event.id().to_hex())
-            elif n.is_MESSAGE():
-                m = n.message.as_enum()
-                if m.is_END_OF_STORED_EVENTS() and m.subscription_id == sub_id:
-                    ctx.eose()
+        # one deadline for the whole loop (a TimeoutError becomes the run's RunTimeout)
+        async with asyncio.timeout(ctx.timeout_s):
+            while not ctx.done.is_set():
+                n = await notifications.next()
+                if n is None:
                     break
+                if n.is_NEW_EVENT():
+                    if n.subscription_id == sub_id:
+                        ctx.event(n.event.id().to_hex())
+                elif n.is_MESSAGE():
+                    # the EOSE only shows up as a RelayMessage: as_enum() on every MESSAGE
+                    # notification (one per EVENT frame too) is the only way to spot it
+                    m = n.message.as_enum()
+                    if m.is_END_OF_STORED_EVENTS() and m.subscription_id == sub_id:
+                        ctx.eose()
+                        break
         await ctx.wait_async()
         await client.unsubscribe(sub_id)
     finally:
@@ -258,6 +262,7 @@ def _pynostr_no_eose(ctx, log):
 
 
 def run_pynostr_callback(ctx):
+    from pynostr.event import Event
     from pynostr.filters import Filters, FiltersList
     from pynostr.relay_manager import RelayManager
 
@@ -268,7 +273,13 @@ def run_pynostr_callback(ctx):
 
     def on_message(msg):  # called by pynostr only for messages that passed its checks
         if msg[0] == "EVENT":
-            ctx.event(msg[2]["id"])
+            # pynostr checked the sig against an id it recomputed (Event.from_dict drops the wire
+            # id) and never compared that id with the wire one. The callback gets the JSON list,
+            # not that Event, so the harness recomputes the id with pynostr's own Event.from_dict
+            # (a second hash) and drops the event on a mismatch.
+            e = msg[2]
+            if Event.from_dict(e).id == e["id"]:
+                ctx.event(e["id"])
         elif msg[0] == "EOSE":
             ctx.eose()
 
@@ -302,9 +313,10 @@ def run_pynostr_pool(ctx):
     rm.close_connections()
 
 
-def _drain_pool(ctx, pool):
+def _drain_pool(ctx, pool, deliver):
     """App side of python-nostr / nostrj: reads MessagePool.events (a queue.Queue filled by the
-    websocket thread) until the EOSE shows up in pool.eose_notices."""
+    websocket thread) until the EOSE shows up in pool.eose_notices. `deliver(ctx, msg)` hands
+    one EventMessage to the app."""
     from queue import Empty
 
     events = pool.events
@@ -322,12 +334,27 @@ def _drain_pool(ctx, pool):
                         m = events.get_nowait()
                     except Empty:
                         break
-                    ctx.event(m.event.id)
+                    deliver(ctx, m)
                 ctx.eose()
                 break
             continue
-        ctx.event(m.event.id)
+        deliver(ctx, m)
     ctx.wait()
+
+
+def _python_nostr_deliver(ctx, m):
+    # python-nostr's Event keeps the wire id, but verify() checks the sig against an id it
+    # recomputes and never compares with it: the harness compares, with the library's own
+    # Event.compute_id (a second hash: verify() returns only a bool).
+    ev = m.event
+    if ev.compute_id(ev.public_key, ev.created_at, ev.kind, ev.tags, ev.content) == ev.id:
+        ctx.event(ev.id)
+
+
+def _nostrj_deliver(ctx, m):
+    # nostrj's Event has no id field (the property recomputes it on every access) and the wire
+    # id is dropped before the message reaches the pool: nothing to compare it with.
+    ctx.event(m.event.id)
 
 
 def run_python_nostr(ctx):
@@ -352,7 +379,7 @@ def run_python_nostr(ctx):
         req = json.dumps([ClientMessageType.REQUEST, "bench", *filters.to_json_array()])
         ctx.begin()
         rm.publish_message(req)
-        _drain_pool(ctx, rm.message_pool)
+        _drain_pool(ctx, rm.message_pool, _python_nostr_deliver)
     finally:
         rm.close_connections()
 
@@ -367,7 +394,7 @@ def run_nostrj(ctx):
         filters = Filters([Filter(limit=ctx.limit)])
         ctx.begin()
         rm.add_subscription_on_all_relays("bench", filters)  # REQ goes out from the queue-worker thread
-        _drain_pool(ctx, rm.message_pool)
+        _drain_pool(ctx, rm.message_pool, _nostrj_deliver)
     finally:
         for r in rm.relays.values():
             r.reconnect = False  # Relay reconnects when its connection closes otherwise
@@ -377,7 +404,8 @@ def run_nostrj(ctx):
 def _monstr_client(ctx, **kw):
     from monstr.client.client import Client
 
-    # eose_timeout=None: no forced EOSE; query_timeout as the run timeout
+    # eose_timeout=None: no forced EOSE (default 10 s); query_timeout (default 10 s, used only by
+    # query()) raised to the run timeout
     return Client(ctx.url, query_timeout=ctx.timeout_s, eose_timeout=None, **kw)
 
 
@@ -441,8 +469,9 @@ async def run_aionostr(ctx):
         async for ev in mgr.get_events({"limit": ctx.limit}):
             # Event.verify() checks the signature against a recomputed id but never compares
             # that id with the event's own id field: the harness does, with Event.compute_id.
+            # Two hashes per event: verify() keeps its id to itself (returns only a bool).
             try:
-                ok = ev.verify() and Event.compute_id(ev.pubkey, ev.created_at, ev.kind, ev.tags, ev.content) == ev.id
+                ok = Event.compute_id(ev.pubkey, ev.created_at, ev.kind, ev.tags, ev.content) == ev.id and ev.verify()
             except Exception:  # noqa: BLE001 - "sig": "" raises
                 ok = False
             if ok:
@@ -456,11 +485,14 @@ async def run_aionostr(ctx):
 async def run_electrum_aionostr(ctx):
     from electrum_aionostr.relay import Manager
 
+    # connect_timeout=10 (default 5 s): bounds the untimed connect and the subscribe call
     mgr = Manager([ctx.url], connect_timeout=10)
     await mgr.connect()
     try:
         ctx.begin()
         async for ev in mgr.get_events({"limit": ctx.limit}, filter_future_events_sec=None):
+            # ev.id is the id Event() recomputed; the wire id was dropped by Event.from_json
+            # and is not reachable from the delivered Event, so it cannot be compared.
             ctx.event(ev.id)
         ctx.eose()
         await ctx.wait_async()
@@ -486,6 +518,7 @@ async def run_nostr_tools(ctx):
 def run_nostrclient(ctx):
     from nostrclient.event import Event
     from nostrclient.relay import Relay
+    from nostrclient.subscription import Subscription
 
     relay = Relay(ctx.url)
     relay.connect(10)
@@ -493,20 +526,25 @@ def run_nostrclient(ctx):
         raise RuntimeError("could not connect")
     try:
         def on_event(e):
-            # Event.verify() checks the signature against Event.id, a property that always
-            # recomputes the id from the fields; the harness compares it with the event's id.
+            # Event.verify() checks the signature against Event.id, a property that recomputes
+            # the id on every access and has no wire id to compare with: the harness compares
+            # ev.id with the id field. Two hashes per event (verify() reads the property again).
             try:
                 ev = Event(e["content"], e["pubkey"], e["created_at"], e["kind"], e["tags"], e["sig"])
-                ok = ev.verify() and ev.id == e["id"]
+                ok = ev.id == e["id"] and ev.verify()
             except Exception:  # noqa: BLE001 - "sig": "" raises
                 ok = False
             if ok:
                 ctx.event(e["id"])
 
-        ctx.begin()
-        sub = relay.subscribe({"limit": ctx.limit})
+        # The emitter thread drops an event that has no listener yet, so the listeners go on a
+        # Subscription made with the id relay.subscribe would give it, before the REQ goes out.
+        filt = {"limit": ctx.limit}
+        sub = Subscription(f"nostrclient-sub-{relay.serial + 1}", filt, relay)
         sub.on("EVENT", on_event)
         relay.on("EOSE" + sub.subid, lambda _arg: ctx.eose())
+        ctx.begin()
+        relay.subscribe(filt, sub=sub)
         ctx.wait()
     finally:
         relay.close()
@@ -561,8 +599,10 @@ CLIENTS = [
                "tokio threads; each notification crosses the FFI (a NEW_EVENT plus a MESSAGE for every EVENT "
                "frame), id via Event.id().to_hex(). The stream handle_notifications wraps. "
                "notification_channel_size raised to 2x the workload (a broadcast channel drops what a slow "
-               "consumer has not read). Drops expired (NIP-40) events. New Client per run. Headline row because "
-               "stream_events loses events with a Python consumer (see nostr-sdk-stream)."),
+               "consumer has not read). The EOSE only arrives as a MESSAGE notification, so the app calls "
+               "RelayMessage.as_enum() (an FFI call) on every MESSAGE notification to spot it. Drops expired "
+               "(NIP-40) events. New Client per run. Headline row because stream_events loses events with a "
+               "Python consumer (see nostr-sdk-stream)."),
     dict(id="nostr-sdk-stream", library="nostr-sdk", dist="nostr-sdk", license="MIT", run=run_nostr_sdk_stream,
          variant=True,
          api="Client.stream_events(ReqTarget.single(url, [filter])) + ClientEventStream.next() until it ends",
@@ -582,16 +622,20 @@ CLIENTS = [
     dict(id="pynostr-callback", library="pynostr", dist="pynostr", license="MIT", run=run_pynostr_callback,
          api="RelayManager.add_relay(message_callback=...) + add_subscription_on_all_relays + run_sync()",
          websocket="tornado 6.6 websocket_connect (pure Python on asyncio)", crypto=COINCURVE, verify="library",
-         notes="pynostr verifies every EVENT (Event.from_dict recomputes the id from the fields; verify() checks "
-               "the sig with coincurve) before calling message_callback with the parsed message; the id counted "
-               "is the message's id field (the callback gets the JSON list, not the Event). RelayManager(timeout=0): "
+         notes="pynostr verifies every EVENT before calling message_callback with the parsed JSON list: "
+               "Event.from_dict drops the wire id and recomputes it, verify() checks the sig against that "
+               "recomputed id (coincurve), and nothing compares it with the wire id. The harness does: it "
+               "recomputes the id with pynostr's own Event.from_dict(...).id (a second hash: the callback gets "
+               "the JSON, not pynostr's Event), drops a mismatch, and counts the wire id. RelayManager(timeout=0): "
                "the default 2 s timeout covers the whole read loop. Connects lazily inside run_sync: the connect "
                "is inside the timed part (~1 ms on loopback). Each frame is json.loads-ed three times by pynostr."),
     dict(id="pynostr-pool", library="pynostr", dist="pynostr", license="MIT", run=run_pynostr_pool, variant=True,
          api="RelayManager + add_subscription_on_all_relays + run_sync() + message_pool.get_event() (README idiom)",
          websocket="tornado 6.6 websocket_connect (pure Python on asyncio)", crypto=COINCURVE, verify="library",
          notes="same pipeline as pynostr-callback; the app drains the MessagePool's Event objects after run_sync "
-               "returns at EOSE (the pool parses each frame again into an Event, id recomputed)"),
+               "returns at EOSE (the pool parses each frame again into an Event, id recomputed). The wire id is "
+               "never compared with the recomputed one, and it is not reachable here: Event.from_dict drops it "
+               "and the pool's EventMessage holds only that Event, so the id counted is pynostr's recomputed id."),
     dict(id="python-nostr", library="nostr (python-nostr)", dist="nostr", license="MIT", run=run_python_nostr,
          api="RelayManager.add_relay + add_subscription + open_connections + publish_message(REQ) + "
              "message_pool.events queue (README idiom)",
@@ -599,8 +643,10 @@ CLIENTS = [
          verify="library",
          notes="jeffthibault/python-nostr 0.0.2 (Jan 2023, the PyPI `nostr` package, unmaintained). "
                "Relay._is_valid_message verifies every event (Event.verify recomputes the id and checks the sig "
-               "against it; the id compared is that recomputed one, the Event keeps the wire id) and matches the "
-               "filter, then the MessagePool parses the frame again. An exception in verify (\"sig\": \"\") is "
+               "against it, but never compares it with the wire id the Event keeps) and matches the filter, then "
+               "the MessagePool parses the frame again. The harness compares the wire id with the library's own "
+               "Event.compute_id(...) (a second hash: verify() returns only a bool) and counts the wire id. "
+               "An exception in verify (\"sig\": \"\") is "
                "swallowed by websocket-client's callback wrapper, dropping that event. Bug: Event() turns "
                "created_at 0 into now (`created_at or int(time.time())`), so a valid event with created_at 0 fails "
                "verification and is dropped. The app reads the pool's queue from the main thread (5 ms poll when "
@@ -610,33 +656,43 @@ CLIENTS = [
          websocket="websocket-client 1.9 WebSocketApp (pure Python, one thread per relay)", crypto=SECP_PY,
          verify="library",
          notes="maintained fork of python-nostr (gitlab 1440000bytes/python-nostr, 2026); same `nostr` module "
-               "name, so it is installed in its own overlay. Relay verifies every event (the Event id is always "
-               "computed from the fields, sig checked against it) inside a try/except that rejects anything that "
-               "raises, and matches the filter. add_relay sleeps 1 s (untimed); the REQ goes out from a "
+               "name, so it is installed in its own overlay. Relay verifies every event (sig checked against the "
+               "id computed from the fields) inside a try/except that rejects anything that raises, and matches "
+               "the filter. The wire id is never compared and cannot be: Event has no id field (the id property "
+               "recomputes it on every access, so the pool's dedup and the app's read hash again) and Relay "
+               "builds the Event without the wire id, which the delivered EventMessage does not carry. add_relay sleeps 1 s (untimed); the REQ goes out from a "
                "queue-worker thread that polls every 0.1 s while disconnected and is left behind (daemon) after "
                "each run. App reads the pool's queue (5 ms poll when empty)."),
     dict(id="monstr-subscribe", library="monstr", dist="monstr", license="MIT", run=run_monstr_subscribe,
          api="Client.run() + Client.subscribe(filters, eose_func=...): stored events handed over as a list at EOSE",
          websocket="aiohttp 3.14 ws_connect", crypto=SECP_PY, verify="explicit",
          notes="monstr's Client does not verify received events; the harness calls Event.is_valid() (sig "
-               "against the id field) and checks the id with Event.serialize() + sha256. Client(eose_timeout=None)."),
+               "against the id field) and checks the id with Event.serialize() + sha256. Client(eose_timeout=None): "
+               "the default sends a fake EOSE after 10 s. Client.run() GETs the relay's NIP-11 document over HTTP "
+               "before the websocket connect (no option turns it off; in the untimed setup)."),
     dict(id="monstr-query", library="monstr", dist="monstr", license="MIT", run=run_monstr_query, variant=True,
          api="await Client.query(filters) -> list after EOSE", websocket="aiohttp 3.14 ws_connect", crypto=SECP_PY,
          verify="explicit",
          notes="fetch-all; query() polls for completion every 100 ms, so up to 0.1 s of each run is that sleep. "
-               "Verification as monstr-subscribe."),
+               "Its timeout (Client(query_timeout=...) and query(timeout=...), default 10 s, raises "
+               "QueryTimeoutException) is raised to the run timeout. Verification, eose_timeout and NIP-11 GET as "
+               "monstr-subscribe."),
     dict(id="aionostr", library="aionostr", dist="aionostr", license="BSD-3-Clause", run=run_aionostr,
          api="Manager([url]).get_events(filter) async generator (ends at EOSE)",
          websocket="websockets 17 (asyncio client)", crypto=COINCURVE, verify="explicit",
          notes="aionostr does not verify received events; the harness calls Event.verify() (sig against an id "
                "it recomputes with json.dumps compact, ensure_ascii=False) and compares Event.compute_id(...) with "
-               "the event's id field, which verify() never does. Bug: Event() turns created_at 0 into now "
+               "the event's id field, which verify() never does: two hashes per event, as verify() keeps its "
+               "id to itself. Bug: Event() turns created_at 0 into now "
                "(`created_at or int(time.time())`), so a valid event with created_at 0 fails verification."),
     dict(id="electrum-aionostr", library="electrum-aionostr", dist="electrum-aionostr", license="BSD-3-Clause",
          run=run_electrum_aionostr, api="Manager([url]).get_events(filter) async generator (ends at EOSE)",
          websocket="aiohttp 3.14 ws_connect", crypto="libsecp256k1 (C, bundled in electrum-ecc 0.0.8, ctypes)",
          verify="library",
          notes="Electrum's fork of aionostr: Event() recomputes the id and verifies the sig on construction. "
+               "The wire id is never compared and cannot be: Event.from_json drops it ('we don't validate the "
+               "original self.id, just always overwrite it') and the delivered Event holds only the recomputed "
+               "one. Manager(connect_timeout=10) (default 5 s; bounds the untimed connect and the subscribe). "
                "Relay._receive_messages sleeps 5 ms before every message (CPU-DOS mitigation) and 5 s after any "
                "exception, and an event without a valid sig raises (ValueError 'missing sig'), so each of the "
                "1547 unsigned events costs 5 s. get_events(filter_future_events_sec=None)."),
@@ -653,9 +709,13 @@ CLIENTS = [
          api="Relay(url).connect() + relay.subscribe(filter) + sub.on('EVENT') / relay.on('EOSE'+subid)",
          websocket="websocket-client 1.9 WebSocketApp (pure Python, thread)", crypto=SECP_PY, verify="explicit",
          notes="nostrclient does not verify received events; the harness builds nostrclient.event.Event from the "
-               "dict, calls verify() (sig against the recomputed id) and compares that id with the id field. "
-               "Events reach the app through an emitter thread; Subscription dedups with a list (linear scan, "
-               "reset at 10 000 ids)."),
+               "dict, compares its id with the id field and calls verify() (sig against the id): two hashes per "
+               "event, as Event.id is a property that recomputes on every access and verify() reads it again. "
+               "Events reach the app through an emitter thread that drops events with no listener yet, so the "
+               "app makes the Subscription, attaches its EVENT/EOSE listeners, then relay.subscribe(filter, "
+               "sub=sub). Subscription dedups with a list (linear scan, reset at 10 000 ids). Each Relay starts a "
+               "non-daemon emitter thread (0.1 s queue poll) that nothing stops: one more is left polling after "
+               "every run."),
     dict(id="basic-nostr", library="basic-nostr", dist="basic-nostr", license="MIT", run=run_basic_nostr,
          api="read_events_from_relays([(url, websocket)], limit) -> deduplicated, sorted list",
          websocket="websockets 17 (asyncio client)", crypto=COINCURVE, verify="harness",

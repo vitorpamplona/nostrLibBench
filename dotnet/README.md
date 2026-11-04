@@ -38,7 +38,10 @@ runs the orchestrator from the repo root. It takes every HARNESS.md flag.
   either the accepted set is complete or no event came for 1 s. Teardown, untimed.
 - **CPU**: `Environment.CpuUsage.TotalTime` (getrusage: user + system, all threads, µs
   resolution; the same counter as `Process.TotalProcessorTime` without its 10 ms ticks),
-  from `t0` to the moment the run completed (read in the callback that completes it).
+  from `t0` to the moment the run completed (read in the callback that completes it). A run
+  whose set never completes (it ends after 1 s without events) takes the CPU read at EOSE,
+  or, if events came after the EOSE, the one read at the last of them, so the idle second
+  is never counted.
 - **Memory**: `peak_rss_mb` is `VmHWM` from `/proc/self/status` at the end of the child.
 - **Runtime**: .NET defaults, recorded in `runtime`: Workstation GC, concurrent GC,
   tiered compilation with dynamic PGO, Release builds, framework-dependent apphost.
@@ -83,14 +86,25 @@ Per library (each row's `notes` has the details):
   parsing (serde_json), verification (libsecp256k1) and the WebSocket all run in Rust on a
   tokio runtime; each event crosses the FFI as an async `Next()` call and an object handle.
   It verifies every event, drops the NIP-40-expired events (allowed) and accepts the
-  ambiguous U+0000 event (serde_json writes it as `\u0000`). Correct.
+  ambiguous U+0000 event (serde_json writes it as `\u0000`). Correct. `AddRelay` takes the
+  capabilities explicitly in C#; the harness passes `RelayCapabilities.Read()` (the Rust
+  default is read + write; `ReqTarget.Auto` sends the REQ to read relays either way).
+  `StreamEvents` runs through rust-nostr's fixed internal channels (the relay's notification
+  broadcast, then the stream's own channel), whose sizes the bindings do not expose.
 - **Nostra** (F#) verifies every event in its receive loop and hands the callback a
   `Result`: `Error` for invalid or undecodable events. Correct. License file: GPL-2.0.
 - **NostrSharp** (last release 2023) does not verify. `NEvent.IsVerified()` checks BIP-340
-  over an id it recomputes but never compares that id with `Id`, so the harness also calls
-  the library's id function (the private `NEvent.GetId`, by reflection). That id function
-  serializes the event with an **empty tag list**, so only tagless events pass (18 of 995 on
-  smoke): `accepted_ok: false`. Its relay replaces the REQ's subscription id with its own
+  over an id it recomputes (`GetId`) but never compares that id with `Id`. The harness hashes
+  once with the library's id function (the private `NEvent.GetId`, by reflection), compares
+  it with `Id`, then checks the signature over `Id` with the library's
+  `NPub.FromHex(pubkey).IsHexSignatureValid(sig, id)`, the call `IsVerified` makes. One id
+  computation per event is also the only one that works: `GetId` serializes a temporary
+  `NEventSign` that shares the event's `Tags` list and disposes it, which **clears the
+  event's tags**, so any later `GetId` (or `IsVerified`) hashes an empty tag list (the
+  harness used to call both and accepted only the 18 tagless events of smoke). `NTag` holds a
+  key and at most 4 values, so a valid event with a longer tag (zap-request `relays` tags,
+  ...) gets a wrong id and is **rejected** (31 of 995 on smoke, 964 accepted):
+  `accepted_ok: false`. Its relay replaces the REQ's subscription id with its own
   Guid, its dispatch loop sleeps 200 ms whenever its queue is empty, and it splits every
   frame on `,` to find the message type.
 

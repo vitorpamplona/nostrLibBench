@@ -72,10 +72,8 @@ The harness follows HARNESS.md "A run"; the JVM specifics:
 | `quartz-parallelverifier` | Quartz | same + Quartz's `ParallelEventVerifier` | explicit | yes |
 | `quartz-standalone` | Quartz | `StandaloneRelayClient.sendRequest` | explicit | yes |
 | `nostr-sdk-subscribe` | rust-nostr nostr-sdk 0.45 (UniFFI JVM bindings) | `Client.subscribe` + `notifications()` | library | |
-| `nostr-sdk-subscribe-defaultchannel` | same | same, default channel size | library | yes |
 | `nostr-sdk-stream` | same | `Client.streamEvents` | library | yes |
-| `nostr4j-pool` | nostr4j 0.4.1 | `NostrPool.subscribe(filter, NaiveEventTracker)` | library | |
-| `nostr4j-pool-defaulttracker` | nostr4j | `NostrPool.subscribe(filter)` | library | yes |
+| `nostr4j-pool` | nostr4j 0.4.1 | `NostrPool.subscribe(filter, PassthroughEventTracker)` | library | |
 | `nostr-java-relaypool` | nostr-java 2.4.2 | `RelayPool.subscribe` | explicit | |
 | `rhodium-request` | Rhodium 1.0-rc | `NostrService.request` + `deserializedEvent` | explicit | |
 
@@ -106,7 +104,7 @@ The harness follows HARNESS.md "A run"; the JVM specifics:
 - `quartz-parallelverifier` (variant): the listener submits each event to Quartz's own
   `ParallelEventVerifier` accessory (batches of up to 256, `Event.verify()` fanned out on
   `Dispatchers.Default`, delivered in order). It is opt-in and adds verify threads, so it
-  is a variant; Amethyst still verifies inline today.
+  is a variant (verification threads the app opts into); Amethyst still verifies inline today.
 - `quartz-standalone` (variant): `StandaloneRelayClient`, Quartz's single-relay client
   (`BasicRelayClient` + REQ replay), events through `RelayConnectionListener.onIncomingMessage`.
 
@@ -124,7 +122,9 @@ the library's strings).
 - **Everything runs in Rust:** tokio-tungstenite 0.28 (async-wsocket 0.17), serde, the
   relay task's checks, then `ClientNotification.NewEvent`. Kotlin pays one JNA round trip
   per notification, and the channel carries two per event (`NewEvent` and the raw
-  `Message`), plus `asEnum()` to recognise the EOSE.
+  `Message`). The EOSE only arrives as a `Message`, so the app calls `asEnum()` on every
+  `Message` notification (a clone of the relay message, event included, plus a JNA call,
+  per event) to recognise it; named in `notes`.
 - **Verification (library).** The relay task checks `verify_id()` and the signature
   (libsecp256k1 via rust secp256k1 0.30) before saving the event to its default in-memory
   events tracker and announcing it. A per-client LRU caches verified `(id, sig)` pairs;
@@ -134,9 +134,10 @@ the library's strings).
 - **Channel size.** The client's notification channel is a tokio broadcast channel: a
   reader that falls behind loses the oldest notifications, events and EOSE alike. The JNA
   reader is far slower than Rust's writer, so with the default 4096 the `all` workload
-  lost 60-65% of its events, a different number every run
-  (`nostr-sdk-subscribe-defaultchannel`, a variant that reports that error). The headline
-  row raises it to 65536 (HARNESS.md: raise limits that drop events), named in `notes`.
+  lost 60-65% of its events, a different number every run (measured with a
+  default-channel variant, since dropped: it only showed that the default is wrong for
+  this job). The row raises it to 65536 (HARNESS.md: raise limits that drop events),
+  named in `notes`.
 - `nostr-sdk-stream` (variant): `Client.streamEvents`, which the Rust harness ranks. From
   the JVM it loses events on `all` (1,574 and 2,051 of 29,548 in two runs): the stream is
   fed from the relay's own broadcast channel (2048) through a 512-slot channel, and the
@@ -145,7 +146,8 @@ the library's strings).
 ### nostr4j (NostrGameEngine), `org.ngengine:nostr4j` 0.4.1 + `nge-platform-jvm` 0.2.6, BSD-3-Clause
 
 - **API.** `NostrPool().connectRelay(NostrRelay(url)).await()` in setup, then
-  `pool.subscribe(filter) { NaiveEventTracker() }`, event and EOSE listeners, `sub.open()`.
+  `pool.subscribe(filter) { PassthroughEventTracker() }`, `setVerifyMatchLocally(false)`,
+  event and EOSE listeners, `sub.open()`.
   The platform layer is a separate artifact the README asks for (`nge-platform-jvm`,
   needs Java 21); it refuses loopback URIs unless
   `-Dnge-platforms.allowLoopbackInURIs=true` (the client sets the property).
@@ -156,12 +158,16 @@ the library's strings).
   nge-platform-jvm's `Schnorr`, which calls Bouncy Castle's secp256k1 curve
   (`ECAlgorithms.sumOfTwoMultiplies`, pure Java). With `parallelEvents` (default on) each
   verify runs on the common ForkJoinPool: the CPU time is about 2x the wall time.
-- **Event tracker.** The pool's default `ForwardSlidingWindowEventTracker` is built for
-  live feeds: after 21 events it moves its cut-off to "now - 30 min" and treats anything
-  older (and anything expired) as already seen. A history sync therefore gets 22 events
-  (`nostr4j-pool-defaulttracker`, a variant kept to show it). The headline row passes
-  `NaiveEventTracker` (dedup by id), the library's own tracker for this, named in `notes`.
-- **Results.** Drops the expired events, accepts the ambiguous one.
+- **Event tracker and filter re-matching.** The pool's default
+  `ForwardSlidingWindowEventTracker` is built for live feeds: after 21 events it moves its
+  cut-off to "now - 30 min" and treats anything older (and anything expired) as already
+  seen, so a history sync gets 22 events. The row passes the library's
+  `PassthroughEventTracker` (`seen()` returns false: no dedup set, which a single relay
+  and a single REQ do not need; `NaiveEventTracker` would add a synchronized `HashSet`
+  insert per event), and turns off `setVerifyMatchLocally` (default on: every event is
+  matched again against the filter the relay already applied). Both named in `notes`.
+- **Results.** Drops the expired events (the pool does, unconditionally), accepts the
+  ambiguous one.
 
 ### nostr-java (tcheeric), `xyz.tcheeric:nostr-java-client`/`-api` 2.4.2, MIT
 
@@ -181,6 +187,10 @@ the library's strings).
   about 12-14 ms per event, so `smoke` takes ~17 s and `all` does not finish in the
   default 300 s timeout (17,294 events accepted when it hit it). The `all` row is a
   timeout error unless `--timeout-ms` is raised to ~600 000.
+- **Logging.** `EventMessage.convertValue` logs every event at INFO
+  (`log.info("Converting map to GenericEvent: {}", map)`). It costs nothing here only
+  because no SLF4J provider is on the classpath, so slf4j-api binds its no-op logger (an
+  app that configures its logger above INFO gets the same); named in `notes`.
 - **Results.** Correct: delivers expired events and accepts the ambiguous one.
 
 ### Rhodium (KotlinGeekDev), `io.github.kotlingeekdev.rhodium:rhodium` 1.0-rc, MIT
@@ -224,15 +234,13 @@ the library's strings).
 
 | client | accepted | ambiguous | expired | ok | median ms | cpu ms |
 |---|---|---|---|---|---|---|
-| quartz-nostrclient | 995 | 1 | 66 | true | 114 | 140 |
-| quartz-parallelverifier | 995 | 1 | 66 | true | 155 | 190 |
+| quartz-nostrclient | 995 | 1 | 66 | true | 150 | 215 |
+| quartz-parallelverifier | 995 | 1 | 66 | true | 88 | 165 |
 | quartz-standalone | 995 | 1 | 66 | true | 229 | 215 |
-| nostr-sdk-subscribe | 929 | 1 | 0 | true | 551 | 370 |
-| nostr-sdk-subscribe-defaultchannel | 929 | 1 | 0 | true | 834 | 390 |
+| nostr-sdk-subscribe | 929 | 1 | 0 | true | 255 | 465 |
 | nostr-sdk-stream | 929 | 1 | 0 | true | 478 | 360 |
-| nostr4j-pool | 929 | 1 | 0 | true | 396 | 545 |
-| nostr4j-pool-defaulttracker | 22 | 0 | 0 | false | 384 | 530 |
-| nostr-java-relaypool | 995 | 1 | 66 | true | 16 806 | 13 770 |
+| nostr4j-pool | 929 | 1 | 0 | true | 211 | 565 |
+| nostr-java-relaypool | 995 | 1 | 66 | true | 15 752 | 16 195 |
 | rhodium-request | 962 | 1 | 66 | false | 386 | 415 |
 
 `results/jvm.json` holds the latest run.

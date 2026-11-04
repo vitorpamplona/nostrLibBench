@@ -86,7 +86,9 @@ nostr-sdk's UniFFI library. No Python Nostr library here verifies in pure Python
 `MESSAGE` notification carrying the EOSE; events come as `NEW_EVENT`. Relay I/O, JSON, id and
 signature checks run in Rust on tokio threads; every notification crosses the FFI (a
 `NEW_EVENT` and a `MESSAGE` per EVENT frame) and the id is read with `Event.id().to_hex()`, so
-per-event cost is mostly the FFI round-trip. The client's notification channel is a broadcast
+per-event cost is mostly the FFI round-trip. The EOSE only arrives as a `MESSAGE`, so the app
+calls `as_enum()` (another FFI call) on every `MESSAGE` notification to spot it. One
+`asyncio.timeout` bounds the whole loop (not a timer per notification). The client's notification channel is a broadcast
 channel that drops what a slow consumer has not read, so it is sized at twice the workload.
 Verifies every event (new `Client` and in-memory state per run), drops expired (NIP-40) events,
 accepts the ambiguous one.
@@ -102,8 +104,12 @@ Rust, so it does not lag) needs `max_events` raised to the workload size: its de
 `all` with `too many fetched events`.
 
 **pynostr.** `RelayManager.add_relay(message_callback=...)`, `add_subscription_on_all_relays`,
-`run_sync()` (tornado). Verifies every event (`Event.from_dict` recomputes the id, `verify()`
-checks the signature with coincurve). It does not survive the corpus: coincurve raises
+`run_sync()` (tornado). Verifies every event's signature (coincurve) against an id it recomputes:
+`Event.from_dict` drops the wire id ("id is ignore, as it will be computed") and nothing compares
+the two. In `pynostr-callback` the callback gets the JSON list, so the harness recomputes the id
+with pynostr's own `Event.from_dict(...).id` (a second hash), drops a mismatch and counts the
+wire id. In `pynostr-pool` the wire id is not reachable (the pool's `EventMessage` holds only the
+rebuilt `Event`), so the id counted is the recomputed one and notes say so. It does not survive the corpus: coincurve raises
 `Signature must be 64 bytes long` on the first `"sig":""` event, the exception escapes
 `_on_message`, and `Relay.connect` logs it and drops the connection before EOSE. Both rows
 report that error. Also: the default `RelayManager(timeout=2)` wraps the whole read loop, not
@@ -114,32 +120,41 @@ each frame is `json.loads`-ed three times.
 name). README idiom: `add_relay`, `add_subscription`, `open_connections`, `publish_message`
 of the REQ, then the `message_pool` queues, read from the main thread (5 ms poll when empty;
 events and EOSE come from one websocket thread in order). The relay thread verifies every
-event (id recomputed, signature checked against it with secp256k1-py) and matches filters; a
-`"sig":""` raises inside the callback and websocket-client swallows it. **Bug:** `Event()`
+event (signature checked with secp256k1-py against a recomputed id) and matches filters; a
+`"sig":""` raises inside the callback and websocket-client swallows it. `verify()` never compares
+the recomputed id with the wire id the `Event` keeps, so the harness does, with the library's own
+`Event.compute_id` (a second hash, as `verify()` returns only a bool). **Bug:** `Event()`
 does `created_at or int(time.time())`, so the valid event with `created_at: 0` gets a wrong
 id and is rejected: `accepted_ok: false`.
 
 **nostrj** (fork of python-nostr, 2026). Same structure; `add_relay` sleeps 1 s (untimed), the
 REQ is sent by a queue-worker thread, verification is wrapped in a try/except that rejects
 anything that raises. Each run leaves a daemon queue-worker thread polling every 0.1 s
-(library design). Correct on the corpus.
+(library design). Its `Event` has no id field (the `id` property recomputes it on every access)
+and `Relay` builds it without the wire id, which the delivered message does not carry: the wire
+id is never compared and cannot be (named in `notes`). Correct on the corpus.
 
 **monstr.** `Client.run()` (aiohttp) and `subscribe(filters, eose_func=...)`: monstr buffers a
 subscription's stored events and hands them to `eose_func` as one list at EOSE (per-event
 handlers only see events after EOSE). It does not verify received events; the harness calls
 `Event.is_valid()` (signature against the event's id field, secp256k1-py) and checks the id with
-monstr's own `Event.serialize()` + sha256. Variant `monstr-query`: `await client.query(filter)`,
-which polls for completion every 100 ms.
+monstr's own `Event.serialize()` + sha256. `Client(eose_timeout=None)` (the default fakes an EOSE
+after 10 s). `Client.run()` GETs the relay's NIP-11 document over HTTP before the websocket
+connect, in the untimed setup (no option turns it off). Variant `monstr-query`: `await
+client.query(filter)`, which polls for completion every 100 ms; its timeout (`query_timeout`,
+default 10 s, raises `QueryTimeoutException`) is raised to the run timeout.
 
 **aionostr.** `Manager([url]).get_events(filter)` async generator (websockets), with dedup. No
 verification on receive; `Event.verify()` recomputes the id and checks the signature against
 it (coincurve) but never compares it with the event's id field, so the harness compares
-`Event.compute_id(...)` too. **Bug:** the same `created_at or int(time.time())` as
+`Event.compute_id(...)` too: two hashes per event, as `verify()` keeps its id to itself. **Bug:** the same `created_at or int(time.time())` as
 python-nostr, so the `created_at: 0` event is rejected: `accepted_ok: false`.
 
 **electrum-aionostr** (Electrum's fork of aionostr). `Manager([url]).get_events(filter)`
-(aiohttp); `Event()` recomputes the id and verifies the signature on construction
-(electrum-ecc). `Relay._receive_messages` sleeps 5 ms before each message (a CPU-DOS
+(aiohttp), `Manager(connect_timeout=10)` (default 5 s); `Event()` recomputes the id and verifies
+the signature on construction (electrum-ecc). `Event.from_json` drops the wire id ("we don't
+validate the original self.id, just always overwrite it"), so it is never compared and is not
+reachable from the delivered `Event` (named in `notes`). `Relay._receive_messages` sleeps 5 ms before each message (a CPU-DOS
 mitigation, ~150 s for the `all` workload) and 5 s after any exception, and an event without a
 valid signature raises (`ValueError: missing sig`): the 1,547 unsigned events cost 5 s each,
 so a run of `all` exceeds any sane timeout (error row). `notes` (4 invalid events) takes ~36 s.
@@ -154,12 +169,15 @@ escaped text): the real U+0000 of the ambiguous event passes, and a valid kind 4
 content is escaped JSON containing `\u0000` is rejected: `accepted_ok: false`. It also rejects
 empty tags (`[]`), which this corpus does not contain.
 
-**nostrclient** (PyPI `nostrclient` 1.0.5). `Relay(url).connect()`, `relay.subscribe(filter)`,
-`sub.on("EVENT", ...)`, `relay.on("EOSE" + subid, ...)`; websocket-client thread plus an
-emitter thread that delivers events (0.1 s queue poll). No verification on receive; the harness
-builds `nostrclient.event.Event` from the dict, calls `verify()` (signature against the
-recomputed id) and compares that id with the event's. Subscription dedup keeps ids in a list
-(linear scan, reset at 10,000), which makes it slow.
+**nostrclient** (PyPI `nostrclient` 1.0.5). `Relay(url).connect()`, then a `Subscription` made
+with the id `relay.subscribe` would give it, `sub.on("EVENT", ...)` and `relay.on("EOSE" +
+subid, ...)`, then `relay.subscribe(filter, sub=sub)`: the emitter thread (0.1 s queue poll)
+drops events that have no listener yet, so the listeners go on before the REQ. No verification
+on receive; the harness builds `nostrclient.event.Event` from the dict, compares its id with
+the event's and calls `verify()` (signature against the id): two hashes per event, as `Event.id`
+is a property that recomputes on every access. Subscription dedup keeps ids in a list (linear
+scan, reset at 10,000), which makes it slow. Each `Relay` starts a non-daemon emitter thread
+(`while True`) that nothing stops, so one more is left polling after every run.
 
 **basic-nostr** ("intentionally tiny", 2026). Fetch-only: `read_events_from_relays(relays,
 limit)` returns a deduplicated list sorted by `created_at` after EOSE. Its `connect_to_relays`

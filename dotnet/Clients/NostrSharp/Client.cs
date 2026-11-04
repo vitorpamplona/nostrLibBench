@@ -1,6 +1,7 @@
 // NostrSharp (smaciullator/NostrSharp).
 using System.Reflection;
 using LibBench;
+using NostrSharp.Keys;
 using NostrSharp.Nostr;
 using NostrSharp.Relay;
 using NostrSharp.Relay.Models;
@@ -22,11 +23,15 @@ public sealed class NostrSharpClient : BenchClient
     public override string Crypto => "NBitcoin.Secp256k1 {NBitcoin.Secp256k1} (pure C#)";
     public override string Verify => "explicit";
     public override string Notes =>
-        "Last release 2023. NSRelay does not verify. Per event the harness calls NEvent.IsVerified() (BIP-340 over the id " +
-        "it recomputes with Newtonsoft.Json) and, because IsVerified never compares that id with the event's Id, also the " +
-        "library's own id function (the private NEvent.GetId, called by reflection) against Id. " +
+        "Last release 2023. NSRelay does not verify, and NEvent.IsVerified() checks BIP-340 over the id it recomputes (GetId) " +
+        "without ever comparing it with the event's Id. So per event the harness calls the library's own id function (the " +
+        "private NEvent.GetId, Newtonsoft.Json + SHA-256, by reflection) once, compares it with Id, then checks the " +
+        "signature over Id with NPub.FromHex(PubKey).IsHexSignatureValid(Sig, Id), the call IsVerified makes. " +
         "NSRelay queues frames and its dispatch loop sleeps 200 ms whenever the queue is empty; it splits every frame on ',' " +
-        "to find the message type. Its id function re-serializes the event with an empty tag list (`[0,pubkey,created_at,kind,[],content]` for an event that has tags), so only tagless events pass. SendFilter replaces the REQ's subscription id with the relay object's own SubscriptionId (a Guid). TryConnect also fetches NIP-11 over HTTP (untimed).";
+        "to find the message type. GetId serializes a temporary NEventSign that shares the event's Tags list and disposes it, " +
+        "which clears that list: the first id is right, but the event is left without tags and any later GetId (or " +
+        "IsVerified) hashes an empty tag list, hence one id computation per event. NTag holds a key and at most 4 values, " +
+        "so a valid event with a longer tag (zap-request relays tags, ...) gets a wrong id and is rejected. SendFilter replaces the REQ's subscription id with the relay object's own SubscriptionId (a Guid). TryConnect also fetches NIP-11 over HTTP (untimed).";
 
     static readonly MethodInfo GetId = typeof(NEvent).GetMethod("GetId", BindingFlags.NonPublic | BindingFlags.Instance)
         ?? throw new MissingMethodException("NEvent.GetId");
@@ -43,7 +48,12 @@ public sealed class NostrSharpClient : BenchClient
             if (resp.SubscriptionId != _relay!.SubscriptionId.ToString()) return;
             var ev = resp.Event;
             bool ok;
-            try { ok = ev?.Id != null && ev.IsVerified() && (string?)GetId.Invoke(ev, null) == ev.Id; }
+            // One hash: the library's id function, compared with Id, then IsVerified's own signature check over Id.
+            try
+            {
+                ok = ev?.Id != null && ev.PubKey != null && (string?)GetId.Invoke(ev, null) == ev.Id
+                    && NPub.FromHex(ev.PubKey).IsHexSignatureValid(ev.Sig, ev.Id);
+            }
             catch { ok = false; }
             if (ok) ctx.Event(ev!.Id!); else ctx.Reject();
         };

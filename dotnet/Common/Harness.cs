@@ -57,7 +57,7 @@ public sealed class RunCtx
 
     public readonly int Events, Limit;
     public long T0, EoseTicks, LastEventTicks, LastActivityTicks;
-    public TimeSpan Cpu0, CpuEose, CpuDone;
+    public TimeSpan Cpu0, CpuEose, CpuDone, CpuLastAfterEose;
     public bool CpuDoneSet;
     public int Accepted, Rejected, AmbiguousAccepted, ExpiredAccepted;
     public bool EoseSeen, Started;
@@ -99,7 +99,13 @@ public sealed class RunCtx
             LastActivityTicks = now;
             if (_ambiguous.Contains(id)) AmbiguousAccepted++;
             if (_expired.Contains(id)) ExpiredAccepted++;
-            if (EoseSeen) EventAfterEose = true;
+            if (EoseSeen)
+            {
+                // CPU at the latest event after EOSE (as the JVM sink): if the set never
+                // completes, the run's CPU ends here, not at the idle-timeout detection 1 s later.
+                EventAfterEose = true;
+                CpuLastAfterEose = CpuNow();
+            }
             if (EoseSeen && Accepted >= _complete) Finish();
         }
     }
@@ -330,7 +336,6 @@ public static class Driver
             if (ctx.EoseSeen && now - Volatile.Read(ref ctx.LastActivityTicks) >= idle) break;
             if (now - ctx.T0 > timeout.TotalMilliseconds * TicksPerMs) break;
         }
-        var cpuDetect = RunCtx.CpuNow();
         var failure = ctx.Failure;
         bool eose;
         RunResult r;
@@ -338,7 +343,7 @@ public static class Driver
         {
             eose = ctx.EoseSeen;
             long tEnd = Math.Max(ctx.EoseTicks, ctx.LastEventTicks);
-            TimeSpan cpuEnd = ctx.CpuDoneSet ? ctx.CpuDone : ctx.EventAfterEose ? cpuDetect : ctx.CpuEose;
+            TimeSpan cpuEnd = ctx.CpuDoneSet ? ctx.CpuDone : ctx.EventAfterEose ? ctx.CpuLastAfterEose : ctx.CpuEose;
             r = new RunResult
             {
                 Ms = (tEnd - ctx.T0) / TicksPerMs,

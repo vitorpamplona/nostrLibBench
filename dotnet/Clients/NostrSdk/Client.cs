@@ -21,7 +21,11 @@ public sealed class SdkStream : BenchClient
         "Rust library (nostr-sdk 0.45.2, nostr 0.45.3, serde_json) behind UniFFI: every event crosses the FFI " +
         "(a Next() async call per event, the Event object is a handle; its id is read with event.Id().ToHex()). " +
         "The relay pool verifies id and signature of every event before delivering it and drops NIP-40-expired events. " +
-        "The stream ends at EOSE (ExitOnEose); its end is the EOSE time. Client.AddRelay + Connect are untimed.";
+        "The stream ends at EOSE (ExitOnEose); its end is the EOSE time. StreamEvents runs through rust-nostr's fixed " +
+        "internal channels (the relay's notification broadcast, then the stream's own channel), whose sizes the bindings " +
+        "do not expose. Client.AddRelay(url, RelayCapabilities.Read(), ...) (the C# binding takes the capabilities " +
+        "explicitly; the Rust default is read + write, and ReqTarget.Auto sends the REQ to read relays either way) + " +
+        "Connect are untimed.";
 
     Client? _client;
 
