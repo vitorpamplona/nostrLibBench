@@ -43,6 +43,14 @@ runs the orchestrator from the repo root. It takes every HARNESS.md flag.
   or, if events came after the EOSE, the one read at the last of them, so the idle second
   is never counted.
 - **Memory**: `peak_rss_mb` is `VmHWM` from `/proc/self/status` at the end of the child.
+  `base_rss_mb` is `VmRSS` after `GC.Collect()` at the end of the child's first setup
+  (client connected, before the first REQ). `alloc_bytes` is the growth of
+  `GC.GetTotalAllocatedBytes(true)` (managed heap, all threads; the precise read briefly
+  suspends the runtime) read in `ctx.Start()` right before the CPU time and `t0`, and when
+  the driver's wait ends (immediately once the set is complete, else after the idle
+  second); the row reports the median run's value, the mean of the two middle runs (by ms)
+  when the number of runs is even. Native memory (e.g. a libsecp256k1 P/Invoke, socket
+  buffers) is not counted.
 - **Runtime**: .NET defaults, recorded in `runtime`: Workstation GC, concurrent GC,
   tiered compilation with dynamic PGO, Release builds, framework-dependent apphost.
 - Library console output goes to the orchestrator's stderr, never into the results.

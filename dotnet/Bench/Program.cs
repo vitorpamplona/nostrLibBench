@@ -153,7 +153,7 @@ static class Program
         row["error"] = error;
         row["warmup_runs"] = 0;
         row["runs"] = 0;
-        foreach (var k in new[] { "first_run_ms", "median_ms", "min_ms", "p90_ms", "run_ms", "events_per_s", "us_per_event", "cpu_ms", "peak_rss_mb" })
+        foreach (var k in new[] { "first_run_ms", "median_ms", "min_ms", "p90_ms", "run_ms", "events_per_s", "us_per_event", "cpu_ms", "peak_rss_mb", "base_rss_mb", "alloc_bytes" })
             row[k] = null;
         return row;
     }

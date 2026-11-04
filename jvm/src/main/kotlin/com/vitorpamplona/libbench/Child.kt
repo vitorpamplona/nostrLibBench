@@ -10,6 +10,8 @@ import kotlin.math.ceil
 class RunResult(
     val ms: Double,
     val cpuMs: Double,
+    /** Heap bytes all threads allocated from t0 to the end of the wait; null if the JVM has no counter. */
+    val allocBytes: Long?,
     val accepted: Int,
     val xor: String,
     val ambiguous: Int,
@@ -75,26 +77,60 @@ object Child {
         }
     }
 
+    /**
+     * Cumulative heap bytes allocated by every thread of the JVM, live and terminated
+     * (JDK 21+), or null when the JVM does not support or has disabled the counter.
+     */
+    private val threadMx = java.lang.management.ManagementFactory.getThreadMXBean() as? com.sun.management.ThreadMXBean
+
+    private fun totalAllocated(): Long? = threadMx?.totalThreadAllocatedBytes?.takeIf { it >= 0 }
+
+    /** Current resident set of this process (VmRSS), in MB. */
+    private fun currentRssMb(): Double? =
+        try {
+            File("/proc/self/status")
+                .readLines()
+                .firstOrNull { it.startsWith("VmRSS:") }
+                ?.substringAfter(':')
+                ?.trim()
+                ?.removeSuffix("kB")
+                ?.trim()
+                ?.toLong()
+                ?.let { it / 1024.0 }
+        } catch (_: Exception) {
+            null
+        }
+
+    /** [baseRss], when given, gets the RSS after setup and a full GC, before the REQ. */
     private fun oneRun(
         spec: ClientSpec,
         w: Workload,
         url: String,
         args: Args,
+        baseRss: ((Double?) -> Unit)? = null,
     ): RunResult {
         val sink = EventSink(w.ambiguousIds.toHashSet(), w.expiredIds.toHashSet(), w.validEvents + w.ambiguousIds.size)
         val client = spec.create()
         onWorker(args.timeoutMs, "setup") { client.setup(url) }
+        if (baseRss != null) {
+            System.gc()
+            baseRss(currentRssMb())
+        }
         var t0 = 0L
         var cpu0 = 0L
+        var alloc0: Long? = null
+        var alloc1: Long? = null
         try {
             val started = System.nanoTime()
             val subscribed =
                 worker.submit {
+                    alloc0 = totalAllocated()
                     cpu0 = Cpu.nanos()
                     t0 = System.nanoTime()
                     client.subscribe(w.events, sink)
                 }
             val outcome = sink.await(idleMs = 1000, deadlineNanos = started + args.timeoutMs * 1_000_000L)
+            alloc1 = totalAllocated()
             sink.close()
             if (outcome == EventSink.Outcome.TIMEOUT) {
                 throw RunFailure(
@@ -127,6 +163,7 @@ object Child {
         return RunResult(
             ms = (end - t0) / 1e6,
             cpuMs = (sink.endCpu() - cpu0) / 1e6,
+            allocBytes = alloc0?.let { a0 -> alloc1?.let { it - a0 } },
             accepted = sink.accepted,
             xor = EventSink.toHex(sink.xor),
             ambiguous = sink.ambiguous,
@@ -180,7 +217,7 @@ object Child {
             if (!warm && measured.isEmpty()) measureStart = System.nanoTime()
             val r =
                 try {
-                    oneRun(spec, w, url, args)
+                    oneRun(spec, w, url, args, if (runs == 0) { rss -> row["base_rss_mb"] = rss?.let { round1(it) } } else null)
                 } catch (e: RunFailure) {
                     runs++
                     System.err.println("   %-9s run %d: %s".format(w.name, runs, e.message))
@@ -236,8 +273,23 @@ object Child {
         row["events_per_s"] = round1(w.events / (med / 1000))
         row["us_per_event"] = Math.round(med * 1000 / w.events * 1000) / 1000.0
         row["cpu_ms"] = round1(median(measured.map { it.cpuMs }.sorted()))
+        row["alloc_bytes"] = medianAlloc(measured)
         row["peak_rss_mb"] = peakRssMb()?.let { round1(it) }
         return row to false
+    }
+
+    /**
+     * alloc_bytes of the run whose ms is median_ms; with an even number of runs (median_ms
+     * is then the mean of the two middle runs) the mean of those two runs' values.
+     */
+    private fun medianAlloc(measured: List<RunResult>): Long? {
+        if (measured.isEmpty()) return null
+        val byMs = measured.sortedBy { it.ms }
+        val n = byMs.size
+        val mid = byMs[n / 2].allocBytes ?: return null
+        if (n % 2 == 1) return mid
+        val lo = byMs[n / 2 - 1].allocBytes ?: return null
+        return (lo + mid) / 2
     }
 
     private fun median(s: List<Double>): Double {

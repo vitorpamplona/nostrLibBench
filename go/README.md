@@ -57,6 +57,15 @@ The harness follows HARNESS.md "A run"; the Go specifics:
   and again when the EOSE is delivered and at every accepted event after it, so
   `cpu_ms` covers `t0 .. t_end` and not the untimed wait. `peak_rss_mb` is `ru_maxrss`
   at the end of the workload (warm-ups and every run).
+- **Memory.** `base_rss_mb` is `VmRSS` from `/proc/self/status`, read in the child after
+  `runtime.GC()` at the end of the first setup of each workload (client connected, before
+  the first REQ; the child runs every workload of a client, so later workloads see the
+  heap the earlier ones left). `alloc_bytes` is the growth of `runtime.MemStats.TotalAlloc`
+  (heap bytes, all goroutines), read with `ReadMemStats` (stop-the-world) right before
+  `t0` and right after the wait ends (immediately when every deliverable event arrived,
+  else after the 1 s quiet wait); the row reports the median run's value, the mean of the
+  two middle runs (by ms) when the number of runs is even. C allocations of the cgo
+  libsecp256k1 builds are not counted (libsecp256k1 does not allocate per event).
 - **Teardown (untimed).** Unsubscribe/cancel, close the client, then `runtime.GC()` so
   every run starts from a collected heap.
 - **Correctness.** `accepted_ok` per HARNESS.md "Correctness" (expired events optional,

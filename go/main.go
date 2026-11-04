@@ -81,6 +81,8 @@ type row struct {
 	UsPerEvent        *float64  `json:"us_per_event"`
 	CPUMs             *float64  `json:"cpu_ms"`
 	PeakRssMb         *float64  `json:"peak_rss_mb"`
+	BaseRssMb         *float64  `json:"base_rss_mb"`
+	AllocBytes        *int64    `json:"alloc_bytes"`
 }
 
 type output struct {

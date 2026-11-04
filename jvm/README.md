@@ -55,6 +55,17 @@ The harness follows HARNESS.md "A run"; the JVM specifics:
 - **Peak RSS** is `VmHWM` from `/proc/self/status` when the row is written: the child's
   peak over every run so far (with several workloads, the later rows include the earlier
   workloads' peak).
+- **Base RSS and allocation.** `base_rss_mb` is `VmRSS` from `/proc/self/status`, read
+  after `System.gc()` at the end of the first setup of each workload (client connected,
+  before the first REQ; one child JVM runs every workload of a client, so later workloads
+  start from what the earlier ones left). `alloc_bytes` is the growth of
+  `com.sun.management.ThreadMXBean.getTotalThreadAllocatedBytes()` (heap bytes, live and
+  terminated threads) read on the worker thread right before t0 and on the main thread
+  when the wait ends (immediately once `valid + ambiguous` arrived, else after the 1 s
+  idle wait), so the counter covers every library thread; null if
+  the JVM reports -1. The row reports the median run's value, the mean of the two middle
+  runs (by ms) when the number of runs is even. Native memory (direct ByteBuffers,
+  secp256k1 JNI) is not counted.
 - **Timeouts.** A run with no EOSE within `--timeout-ms` is an error; the child then
   writes its rows and stops (a library that timed out may be wedged), and the parent marks
   the remaining workloads "not run". Set comparison, warm-up, `min-runs`/`min-time-ms`/

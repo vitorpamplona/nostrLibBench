@@ -59,6 +59,33 @@ func peakRSSMb() float64 {
 	return float64(ru.Maxrss) / 1024 // Linux: KiB
 }
 
+// currentRSSMb is the process's current resident set (VmRSS in /proc/self/status), in
+// MB like peakRSSMb; nil when it cannot be read.
+func currentRSSMb() *float64 {
+	b, err := os.ReadFile("/proc/self/status")
+	if err != nil {
+		return nil
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		if rest, ok := strings.CutPrefix(line, "VmRSS:"); ok {
+			var kb float64
+			if _, err := fmt.Sscan(strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(rest), "kB")), &kb); err != nil {
+				return nil
+			}
+			return f64(round1(kb / 1024))
+		}
+	}
+	return nil
+}
+
+// totalAlloc is runtime.MemStats.TotalAlloc: cumulative heap bytes allocated by every
+// goroutine. ReadMemStats stops the world, so it is read only outside t0 .. t_end.
+func totalAlloc() uint64 {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	return m.TotalAlloc
+}
+
 func (c *collector) event(id [32]byte) {
 	now := time.Now()
 	c.mu.Lock()
@@ -122,6 +149,7 @@ func (c *collector) fail(err error) {
 
 type runResult struct {
 	ms, cpuMs float64
+	alloc     uint64 // heap bytes allocated between t0 and the end of the wait
 	accepted  int
 	xor       [32]byte
 	ids       [][32]byte // diagnostic run only
@@ -232,7 +260,9 @@ const quietWait = time.Second
 
 // oneRun is one subscription, end to end (HARNESS.md "A run").
 // keepIDs makes it the untimed diagnostic run, which also records the accepted ids.
-func oneRun(c *clientDef, url string, w workload, e *expect, timeout time.Duration, keepIDs bool) (res runResult, err error) {
+// A non-nil baseRSS gets the current RSS at the end of setup, after a GC (the first
+// setup of a workload: HARNESS.md "base_rss_mb").
+func oneRun(c *clientDef, url string, w workload, e *expect, timeout time.Duration, keepIDs bool, baseRSS **float64) (res runResult, err error) {
 	// 1. setup, untimed
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	s, err := opens[c.ID](ctx, url)
@@ -247,7 +277,13 @@ func oneRun(c *clientDef, url string, w workload, e *expect, timeout time.Durati
 		keep: keepIDs,
 	}
 
+	if baseRSS != nil {
+		runtime.GC()
+		*baseRSS = currentRSSMb()
+	}
+
 	// 2. timed
+	alloc0 := totalAlloc()
 	cpu0 := cpuTime()
 	t0 := time.Now()
 	if err := s.subscribe(h, w.Events); err != nil {
@@ -288,6 +324,7 @@ wait:
 		}
 	}
 
+	alloc1 := totalAlloc()
 	h.mu.Lock()
 	if h.err != nil {
 		err = h.err
@@ -299,6 +336,7 @@ wait:
 	res = runResult{
 		ms:       float64(end.Sub(t0).Nanoseconds()) / 1e6,
 		cpuMs:    float64((h.cpuEnd - cpu0).Nanoseconds()) / 1e6,
+		alloc:    alloc1 - alloc0,
 		accepted: h.accepted,
 		xor:      h.xor,
 		ids:      h.record,
@@ -385,7 +423,11 @@ func runWorkload(c *clientDef, o opts, w workload) (r row, fatalRun bool) {
 		if !warm && len(measured) == 0 {
 			mStart = time.Now()
 		}
-		res, err := oneRun(c, url, w, e, timeout, false)
+		var baseRSS **float64
+		if runs == 0 {
+			baseRSS = &r.BaseRssMb
+		}
+		res, err := oneRun(c, url, w, e, timeout, false, baseRSS)
 		runs++
 		if err != nil {
 			r.Errors++
@@ -424,7 +466,7 @@ func runWorkload(c *clientDef, o opts, w workload) (r row, fatalRun bool) {
 	// ambiguous and expired events the library delivered.
 	diagTimeout := false
 	if !r.AcceptedOK {
-		d, derr := oneRun(c, url, w, e, timeout, true)
+		d, derr := oneRun(c, url, w, e, timeout, true, nil)
 		if derr == nil {
 			r.AmbiguousAccepted = intp(countIn(d.ids, e.ambSet))
 			r.ExpiredAccepted = intp(countIn(d.ids, e.expSet))
@@ -452,6 +494,7 @@ func runWorkload(c *clientDef, o opts, w workload) (r row, fatalRun bool) {
 	r.EventsPerS = f64(round1(float64(w.Events) / (med / 1000)))
 	r.UsPerEvent = f64(round3(med * 1000 / float64(w.Events)))
 	r.CPUMs = f64(round1(median(cpus)))
+	r.AllocBytes = medianAlloc(measured)
 	r.PeakRssMb = f64(round1(peakRSSMb()))
 	r.FirstRunMs = f64(round1(*r.FirstRunMs))
 	return r, diagTimeout
@@ -479,10 +522,27 @@ func setAccepted(r *row, e *expect, res runResult) {
 func nullTimings(r *row) {
 	r.FirstRunMs, r.MedianMs, r.MinMs, r.P90Ms = nil, nil, nil, nil
 	r.EventsPerS, r.UsPerEvent, r.CPUMs = nil, nil, nil
+	r.AllocBytes = nil
 	r.RunMs = []float64{}
 	r.Runs = 0
 	r.AcceptedOK = false
 	r.PeakRssMb = f64(round1(peakRSSMb()))
+}
+
+// medianAlloc is the alloc of the run whose ms is median_ms; with an even number of
+// runs (median_ms is then the mean of the two middle runs) the mean of those two runs'.
+func medianAlloc(measured []runResult) *int64 {
+	if len(measured) == 0 {
+		return nil
+	}
+	byMs := append([]runResult(nil), measured...)
+	sort.SliceStable(byMs, func(i, j int) bool { return byMs[i].ms < byMs[j].ms })
+	n := len(byMs)
+	a := int64(byMs[n/2].alloc)
+	if n%2 == 0 {
+		a = (int64(byMs[n/2-1].alloc) + a) / 2
+	}
+	return &a
 }
 
 func median(s []float64) float64 {

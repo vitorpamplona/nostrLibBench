@@ -88,7 +88,8 @@ val CLIENTS: List<ClientSpec> =
                     "(a clone of the event plus a JNA call, per event) to spot it. " +
                     "ClientBuilder.notificationChannelSize(65536) (default 4096): the broadcast channel drops what a " +
                     "slower reader has not taken yet, and the JNA reader falls behind (with the default, `all` lost " +
-                    "60-65% of its events, a different number every run).",
+                    "60-65% of its events, a different number every run). alloc_bytes counts only the JVM side " +
+                    "(JNA handles, strings); the Rust heap is not counted.",
             variant = false,
             create = { NostrSdkClient(stream = false, channelSize = 65_536) },
         ),

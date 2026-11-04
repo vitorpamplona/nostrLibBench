@@ -25,7 +25,7 @@ public sealed class SdkStream : BenchClient
         "internal channels (the relay's notification broadcast, then the stream's own channel), whose sizes the bindings " +
         "do not expose. Client.AddRelay(url, RelayCapabilities.Read(), ...) (the C# binding takes the capabilities " +
         "explicitly; the Rust default is read + write, and ReqTarget.Auto sends the REQ to read relays either way) + " +
-        "Connect are untimed.";
+        "Connect are untimed. alloc_bytes counts only the managed side (handles, strings); the Rust heap is not counted.";
 
     Client? _client;
 

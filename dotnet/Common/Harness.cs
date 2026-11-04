@@ -58,6 +58,7 @@ public sealed class RunCtx
     public readonly int Events, Limit;
     public long T0, EoseTicks, LastEventTicks, LastActivityTicks;
     public TimeSpan Cpu0, CpuEose, CpuDone, CpuLastAfterEose;
+    public long Alloc0; // GC.GetTotalAllocatedBytes(true) right before t0
     public bool CpuDoneSet;
     public int Accepted, Rejected, AmbiguousAccepted, ExpiredAccepted;
     public bool EoseSeen, Started;
@@ -81,6 +82,9 @@ public sealed class RunCtx
     /// <summary>t0: read right before the library's subscription call.</summary>
     public void Start()
     {
+        // Precise: suspends the runtime for a moment to add up every thread's allocation
+        // context, so it is read before the CPU time and t0.
+        Alloc0 = GC.GetTotalAllocatedBytes(true);
         Cpu0 = CpuNow();
         T0 = Stopwatch.GetTimestamp();
         LastActivityTicks = T0;
@@ -306,9 +310,13 @@ public static class Driver
     sealed class RunResult
     {
         public double Ms, CpuMs;
+        public long AllocBytes;
         public int Accepted, Ambiguous, Expired;
         public string Xor = "";
     }
+
+    /// <summary>VmRSS after the first setup of this process, after a full GC (base_rss_mb).</summary>
+    static double? _baseRssMb;
 
     static async Task<RunResult> OneRun(BenchClient client, Workload w, Uri url, Settings s)
     {
@@ -318,6 +326,11 @@ public static class Driver
         if (await Task.WhenAny(setup, Task.Delay(timeout)) != setup)
             throw new TimeoutException($"setup (connect) did not finish within {s.TimeoutMs} ms");
         await setup;
+        if (_baseRssMb == null)
+        {
+            GC.Collect();
+            _baseRssMb = CurrentRssMb();
+        }
 
         Task run;
         try { run = client.RunAsync(ctx); }
@@ -336,6 +349,7 @@ public static class Driver
             if (ctx.EoseSeen && now - Volatile.Read(ref ctx.LastActivityTicks) >= idle) break;
             if (now - ctx.T0 > timeout.TotalMilliseconds * TicksPerMs) break;
         }
+        long alloc1 = GC.GetTotalAllocatedBytes(true);
         var failure = ctx.Failure;
         bool eose;
         RunResult r;
@@ -348,6 +362,7 @@ public static class Driver
             {
                 Ms = (tEnd - ctx.T0) / TicksPerMs,
                 CpuMs = (cpuEnd - ctx.Cpu0).TotalMilliseconds,
+                AllocBytes = alloc1 - ctx.Alloc0,
                 Accepted = ctx.Accepted,
                 Ambiguous = ctx.AmbiguousAccepted,
                 Expired = ctx.ExpiredAccepted,
@@ -404,6 +419,7 @@ public static class Driver
             if (first != null) { FillAccepted(row, w, first); row["accepted_ok"] = false; }
             row["warmup_runs"] = warm.Count;
             row["runs"] = runs.Count;
+            row["base_rss_mb"] = _baseRssMb is double baseMb ? R(baseMb) : null;
             return row;
         }
 
@@ -428,6 +444,12 @@ public static class Driver
         row2["us_per_event"] = Math.Round(median * 1000.0 / w.Events, 2);
         row2["cpu_ms"] = R(Median(runs.Select(r => r.CpuMs).OrderBy(x => x).ToList()));
         row2["peak_rss_mb"] = R(PeakRssMb());
+        row2["base_rss_mb"] = _baseRssMb is double baseMb2 ? R(baseMb2) : null;
+        // alloc of the run whose ms is median_ms; with an even number of runs (median_ms is
+        // then the mean of the two middle runs) the mean of those two runs' values.
+        var byMs = runs.OrderBy(r => r.Ms).ToList();
+        int n = byMs.Count;
+        row2["alloc_bytes"] = n % 2 == 1 ? byMs[n / 2].AllocBytes : (byMs[n / 2 - 1].AllocBytes + byMs[n / 2].AllocBytes) / 2;
         return row2;
     }
 
@@ -483,7 +505,21 @@ public static class Driver
         foreach (var k in new[] { "first_run_ms", "median_ms", "min_ms", "p90_ms", "run_ms", "events_per_s", "us_per_event", "cpu_ms" })
             row[k] = null;
         row["peak_rss_mb"] = Math.Round(PeakRssMb(), 1);
+        row["base_rss_mb"] = null;
+        row["alloc_bytes"] = null;
         return row;
+    }
+
+    static double? CurrentRssMb()
+    {
+        try
+        {
+            foreach (var line in File.ReadLines("/proc/self/status"))
+                if (line.StartsWith("VmRSS:"))
+                    return long.Parse(line.Split(' ', StringSplitOptions.RemoveEmptyEntries)[1]) / 1024.0;
+        }
+        catch { }
+        return null;
     }
 
     public static double PeakRssMb()

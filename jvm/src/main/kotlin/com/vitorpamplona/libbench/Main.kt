@@ -377,6 +377,8 @@ fun baseRow(
         "us_per_event" to null,
         "cpu_ms" to null,
         "peak_rss_mb" to null,
+        "base_rss_mb" to null,
+        "alloc_bytes" to null,
     )
 
 fun failedRow(
