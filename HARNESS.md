@@ -57,7 +57,27 @@ each named in `notes`:
   timeouts) and limits that would drop events (`max_events`, channel sizes); never lower
   anything;
 - silence per-event logging to the console (an app configures its logger), keeping the
-  library's own work.
+  library's own work;
+- turn off work outside the job that an ordinary documented option switches off: event
+  stores, caches and databases, dedup trackers the app picks, proof-of-work checks,
+  NIP-11 fetches, grouping or batching delays before the `REQ`, re-matching events
+  against the filter.
+
+**Nothing beyond the job, nothing short of it.** A ranked row stores nothing: no event
+store, cache, index or database, in the library or the harness. Work the library does
+unconditionally (a dedup set it always keeps, a second parse inside its API, a log
+string it always builds) is its cost: the row keeps it and `notes` name it. A library's
+store or cache path is benchmarked only as a variant, and only when it adds information.
+A row that does a different amount of work than the job (an API that streams the set
+twice, a parser that never decodes content) is either fixed, left unranked with the
+reason in `notes`, or dropped. When the library's id check is missing, the harness calls
+the library's own id function and compares, so every row hashes and compares the id.
+
+**Timing.** Connecting, the WebSocket handshake and any wait the API needs before it can
+subscribe happen in untimed setup when the API lets the app wait for them; when it
+doesn't, `notes` say the connect is inside the run. Nothing the job needs (parsing,
+verification) is moved outside the run, and classifying the delivered ids (ambiguous,
+expired) happens after the run, not in the per-event callback.
 
 A build option or setting the library documents for speed (a libsecp256k1 backend behind
 a build tag, a native verifier plugin) is a client entry of its own, not a variant: the
