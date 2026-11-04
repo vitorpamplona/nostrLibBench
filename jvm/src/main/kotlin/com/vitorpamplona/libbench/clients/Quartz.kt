@@ -2,6 +2,8 @@ package com.vitorpamplona.libbench.clients
 
 import com.vitorpamplona.libbench.BenchClient
 import com.vitorpamplona.libbench.EventSink
+import com.vitorpamplona.libbench.quartzproposal.fetch
+import com.vitorpamplona.libbench.quartzproposal.fetchEvents
 import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.crypto.verify
 import com.vitorpamplona.quartz.nip01Core.relay.client.NostrClient
@@ -172,7 +174,7 @@ class QuartzStandaloneClient : BenchClient {
 }
 
 /** Which of Quartz's fetch accessories [QuartzFetchClient] drives. */
-enum class QuartzFetch { WITH_HOOKS, FETCH_ALL, FETCH_AS_FLOW }
+enum class QuartzFetch { WITH_HOOKS, FETCH_ALL, FETCH_AS_FLOW, PROPOSED_FETCH, PROPOSED_FETCH_EVENTS }
 
 /**
  * Quartz's fetch accessories (extension functions on [NostrClient]) over the same pool and
@@ -225,6 +227,12 @@ class QuartzFetchClient(
                     for (event in client.fetchAll(relay, filters, IDLE_MS)) {
                         if (event.verify()) sink.event(event.id)
                     }
+                }
+                QuartzFetch.PROPOSED_FETCH -> {
+                    client.fetch(relay, filters, IDLE_MS) { event -> if (event.verify()) sink.event(event.id) }
+                }
+                QuartzFetch.PROPOSED_FETCH_EVENTS -> {
+                    client.fetchEvents(relay, filters, IDLE_MS).collect { event -> if (event.verify()) sink.event(event.id) }
                 }
                 QuartzFetch.FETCH_AS_FLOW -> {
                     var done = 0

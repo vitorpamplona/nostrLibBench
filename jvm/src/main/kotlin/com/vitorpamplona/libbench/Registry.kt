@@ -131,6 +131,40 @@ val CLIENTS: List<ClientSpec> =
             create = { QuartzFetchClient(QuartzFetch.FETCH_AS_FLOW) },
         ),
         ClientSpec(
+            id = "quartz-fetch",
+            library = "Quartz",
+            version = V["com.vitorpamplona.quartz:quartz-jvm"],
+            license = "MIT",
+            api = "proposed NostrClient.fetch(relay, filters) { event -> } (built in the harness on fetchAllWithHooks; not in Quartz 2.13.0)",
+            websocket = OKHTTP,
+            crypto = SECP_KMP,
+            verify = "explicit",
+            notes =
+                "A proposed single-relay accessory, prototyped in the harness (quartzproposal/Fetch.kt) on Quartz's " +
+                    "public fetchAllWithHooks: one REQ, every event handed to the callback unverified in arrival " +
+                    "order, nothing collected, deduped or sorted; returns at EOSE with the delivered count and the " +
+                    "relay's end reason. The callback verifies with Event.verify(), as quartz-nostrclient's listener " +
+                    "does. Same pool, socket and coroutine as quartz-fetchallwithhooks.",
+            variant = true,
+            create = { QuartzFetchClient(QuartzFetch.PROPOSED_FETCH) },
+        ),
+        ClientSpec(
+            id = "quartz-fetchevents",
+            library = "Quartz",
+            version = V["com.vitorpamplona.quartz:quartz-jvm"],
+            license = "MIT",
+            api = "proposed NostrClient.fetchEvents(relay, filters): Flow<Event> (channelFlow over the proposed fetch; not in Quartz 2.13.0)",
+            websocket = OKHTTP,
+            crypto = SECP_KMP,
+            verify = "explicit",
+            notes =
+                "The proposed fetch as a cold Flow of single events (a channelFlow, default 64-slot buffer, that " +
+                    "completes at EOSE): each event is sent through the channel to the collector, which verifies it " +
+                    "with Event.verify(); one more coroutine hop per event than quartz-fetch.",
+            variant = true,
+            create = { QuartzFetchClient(QuartzFetch.PROPOSED_FETCH_EVENTS) },
+        ),
+        ClientSpec(
             id = "nostr-sdk-subscribe",
             library = "rust-nostr nostr-sdk (Kotlin/JVM bindings)",
             version = "${V["org.nostrdevkit:nostr-sdk-jvm"]} (nostr-sdk 0.45.2)",
