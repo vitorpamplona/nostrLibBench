@@ -6,8 +6,11 @@ import com.vitorpamplona.quartz.nip01Core.core.Event
 import com.vitorpamplona.quartz.nip01Core.crypto.verify
 import com.vitorpamplona.quartz.nip01Core.relay.client.NostrClient
 import com.vitorpamplona.quartz.nip01Core.relay.client.accessories.ParallelEventVerifier
+import com.vitorpamplona.quartz.nip01Core.relay.client.accessories.fetchAll
+import com.vitorpamplona.quartz.nip01Core.relay.client.accessories.fetchAllWithHooks
 import com.vitorpamplona.quartz.nip01Core.relay.client.listeners.RelayConnectionListener
 import com.vitorpamplona.quartz.nip01Core.relay.client.reqs.SubscriptionListener
+import com.vitorpamplona.quartz.nip01Core.relay.client.reqs.fetchAsFlow
 import com.vitorpamplona.quartz.nip01Core.relay.client.single.IRelayClient
 import com.vitorpamplona.quartz.nip01Core.relay.client.single.basic.BasicRelayClient
 import com.vitorpamplona.quartz.nip01Core.relay.client.single.standalone.StandaloneRelayClient
@@ -24,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
@@ -164,5 +168,88 @@ class QuartzStandaloneClient : BenchClient {
     override fun teardown() {
         client.close(subId)
         client.disconnect()
+    }
+}
+
+/** Which of Quartz's fetch accessories [QuartzFetchClient] drives. */
+enum class QuartzFetch { WITH_HOOKS, FETCH_ALL, FETCH_AS_FLOW }
+
+/**
+ * Quartz's fetch accessories (extension functions on [NostrClient]) over the same pool and
+ * socket as [QuartzClient]: one REQ to one relay, completed at EOSE. They deliver events
+ * unverified, so each event goes through Quartz's `Event.verify()`, at the point the API
+ * hands it to the app:
+ *  - [QuartzFetch.WITH_HOOKS]: `fetchAllWithHooks`, verified inside its per-event hook (the
+ *    hook's documented "verify / persist" use); the accessory keeps the accepted events in its
+ *    result list.
+ *  - [QuartzFetch.FETCH_ALL]: `fetchAll`, which dedups by id, returns the list at EOSE sorted
+ *    newest-first; every event of the list is verified after it returns (inside the run).
+ *  - [QuartzFetch.FETCH_AS_FLOW]: `fetchAsFlow`, a conflated flow of the growing list that
+ *    completes at EOSE; the collector verifies the events appended since its last emission.
+ * The fetch runs in a coroutine on the client's scope (Dispatchers.IO), as an app launches it.
+ */
+class QuartzFetchClient(
+    private val mode: QuartzFetch,
+) : BenchClient {
+    private lateinit var scope: CoroutineScope
+    private lateinit var client: NostrClient
+    private lateinit var relay: NormalizedRelayUrl
+
+    override fun setup(url: String) {
+        relay = RelayUrlNormalizer.normalizeOrNull(url) ?: error("Quartz could not normalize $url")
+        scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        client = NostrClient(BasicOkHttpWebSocket.Builder { QuartzClient.okHttp }, scope)
+        client.keepConnected(relay)
+        runBlocking { withTimeout(30_000) { client.connectedRelaysFlow().first { relay in it } } }
+        Thread.sleep(QuartzClient.SETTLE_MS)
+    }
+
+    override fun subscribe(
+        limit: Int,
+        sink: EventSink,
+    ) {
+        val filters = listOf(Filter(limit = limit))
+        scope.launch {
+            when (mode) {
+                QuartzFetch.WITH_HOOKS -> {
+                    client.fetchAllWithHooks(mapOf(relay to filters), idleTimeoutMs = IDLE_MS) { _, event ->
+                        if (event.verify()) {
+                            sink.event(event.id)
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                }
+                QuartzFetch.FETCH_ALL -> {
+                    for (event in client.fetchAll(relay, filters, IDLE_MS)) {
+                        if (event.verify()) sink.event(event.id)
+                    }
+                }
+                QuartzFetch.FETCH_AS_FLOW -> {
+                    var done = 0
+                    client.fetchAsFlow(relay, filters).collect { list ->
+                        for (i in done until list.size) {
+                            val event = list[i]
+                            if (event.verify()) sink.event(event.id)
+                        }
+                        done = list.size
+                    }
+                }
+            }
+            sink.eose()
+        }
+    }
+
+    override fun teardown() {
+        client.releaseConnection(relay)
+        client.disconnect()
+        client.close()
+        scope.cancel()
+    }
+
+    private companion object {
+        /** The accessories' idle window (no event for this long ends the fetch); far above any gap here. */
+        const val IDLE_MS = 60_000L
     }
 }

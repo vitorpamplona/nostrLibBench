@@ -4,6 +4,8 @@ import com.vitorpamplona.libbench.clients.Nostr4jClient
 import com.vitorpamplona.libbench.clients.NostrJavaClient
 import com.vitorpamplona.libbench.clients.NostrSdkClient
 import com.vitorpamplona.libbench.clients.QuartzClient
+import com.vitorpamplona.libbench.clients.QuartzFetch
+import com.vitorpamplona.libbench.clients.QuartzFetchClient
 import com.vitorpamplona.libbench.clients.QuartzStandaloneClient
 import com.vitorpamplona.libbench.clients.RhodiumClient
 
@@ -69,6 +71,64 @@ val CLIENTS: List<ClientSpec> =
                     "settle after connect.",
             variant = true,
             create = { QuartzStandaloneClient() },
+        ),
+        ClientSpec(
+            id = "quartz-fetchallwithhooks",
+            library = "Quartz",
+            version = V["com.vitorpamplona.quartz:quartz-jvm"],
+            license = "MIT",
+            api = "NostrClient.fetchAllWithHooks({relay: [filter]}) { relay, event -> ... } (accessory; returns at EOSE)",
+            websocket = OKHTTP,
+            crypto = SECP_KMP,
+            verify = "explicit",
+            notes =
+                "Quartz's fetch accessory with a per-event hook, over the same NostrClient and socket as " +
+                    "quartz-nostrclient: the listener pushes each event into an UNLIMITED channel, one loop drains it " +
+                    "and calls the hook in arrival order; the hook runs Event.verify() and keeps the verified events, " +
+                    "which the accessory collects into its result list (returned at EOSE, so every event stays " +
+                    "reachable until the run ends). No dedup. idleTimeoutMs 60 s. Run in a coroutine on the client's " +
+                    "Dispatchers.IO scope; EOSE = the accessory returning.",
+            variant = true,
+            create = { QuartzFetchClient(QuartzFetch.WITH_HOOKS) },
+        ),
+        ClientSpec(
+            id = "quartz-fetchall",
+            library = "Quartz",
+            version = V["com.vitorpamplona.quartz:quartz-jvm"],
+            license = "MIT",
+            api = "NostrClient.fetchAll(relay, [filter]) (accessory; suspends until EOSE, returns List<Event>)",
+            websocket = OKHTTP,
+            crypto = SECP_KMP,
+            verify = "explicit",
+            notes =
+                "fetchAll is fetchAllWithHooks with a hook that dedups by id (a HashSet of every id), then sorts the " +
+                    "list newest-first (DefaultFeedOrderEvent). It does not verify: the app verifies each event of the " +
+                    "returned list with Event.verify(), inside the run, after the accessory returns. The dedup runs " +
+                    "before any verification, so a forged copy that arrives first takes the id and the genuine event is " +
+                    "dropped as a duplicate: it fails the forged-content and forged-sig checks (98 of 197 delivered). " +
+                    "idleTimeoutMs 60 s; same pool, socket and coroutine as quartz-fetchallwithhooks.",
+            variant = true,
+            create = { QuartzFetchClient(QuartzFetch.FETCH_ALL) },
+        ),
+        ClientSpec(
+            id = "quartz-fetchasflow",
+            library = "Quartz",
+            version = V["com.vitorpamplona.quartz:quartz-jvm"],
+            license = "MIT",
+            api = "NostrClient.fetchAsFlow(relay, [filter]).collect { list -> ... } (accessory; completes at EOSE)",
+            websocket = OKHTTP,
+            crypto = SECP_KMP,
+            verify = "explicit",
+            notes =
+                "fetchAsFlow: a callbackFlow whose listener dedups by id (a HashSet of every id), appends to an " +
+                    "EventListAccumulator and sends a snapshot view of the whole list per event, conflated (a slow " +
+                    "collector sees only the newest list); it completes at EOSE. The collector verifies the events " +
+                    "appended since its previous emission with Event.verify(). The dedup runs before any " +
+                    "verification, so a forged copy that arrives first censors the genuine event: it fails the " +
+                    "forged-content and forged-sig checks (98 of 197 delivered). Same pool, socket and coroutine as " +
+                    "quartz-fetchallwithhooks.",
+            variant = true,
+            create = { QuartzFetchClient(QuartzFetch.FETCH_AS_FLOW) },
         ),
         ClientSpec(
             id = "nostr-sdk-subscribe",
