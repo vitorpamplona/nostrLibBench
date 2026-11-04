@@ -28,7 +28,12 @@ if [[ -z "${JAVA_HOME:-}" ]]; then
     done
 fi
 
-if ! (cd "$HERE" && ./gradlew -q installDist); then
+# QUARTZ_DIR=<vitorpamplona/quartz checkout> benchmarks that checkout's Quartz instead of the release.
+QUARTZ_ARGS=()
+if [[ -n "${QUARTZ_DIR:-}" ]]; then
+    QUARTZ_ARGS=("-PquartzDir=$(cd "$QUARTZ_DIR" && pwd)")
+fi
+if ! (cd "$HERE" && ./gradlew -q installDist "${QUARTZ_ARGS[@]+"${QUARTZ_ARGS[@]}"}"); then
     echo "jvm: build failed" >&2
     exit 1
 fi

@@ -74,6 +74,10 @@ The harness follows HARNESS.md "A run"; the JVM specifics:
   whose API is a pull stream, the app reads on the thread that subscribed.
 - **Debugging.** `LIBBENCH_DUMP_IDS=<dir>` writes every run's accepted ids, in delivery
   order, to `<dir>/<client>-<workload>-*.ids`.
+- **An unreleased Quartz.** `QUARTZ_DIR=../quartz ./jvm/run.sh …` (or `-PquartzDir=…` on
+  Gradle) builds against that vitorpamplona/quartz checkout instead of the Maven Central
+  release (a composite build; version locking is off for that build), and the Quartz rows
+  record `local <dir>@<commit>` as their version.
 - **Profiling.** The child ends with `Runtime.halt()`, which skips JFR's dump on exit, so
   `-Dlibbench.jfrDump=<file>` makes it dump its recordings first (`%p` becomes its pid).
   Child JVMs inherit the parent's flags, so for an allocation profile of one client:

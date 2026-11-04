@@ -25,7 +25,9 @@ kotlin {
 
 // gradle.lockfile pins every resolved version, transitive ones included:
 // ./gradlew dependencies --write-locks after changing a version in libs.versions.toml.
-dependencyLocking { lockAllConfigurations() }
+// A local Quartz (-PquartzDir) is a project, not a locked module: locking is off for that build.
+val quartzDir: String? = providers.gradleProperty("quartzDir").orNull
+if (quartzDir == null) dependencyLocking { lockAllConfigurations() }
 
 dependencies {
     implementation(libs.quartz)
@@ -42,6 +44,20 @@ dependencies {
     implementation(libs.ktor.client.websockets)
 }
 
+// The Quartz under test when built with -PquartzDir: "local <dir>@<commit>".
+val localQuartz: String? =
+    quartzDir?.let { dir ->
+        val commit =
+            providers
+                .exec {
+                    commandLine("git", "-C", dir, "rev-parse", "--short", "HEAD")
+                    isIgnoreExitValue = true
+                }.standardOutput.asText
+                .get()
+                .trim()
+        "local ${File(dir).canonicalFile.name}@${commit.ifEmpty { "unknown" }}"
+    }
+
 // The version of every module on the runtime classpath, as resolved (and locked), written
 // into a resource the harness reports in each row.
 val generatedResources = layout.buildDirectory.dir("generated/libbench-resources")
@@ -50,6 +66,7 @@ val resolvedModules: Provider<List<String>> =
         cfg.incoming.resolutionResult.allComponents
             .mapNotNull { it.id as? org.gradle.api.artifacts.component.ModuleComponentIdentifier }
             .map { "${it.group}\\:${it.module}=${it.version}" }
+            .plus(listOfNotNull(localQuartz?.let { "com.vitorpamplona.quartz\\:quartz-jvm=$it" }))
             .sorted()
     }
 val writeLibraryVersions by tasks.registering {
