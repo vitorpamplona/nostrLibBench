@@ -79,16 +79,21 @@ The harness follows HARNESS.md "A run"; the JVM specifics:
 
 | client | library | API | verify | variant |
 |---|---|---|---|---|
-| `quartz-nostrclient` | Quartz 2.13.0 | `NostrClient` + `subscribe(subId, {relay: [filter]}, listener)` | explicit | |
+| `quartz-nostrclient` | Quartz 2.15.0 | `NostrClient` + `subscribe(subId, {relay: [filter]}, listener)` | explicit | |
 | `quartz-parallelverifier` | Quartz | same + Quartz's `ParallelEventVerifier` | explicit | |
 | `quartz-standalone` | Quartz | `StandaloneRelayClient.sendRequest` | explicit | yes |
+| `quartz-fetch` | Quartz | `fetch(relay, filters) { event -> }` (callback on the delivery coroutine, returns at EOSE) | explicit | yes |
+| `quartz-fetchevents` | Quartz | `fetchEvents(relay, filters): Flow<Event>` (completes at EOSE) | explicit | yes |
+| `quartz-fetchallwithhooks` | Quartz | `fetchAllWithHooks(filters) { relay, event -> }` | explicit | yes |
+| `quartz-fetchall` | Quartz | `fetchAll(relay, filters)` (dedup, sort, list at EOSE) | explicit | yes |
+| `quartz-fetchasflow` | Quartz | `fetchAsFlow(relay, filters)` (conflated list snapshots) | explicit | yes |
 | `nostr-sdk-subscribe` | rust-nostr nostr-sdk 0.45 (UniFFI JVM bindings) | `Client.subscribe` + `notifications()` | library | |
 | `nostr-sdk-stream` | same | `Client.streamEvents` | library | yes |
 | `nostr4j-pool` | nostr4j 0.4.1 | `NostrPool.subscribe(filter, PassthroughEventTracker)` | library | |
 | `nostr-java-relaypool` | nostr-java 2.4.2 | `RelayPool.subscribe` | explicit | |
 | `rhodium-request` | Rhodium 1.0-rc | `NostrService.request` + `deserializedEvent` | explicit | |
 
-### Quartz (Amethyst's library), `com.vitorpamplona.quartz:quartz` 2.13.0, MIT
+### Quartz (Amethyst's library), `com.vitorpamplona.quartz:quartz` 2.15.0, MIT
 
 - **API.** `NostrClient(BasicOkHttpWebSocket.Builder { okHttp })`, the pool Amethyst
   (Android, Desktop, the `amy` CLI) runs on, used with one relay;

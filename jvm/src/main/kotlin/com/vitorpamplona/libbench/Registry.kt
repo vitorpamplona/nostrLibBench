@@ -135,34 +135,34 @@ val CLIENTS: List<ClientSpec> =
             library = "Quartz",
             version = V["com.vitorpamplona.quartz:quartz-jvm"],
             license = "MIT",
-            api = "proposed NostrClient.fetch(relay, filters) { event -> } (built in the harness on fetchAllWithHooks; not in Quartz 2.13.0)",
+            api = "NostrClient.fetch(relay, filters) { event -> } (accessory; returns at EOSE with the count)",
             websocket = OKHTTP,
             crypto = SECP_KMP,
             verify = "explicit",
             notes =
-                "A proposed single-relay accessory, prototyped in the harness (quartzproposal/Fetch.kt) on Quartz's " +
-                    "public fetchAllWithHooks: one REQ, every event handed to the callback unverified in arrival " +
-                    "order, nothing collected, deduped or sorted; returns at EOSE with the delivered count and the " +
-                    "relay's end reason. The callback verifies with Event.verify(), as quartz-nostrclient's listener " +
-                    "does. Same pool, socket and coroutine as quartz-fetchallwithhooks.",
+                "Quartz's one-relay read: one REQ, every event handed to the callback unverified, in arrival order, " +
+                    "on the relay's delivery coroutine (no flow in between; startReq registers the REQ and the " +
+                    "callback runs as a SubscriptionListener would); nothing collected, deduped or sorted; returns " +
+                    "at EOSE. The callback verifies with Event.verify(), as quartz-nostrclient's listener does. Same " +
+                    "pool and socket as quartz-nostrclient, run in a coroutine on the client's Dispatchers.IO scope.",
             variant = true,
-            create = { QuartzFetchClient(QuartzFetch.PROPOSED_FETCH) },
+            create = { QuartzFetchClient(QuartzFetch.FETCH) },
         ),
         ClientSpec(
             id = "quartz-fetchevents",
             library = "Quartz",
             version = V["com.vitorpamplona.quartz:quartz-jvm"],
             license = "MIT",
-            api = "proposed NostrClient.fetchEvents(relay, filters): Flow<Event> (channelFlow over the proposed fetch; not in Quartz 2.13.0)",
+            api = "NostrClient.fetchEvents(relay, filters): Flow<Event> (accessory; completes at EOSE)",
             websocket = OKHTTP,
             crypto = SECP_KMP,
             verify = "explicit",
             notes =
-                "The proposed fetch as a cold Flow of single events (a channelFlow, default 64-slot buffer, that " +
-                    "completes at EOSE): each event is sent through the channel to the collector, which verifies it " +
-                    "with Event.verify(); one more coroutine hop per event than quartz-fetch.",
+                "fetch as a cold Flow of single events: a callbackFlow over startReq, each event handed over with a " +
+                    "suspending send (default 64-slot buffer) and verified by the collector with Event.verify(); one " +
+                    "coroutine hop per event more than quartz-fetch. Completes at EOSE.",
             variant = true,
-            create = { QuartzFetchClient(QuartzFetch.PROPOSED_FETCH_EVENTS) },
+            create = { QuartzFetchClient(QuartzFetch.FETCH_EVENTS) },
         ),
         ClientSpec(
             id = "nostr-sdk-subscribe",

@@ -4,7 +4,7 @@
 [versions]
 kotlin = "2.4.21"
 # Amethyst's Nostr library (NostrClient + BasicOkHttpWebSocket + Kite parser).
-quartz = "2.13.0"
+quartz = "2.15.0"
 # rust-nostr's nostr-sdk through its UniFFI Kotlin/JVM bindings (now published by nostrdevkit).
 nostrSdkJvm = "0.45.1"
 # NostrGameEngine's pure-Java library.
