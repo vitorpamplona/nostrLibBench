@@ -40,19 +40,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 62760,
-   "median_ms": 59597.7,
-   "min_ms": 59328.5,
-   "p90_ms": 60033.3,
+   "first_run_ms": 61070.6,
+   "median_ms": 60667.9,
+   "min_ms": 59439.5,
+   "p90_ms": 61540.4,
    "run_ms": [
-    59597.7,
-    59328.5,
-    60033.3
+    60667.9,
+    59439.5,
+    61540.4
    ],
-   "events_per_s": 522.9,
-   "us_per_event": 1912.572,
-   "cpu_ms": 59422.3,
-   "peak_rss_mb": 114.2
+   "events_per_s": 513.6,
+   "us_per_event": 1946.917,
+   "cpu_ms": 60210.6,
+   "peak_rss_mb": 112.3,
+   "base_rss_mb": 63.4,
+   "alloc_bytes": null
   },
   {
    "client": "nostr-tools-pool",
@@ -77,19 +79,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 61044,
-   "median_ms": 62897.3,
-   "min_ms": 60918.3,
-   "p90_ms": 65635.1,
+   "first_run_ms": 61987.8,
+   "median_ms": 54989.8,
+   "min_ms": 53222.3,
+   "p90_ms": 59428.5,
    "run_ms": [
-    60918.3,
-    62897.3,
-    65635.1
+    59428.5,
+    54989.8,
+    53222.3
    ],
-   "events_per_s": 495.4,
-   "us_per_event": 2018.462,
-   "cpu_ms": 62870.7,
-   "peak_rss_mb": 143.2
+   "events_per_s": 566.7,
+   "us_per_event": 1764.698,
+   "cpu_ms": 54534.6,
+   "peak_rss_mb": 143.3,
+   "base_rss_mb": 63.3,
+   "alloc_bytes": null
   },
   {
    "client": "nostr-tools-relay-wasm",
@@ -114,19 +118,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 12245.3,
-   "median_ms": 12549.2,
-   "min_ms": 12281.1,
-   "p90_ms": 12620.3,
+   "first_run_ms": 10634.5,
+   "median_ms": 10461.6,
+   "min_ms": 10402,
+   "p90_ms": 10793.9,
    "run_ms": [
-    12620.3,
-    12549.2,
-    12281.1
+    10461.6,
+    10793.9,
+    10402
    ],
-   "events_per_s": 2483.1,
-   "us_per_event": 402.722,
-   "cpu_ms": 12439.5,
-   "peak_rss_mb": 94
+   "events_per_s": 2978.6,
+   "us_per_event": 335.727,
+   "cpu_ms": 10401.2,
+   "peak_rss_mb": 94.6,
+   "base_rss_mb": 63.1,
+   "alloc_bytes": null
   },
   {
    "client": "ndk",
@@ -151,19 +157,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 106017.1,
-   "median_ms": 109196.3,
-   "min_ms": 109129,
-   "p90_ms": 110390.3,
+   "first_run_ms": 94780,
+   "median_ms": 102281.6,
+   "min_ms": 101845.2,
+   "p90_ms": 104563.7,
    "run_ms": [
-    109196.3,
-    109129,
-    110390.3
+    101845.2,
+    102281.6,
+    104563.7
    ],
-   "events_per_s": 285.4,
-   "us_per_event": 3504.26,
-   "cpu_ms": 109209.8,
-   "peak_rss_mb": 160.2
+   "events_per_s": 304.7,
+   "us_per_event": 3282.358,
+   "cpu_ms": 101275.7,
+   "peak_rss_mb": 158.8,
+   "base_rss_mb": 75.4,
+   "alloc_bytes": null
   },
   {
    "client": "nostrify-relay",
@@ -188,19 +196,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 61066.4,
-   "median_ms": 61010.9,
-   "min_ms": 60788.5,
-   "p90_ms": 61710.2,
+   "first_run_ms": 55488.6,
+   "median_ms": 59312.8,
+   "min_ms": 58012.5,
+   "p90_ms": 60904.1,
    "run_ms": [
-    60788.5,
-    61710.2,
-    61010.9
+    59312.8,
+    60904.1,
+    58012.5
    ],
-   "events_per_s": 510.7,
-   "us_per_event": 1957.925,
-   "cpu_ms": 61001.8,
-   "peak_rss_mb": 131.9
+   "events_per_s": 525.4,
+   "us_per_event": 1903.429,
+   "cpu_ms": 58990.6,
+   "peak_rss_mb": 133.9,
+   "base_rss_mb": 77.5,
+   "alloc_bytes": null
   },
   {
    "client": "nostrify-pool",
@@ -225,19 +235,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 62482.2,
-   "median_ms": 61666.3,
-   "min_ms": 61370.6,
-   "p90_ms": 62492,
+   "first_run_ms": 54313.4,
+   "median_ms": 54153.3,
+   "min_ms": 52707.8,
+   "p90_ms": 58685.1,
    "run_ms": [
-    61666.3,
-    61370.6,
-    62492
+    52707.8,
+    54153.3,
+    58685.1
    ],
-   "events_per_s": 505.3,
-   "us_per_event": 1978.957,
-   "cpu_ms": 61790.3,
-   "peak_rss_mb": 139.8
+   "events_per_s": 575.4,
+   "us_per_event": 1737.856,
+   "cpu_ms": 53927.8,
+   "peak_rss_mb": 138.8,
+   "base_rss_mb": 75,
+   "alloc_bytes": null
   },
   {
    "client": "welshman-nodelay",
@@ -262,19 +274,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 11566.8,
-   "median_ms": 11767.6,
-   "min_ms": 11541.3,
-   "p90_ms": 11777.7,
+   "first_run_ms": 11022.2,
+   "median_ms": 10138.7,
+   "min_ms": 9915.1,
+   "p90_ms": 10433,
    "run_ms": [
-    11767.6,
-    11777.7,
-    11541.3
+    10433,
+    9915.1,
+    10138.7
    ],
-   "events_per_s": 2648,
-   "us_per_event": 377.64,
-   "cpu_ms": 11940.6,
-   "peak_rss_mb": 231.7
+   "events_per_s": 3073.5,
+   "us_per_event": 325.365,
+   "cpu_ms": 10291.7,
+   "peak_rss_mb": 168.5,
+   "base_rss_mb": 86.4,
+   "alloc_bytes": null
   },
   {
    "client": "applesauce-relay",
@@ -299,19 +313,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 60560.1,
-   "median_ms": 60683.6,
-   "min_ms": 60330,
-   "p90_ms": 60904.5,
+   "first_run_ms": 55167.8,
+   "median_ms": 60132.9,
+   "min_ms": 51706.6,
+   "p90_ms": 60211.9,
    "run_ms": [
-    60904.5,
-    60330,
-    60683.6
+    51706.6,
+    60132.9,
+    60211.9
    ],
-   "events_per_s": 513.5,
-   "us_per_event": 1947.421,
-   "cpu_ms": 60591,
-   "peak_rss_mb": 135.6
+   "events_per_s": 518.2,
+   "us_per_event": 1929.747,
+   "cpu_ms": 59495.4,
+   "peak_rss_mb": 129,
+   "base_rss_mb": 78.7,
+   "alloc_bytes": null
   },
   {
    "client": "rx-nostr",
@@ -336,19 +352,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 63619.1,
-   "median_ms": 64525.5,
-   "min_ms": 64107.9,
-   "p90_ms": 64673.3,
+   "first_run_ms": 65929.6,
+   "median_ms": 63686.7,
+   "min_ms": 63321.3,
+   "p90_ms": 63903,
    "run_ms": [
-    64673.3,
-    64107.9,
-    64525.5
+    63903,
+    63321.3,
+    63686.7
    ],
-   "events_per_s": 482.9,
-   "us_per_event": 2070.714,
-   "cpu_ms": 64788.4,
-   "peak_rss_mb": 121.2
+   "events_per_s": 489.3,
+   "us_per_event": 2043.796,
+   "cpu_ms": 63344.6,
+   "peak_rss_mb": 123.1,
+   "base_rss_mb": 57,
+   "alloc_bytes": null
   },
   {
    "client": "snort-system",
@@ -381,7 +399,9 @@
    "events_per_s": null,
    "us_per_event": null,
    "cpu_ms": null,
-   "peak_rss_mb": 112.3
+   "peak_rss_mb": 109,
+   "base_rss_mb": 102.3,
+   "alloc_bytes": null
   },
   {
    "client": "snort-system-wasm",
@@ -406,19 +426,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 10591.3,
-   "median_ms": 10179.9,
-   "min_ms": 10013.5,
-   "p90_ms": 10618.1,
+   "first_run_ms": 9643.4,
+   "median_ms": 9717.1,
+   "min_ms": 9682,
+   "p90_ms": 9790.3,
    "run_ms": [
-    10618.1,
-    10013.5,
-    10179.9
+    9790.3,
+    9717.1,
+    9682
    ],
-   "events_per_s": 3061,
-   "us_per_event": 326.687,
-   "cpu_ms": 10389.5,
-   "peak_rss_mb": 205.2
+   "events_per_s": 3206.8,
+   "us_per_event": 311.837,
+   "cpu_ms": 9861.2,
+   "peak_rss_mb": 201.7,
+   "base_rss_mb": 99,
+   "alloc_bytes": null
   },
   {
    "client": "nostr-sdk-node",
@@ -434,15 +456,15 @@
    "workload": "all",
    "events": 31161,
    "bytes": 26995371,
-   "accepted": 29548,
-   "accepted_xor": "008a750b810b6ed995a5b23850ac2d1553f415d0ceec41510a710bd0bdb283ac",
+   "accepted": 24391,
+   "accepted_xor": "5f845cf78aa36a44168a6d27f23aad160cb903a179e8b091913f0ca142f80257",
    "ambiguous_accepted": 1,
    "expired_accepted": 0,
-   "accepted_ok": true,
-   "errors": 1,
-   "error": "run 4 delivered a different set than the first run (23720 events, xor 1b116bc24640ef64b3104b5bdb435475b88b76ca1079d70bceb42f494ba1d551 vs 29548, 008a750b810b6ed995a5b23850ac2d1553f415d0ceec41510a710bd0bdb283ac)",
+   "accepted_ok": false,
+   "errors": 5,
+   "error": "run 2 delivered a different set than the first run (29548 events, xor 008a750b810b6ed995a5b23850ac2d1553f415d0ceec41510a710bd0bdb283ac vs 24391, 5f845cf78aa36a44168a6d27f23aad160cb903a179e8b091913f0ca142f80257)",
    "warmup_runs": 1,
-   "runs": 4,
+   "runs": 5,
    "first_run_ms": null,
    "median_ms": null,
    "min_ms": null,
@@ -451,7 +473,9 @@
    "events_per_s": null,
    "us_per_event": null,
    "cpu_ms": null,
-   "peak_rss_mb": 725.5
+   "peak_rss_mb": 617.6,
+   "base_rss_mb": 71.4,
+   "alloc_bytes": null
   },
   {
    "client": "qntx-nostr",
@@ -476,19 +500,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 50031.4,
-   "median_ms": 50237.5,
-   "min_ms": 49770.2,
-   "p90_ms": 50281.5,
+   "first_run_ms": 47679.8,
+   "median_ms": 47813.6,
+   "min_ms": 47056.8,
+   "p90_ms": 47925.1,
    "run_ms": [
-    49770.2,
-    50281.5,
-    50237.5
+    47925.1,
+    47813.6,
+    47056.8
    ],
-   "events_per_s": 620.3,
-   "us_per_event": 1612.193,
-   "cpu_ms": 50171.9,
-   "peak_rss_mb": 118.1
+   "events_per_s": 651.7,
+   "us_per_event": 1534.406,
+   "cpu_ms": 47232.9,
+   "peak_rss_mb": 111.7,
+   "base_rss_mb": 65.5,
+   "alloc_bytes": null
   },
   {
    "client": "qntx-nostr-wasm",
@@ -513,19 +539,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 4295.3,
-   "median_ms": 4051.4,
-   "min_ms": 4038.9,
-   "p90_ms": 4160.4,
+   "first_run_ms": 3996.1,
+   "median_ms": 3782.1,
+   "min_ms": 3687.4,
+   "p90_ms": 3903.8,
    "run_ms": [
-    4160.4,
-    4051.4,
-    4038.9
+    3903.8,
+    3687.4,
+    3782.1
    ],
-   "events_per_s": 7691.4,
-   "us_per_event": 130.015,
-   "cpu_ms": 4064.7,
-   "peak_rss_mb": 77.6
+   "events_per_s": 8239.1,
+   "us_per_event": 121.372,
+   "cpu_ms": 3766.2,
+   "peak_rss_mb": 77.3,
+   "base_rss_mb": 66.2,
+   "alloc_bytes": null
   },
   {
    "client": "welshman",
@@ -536,7 +564,7 @@
    "websocket": "isomorphic-ws → ws 8.22.1 (pure JS on node:net)",
    "crypto": "nostr-wasm 0.1.0 (libsecp256k1 in WebAssembly) via @welshman/util verifyEvent → nostr-tools/wasm",
    "verify": "library",
-   "notes": "Slow pass: one timed run, measured after a container restart on a slower host: the go-nostr-relay control took 8,547 ms there against 7,881 ms in the main pass (+8 %), so compare this row with the others only to within ~10 %. Library defaults (the default-configuration row; welshman-nodelay is the ranked speed configuration), including the Socket send and receive queues: the REQ itself waits in the send queue for Socket.sendBatchDelay (100 ms, a setTimeout before each batch of sendBatchSize 5), inside the timed run, and inbound messages reach subscribers through a TaskQueue of recvBatchSize 20 per recvBatchDelay 100 ms, i.e. at most ~200 messages/s per socket, so this row is bound by those timers, not the CPU. On Deno, @welshman/util cannot be imported as is (its module-load proof-of-work benchmark starts a classic Worker, which Deno rejects), so the harness hides globalThis.Worker during the import. @welshman/util verifyEvent: nostr-tools/pure until nostr-wasm finishes loading (it imports it dynamically at module load), then nostr-tools/wasm (id + signature); load() waits until a probe confirms the wasm verifier is the one in use and fails otherwise. Unconditional library work on every event: the request Tracker (dedup by id), matchFilters, and the request's result array (request() resolves with the deduplicated list). A new Pool per run (context.pool), socket opened in setup.",
+   "notes": "Slow pass: one timed run (no warmup for Dart, JVM and Ruby), in the same batch as the other rows. Library defaults (the default-configuration row; welshman-nodelay is the ranked speed configuration), including the Socket send and receive queues: the REQ itself waits in the send queue for Socket.sendBatchDelay (100 ms, a setTimeout before each batch of sendBatchSize 5), inside the timed run, and inbound messages reach subscribers through a TaskQueue of recvBatchSize 20 per recvBatchDelay 100 ms, i.e. at most ~200 messages/s per socket, so this row is bound by those timers, not the CPU. On Deno, @welshman/util cannot be imported as is (its module-load proof-of-work benchmark starts a classic Worker, which Deno rejects), so the harness hides globalThis.Worker during the import. @welshman/util verifyEvent: nostr-tools/pure until nostr-wasm finishes loading (it imports it dynamically at module load), then nostr-tools/wasm (id + signature); load() waits until a probe confirms the wasm verifier is the one in use and fails otherwise. Unconditional library work on every event: the request Tracker (dedup by id), matchFilters, and the request's result array (request() resolves with the deduplicated list). A new Pool per run (context.pool), socket opened in setup.",
    "variant": false,
    "workload": "all",
    "events": 31161,
@@ -550,17 +578,19 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 1,
-   "first_run_ms": 172459.2,
-   "median_ms": 172045.9,
-   "min_ms": 172045.9,
-   "p90_ms": 172045.9,
+   "first_run_ms": 169275.8,
+   "median_ms": 169682.1,
+   "min_ms": 169682.1,
+   "p90_ms": 169682.1,
    "run_ms": [
-    172045.9
+    169682.1
    ],
-   "events_per_s": 181.1,
-   "us_per_event": 5521.194,
-   "cpu_ms": 15899.7,
-   "peak_rss_mb": 169.6,
+   "events_per_s": 183.6,
+   "us_per_event": 5445.337,
+   "cpu_ms": 13858.1,
+   "peak_rss_mb": 173.9,
+   "base_rss_mb": 87,
+   "alloc_bytes": null,
    "pass": 2
   },
   {

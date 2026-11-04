@@ -48,7 +48,9 @@
    "events_per_s": null,
    "us_per_event": null,
    "cpu_ms": null,
-   "peak_rss_mb": null
+   "peak_rss_mb": null,
+   "base_rss_mb": null,
+   "alloc_bytes": null
   },
   {
    "client": "nostr-sdk-ios-pool",
@@ -81,7 +83,9 @@
    "events_per_s": null,
    "us_per_event": null,
    "cpu_ms": null,
-   "peak_rss_mb": null
+   "peak_rss_mb": null,
+   "base_rss_mb": null,
+   "alloc_bytes": null
   },
   {
    "client": "nostr-sdk-swift-stream",
@@ -114,7 +118,9 @@
    "events_per_s": null,
    "us_per_event": null,
    "cpu_ms": null,
-   "peak_rss_mb": null
+   "peak_rss_mb": null,
+   "base_rss_mb": null,
+   "alloc_bytes": null
   },
   {
    "client": "nostr-sdk-swift-notifications",
@@ -147,7 +153,9 @@
    "events_per_s": null,
    "us_per_event": null,
    "cpu_ms": null,
-   "peak_rss_mb": null
+   "peak_rss_mb": null,
+   "base_rss_mb": null,
+   "alloc_bytes": null
   },
   {
    "client": "swift-nostr-client",
@@ -180,7 +188,9 @@
    "events_per_s": null,
    "us_per_event": null,
    "cpu_ms": null,
-   "peak_rss_mb": 35.1
+   "peak_rss_mb": 35.2,
+   "base_rss_mb": null,
+   "alloc_bytes": null
   },
   {
    "client": "swift-nostr-websocketkit",
@@ -205,19 +215,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 5786.5,
-   "median_ms": 5348.3,
-   "min_ms": 5116.6,
-   "p90_ms": 5450.9,
+   "first_run_ms": 5412.6,
+   "median_ms": 5118.2,
+   "min_ms": 4983.4,
+   "p90_ms": 5215.1,
    "run_ms": [
-    5348.3,
-    5116.6,
-    5450.9
+    5215.1,
+    4983.4,
+    5118.2
    ],
-   "events_per_s": 5826.3,
-   "us_per_event": 171.634,
-   "cpu_ms": 10116.6,
-   "peak_rss_mb": 77.5
+   "events_per_s": 6088.3,
+   "us_per_event": 164.25,
+   "cpu_ms": 9161.2,
+   "peak_rss_mb": 76.8,
+   "base_rss_mb": 33.6,
+   "alloc_bytes": null
   },
   {
    "client": "nostr-essentials-pool",
@@ -250,7 +262,9 @@
    "events_per_s": null,
    "us_per_event": null,
    "cpu_ms": null,
-   "peak_rss_mb": null
+   "peak_rss_mb": null,
+   "base_rss_mb": null,
+   "alloc_bytes": null
   },
   {
    "client": "nostr-sdk-ios-relay",

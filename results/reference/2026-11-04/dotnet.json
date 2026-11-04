@@ -39,19 +39,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 8483.3,
-   "median_ms": 6663.6,
-   "min_ms": 6476.9,
-   "p90_ms": 6743,
+   "first_run_ms": 7446.1,
+   "median_ms": 6058.8,
+   "min_ms": 5917.1,
+   "p90_ms": 6186.5,
    "run_ms": [
-    6743,
-    6476.9,
-    6663.6
+    6186.5,
+    5917.1,
+    6058.8
    ],
-   "events_per_s": 4676.3,
-   "us_per_event": 213.84,
-   "cpu_ms": 6762.8,
-   "peak_rss_mb": 228.5
+   "events_per_s": 5143.1,
+   "us_per_event": 194.44,
+   "cpu_ms": 6141.7,
+   "peak_rss_mb": 222.6,
+   "base_rss_mb": 55.3,
+   "alloc_bytes": 1805990760
   },
   {
    "client": "nnostr",
@@ -76,19 +78,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 6365.3,
-   "median_ms": 5379.3,
-   "min_ms": 5261.9,
-   "p90_ms": 5463.4,
+   "first_run_ms": 5532.4,
+   "median_ms": 4788.8,
+   "min_ms": 4783,
+   "p90_ms": 4921.8,
    "run_ms": [
-    5261.9,
-    5379.3,
-    5463.4
+    4788.8,
+    4783,
+    4921.8
    ],
-   "events_per_s": 5792.7,
-   "us_per_event": 172.63,
-   "cpu_ms": 5647.2,
-   "peak_rss_mb": 312.7
+   "events_per_s": 6507.1,
+   "us_per_event": 153.68,
+   "cpu_ms": 5040.3,
+   "peak_rss_mb": 322.6,
+   "base_rss_mb": 52.6,
+   "alloc_bytes": 511866680
   },
   {
    "client": "nnostr-subscribeforevents",
@@ -121,7 +125,9 @@
    "events_per_s": null,
    "us_per_event": null,
    "cpu_ms": null,
-   "peak_rss_mb": 287.8
+   "peak_rss_mb": 274.6,
+   "base_rss_mb": 52.7,
+   "alloc_bytes": null
   },
   {
    "client": "nostrnet",
@@ -146,19 +152,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 6529.6,
-   "median_ms": 5371.6,
-   "min_ms": 5368.3,
-   "p90_ms": 5431.6,
+   "first_run_ms": 5730.7,
+   "median_ms": 5001.4,
+   "min_ms": 4796.9,
+   "p90_ms": 5173.8,
    "run_ms": [
-    5371.6,
-    5431.6,
-    5368.3
+    5173.8,
+    5001.4,
+    4796.9
    ],
-   "events_per_s": 5801.1,
-   "us_per_event": 172.38,
-   "cpu_ms": 7431.1,
-   "peak_rss_mb": 218.4
+   "events_per_s": 6230.5,
+   "us_per_event": 160.5,
+   "cpu_ms": 7041.9,
+   "peak_rss_mb": 215.5,
+   "base_rss_mb": 51.6,
+   "alloc_bytes": 219132440
   },
   {
    "client": "nostrnet-pool",
@@ -183,19 +191,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 6268.9,
-   "median_ms": 5395.8,
-   "min_ms": 5253.7,
-   "p90_ms": 5520.3,
+   "first_run_ms": 5731.1,
+   "median_ms": 4856.2,
+   "min_ms": 4763.3,
+   "p90_ms": 5006.2,
    "run_ms": [
-    5520.3,
-    5395.8,
-    5253.7
+    4763.3,
+    5006.2,
+    4856.2
    ],
-   "events_per_s": 5775,
-   "us_per_event": 173.16,
-   "cpu_ms": 7903.2,
-   "peak_rss_mb": 215.8
+   "events_per_s": 6416.7,
+   "us_per_event": 155.84,
+   "cpu_ms": 7249.3,
+   "peak_rss_mb": 216.8,
+   "base_rss_mb": 52.5,
+   "alloc_bytes": 221642704
   },
   {
    "client": "nostr-sdk",
@@ -206,7 +216,7 @@
    "websocket": "async-wsocket 0.17 / tokio-tungstenite 0.28 (Rust, in libnostr_sdk_ffi.so)",
    "crypto": "libsecp256k1 (C, via rust secp256k1 0.30 / secp256k1-sys 0.10, in libnostr_sdk_ffi.so)",
    "verify": "library",
-   "notes": "Rust library (nostr-sdk 0.45.2, nostr 0.45.3, serde_json) behind UniFFI: every event crosses the FFI (a Next() async call per event, the Event object is a handle; its id is read with event.Id().ToHex()). The relay pool verifies id and signature of every event before delivering it and drops NIP-40-expired events. The stream ends at EOSE (ExitOnEose); its end is the EOSE time. StreamEvents runs through rust-nostr's fixed internal channels (the relay's notification broadcast, then the stream's own channel), whose sizes the bindings do not expose. Client.AddRelay(url, RelayCapabilities.Read(), ...) (the C# binding takes the capabilities explicitly; the Rust default is read + write, and ReqTarget.Auto sends the REQ to read relays either way) + Connect are untimed.",
+   "notes": "Rust library (nostr-sdk 0.45.2, nostr 0.45.3, serde_json) behind UniFFI: every event crosses the FFI (a Next() async call per event, the Event object is a handle; its id is read with event.Id().ToHex()). The relay pool verifies id and signature of every event before delivering it and drops NIP-40-expired events. The stream ends at EOSE (ExitOnEose); its end is the EOSE time. StreamEvents runs through rust-nostr's fixed internal channels (the relay's notification broadcast, then the stream's own channel), whose sizes the bindings do not expose. Client.AddRelay(url, RelayCapabilities.Read(), ...) (the C# binding takes the capabilities explicitly; the Rust default is read + write, and ReqTarget.Auto sends the REQ to read relays either way) + Connect are untimed. alloc_bytes counts only the managed side (handles, strings); the Rust heap is not counted.",
    "variant": false,
    "workload": "all",
    "events": 31161,
@@ -220,20 +230,22 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 4,
-   "first_run_ms": 1847.9,
-   "median_ms": 1963.9,
-   "min_ms": 1906.9,
-   "p90_ms": 1996.6,
+   "first_run_ms": 1791.6,
+   "median_ms": 1838.7,
+   "min_ms": 1755.9,
+   "p90_ms": 2012.6,
    "run_ms": [
-    1943.5,
-    1984.3,
-    1906.9,
-    1996.6
+    1921.4,
+    1756.1,
+    1755.9,
+    2012.6
    ],
-   "events_per_s": 15866.6,
-   "us_per_event": 63.03,
-   "cpu_ms": 2310.9,
-   "peak_rss_mb": 343.4
+   "events_per_s": 16947,
+   "us_per_event": 59.01,
+   "cpu_ms": 2156.8,
+   "peak_rss_mb": 344.3,
+   "base_rss_mb": 59.9,
+   "alloc_bytes": 73115680
   },
   {
    "client": "blockcore-nostr-client",
@@ -258,19 +270,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 8404,
-   "median_ms": 6722.4,
-   "min_ms": 6618,
-   "p90_ms": 6858.1,
+   "first_run_ms": 8035.6,
+   "median_ms": 6239.3,
+   "min_ms": 6139.5,
+   "p90_ms": 6360.5,
    "run_ms": [
-    6858.1,
-    6618,
-    6722.4
+    6239.3,
+    6360.5,
+    6139.5
    ],
-   "events_per_s": 4635.4,
-   "us_per_event": 215.73,
-   "cpu_ms": 6873.5,
-   "peak_rss_mb": 226.8
+   "events_per_s": 4994.3,
+   "us_per_event": 200.23,
+   "cpu_ms": 6418.7,
+   "peak_rss_mb": 235.7,
+   "base_rss_mb": 55.9,
+   "alloc_bytes": 1958012248
   },
   {
    "client": "nostra",
@@ -295,19 +309,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 7096.3,
-   "median_ms": 6211,
-   "min_ms": 6134.7,
-   "p90_ms": 6229.9,
+   "first_run_ms": 6729.3,
+   "median_ms": 5367.8,
+   "min_ms": 5264.3,
+   "p90_ms": 5371.4,
    "run_ms": [
-    6134.7,
-    6211,
-    6229.9
+    5371.4,
+    5264.3,
+    5367.8
    ],
-   "events_per_s": 5017,
-   "us_per_event": 199.32,
-   "cpu_ms": 6310.7,
-   "peak_rss_mb": 220.4
+   "events_per_s": 5805.2,
+   "us_per_event": 172.26,
+   "cpu_ms": 5415.2,
+   "peak_rss_mb": 221.8,
+   "base_rss_mb": 53.9,
+   "alloc_bytes": 1036077896
   },
   {
    "client": "nostrsharp",
@@ -332,19 +348,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 10907.9,
-   "median_ms": 8515.1,
-   "min_ms": 8393.9,
-   "p90_ms": 8532.6,
+   "first_run_ms": 10189.9,
+   "median_ms": 7898.1,
+   "min_ms": 7819,
+   "p90_ms": 8078.8,
    "run_ms": [
-    8532.6,
-    8393.9,
-    8515.1
+    7819,
+    8078.8,
+    7898.1
    ],
-   "events_per_s": 3659.5,
-   "us_per_event": 273.26,
-   "cpu_ms": 8485.5,
-   "peak_rss_mb": 287.6
+   "events_per_s": 3945.4,
+   "us_per_event": 253.46,
+   "cpu_ms": 7982.9,
+   "peak_rss_mb": 298.2,
+   "base_rss_mb": 62.5,
+   "alloc_bytes": 4065133592
   },
   {
    "client": "nostr-client",

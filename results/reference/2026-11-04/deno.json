@@ -40,19 +40,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 27454.2,
-   "median_ms": 27181.9,
-   "min_ms": 26795.1,
-   "p90_ms": 27316.6,
+   "first_run_ms": 25162,
+   "median_ms": 26126.7,
+   "min_ms": 25257,
+   "p90_ms": 27801.9,
    "run_ms": [
-    27316.6,
-    26795.1,
-    27181.9
+    25257,
+    26126.7,
+    27801.9
    ],
-   "events_per_s": 1146.4,
-   "us_per_event": 872.304,
-   "cpu_ms": 27290.6,
-   "peak_rss_mb": 146.8
+   "events_per_s": 1192.7,
+   "us_per_event": 838.442,
+   "cpu_ms": 25999.8,
+   "peak_rss_mb": 140.5,
+   "base_rss_mb": 51.8,
+   "alloc_bytes": 30220561120
   },
   {
    "client": "nostr-tools-pool",
@@ -77,19 +79,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 28167.2,
-   "median_ms": 29403.1,
-   "min_ms": 28167.4,
-   "p90_ms": 29887.5,
+   "first_run_ms": 28707.3,
+   "median_ms": 27874,
+   "min_ms": 27064.5,
+   "p90_ms": 28677.9,
    "run_ms": [
-    29403.1,
-    28167.4,
-    29887.5
+    27874,
+    27064.5,
+    28677.9
    ],
-   "events_per_s": 1059.8,
-   "us_per_event": 943.587,
-   "cpu_ms": 29547,
-   "peak_rss_mb": 152.5
+   "events_per_s": 1117.9,
+   "us_per_event": 894.517,
+   "cpu_ms": 27897.9,
+   "peak_rss_mb": 153.1,
+   "base_rss_mb": 51.5,
+   "alloc_bytes": 30309769384
   },
   {
    "client": "nostr-tools-relay-wasm",
@@ -114,19 +118,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 13643.2,
-   "median_ms": 13543,
-   "min_ms": 13459.4,
-   "p90_ms": 14021.9,
+   "first_run_ms": 13130.3,
+   "median_ms": 13281.1,
+   "min_ms": 12856,
+   "p90_ms": 13455.6,
    "run_ms": [
-    13543,
-    14021.9,
-    13459.4
+    13455.6,
+    13281.1,
+    12856
    ],
-   "events_per_s": 2300.9,
-   "us_per_event": 434.613,
-   "cpu_ms": 13593.3,
-   "peak_rss_mb": 109
+   "events_per_s": 2346.3,
+   "us_per_event": 426.209,
+   "cpu_ms": 13194.2,
+   "peak_rss_mb": 111.3,
+   "base_rss_mb": 55.9,
+   "alloc_bytes": 355150360
   },
   {
    "client": "ndk",
@@ -151,19 +157,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 71923.3,
-   "median_ms": 74717.1,
-   "min_ms": 71047.6,
-   "p90_ms": 78077,
+   "first_run_ms": 69518.9,
+   "median_ms": 68387.3,
+   "min_ms": 66968.1,
+   "p90_ms": 69971.9,
    "run_ms": [
-    78077,
-    71047.6,
-    74717.1
+    69971.9,
+    66968.1,
+    68387.3
    ],
-   "events_per_s": 417.1,
-   "us_per_event": 2397.777,
-   "cpu_ms": 74884.8,
-   "peak_rss_mb": 237.3
+   "events_per_s": 455.7,
+   "us_per_event": 2194.645,
+   "cpu_ms": 68269.2,
+   "peak_rss_mb": 203.6,
+   "base_rss_mb": 66.3,
+   "alloc_bytes": 38939032600
   },
   {
    "client": "nostrify-relay",
@@ -188,19 +196,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 30273.5,
-   "median_ms": 29073.6,
-   "min_ms": 28763.1,
-   "p90_ms": 29784.3,
+   "first_run_ms": 26904.2,
+   "median_ms": 25573.7,
+   "min_ms": 25322.1,
+   "p90_ms": 26971,
    "run_ms": [
-    29784.3,
-    28763.1,
-    29073.6
+    26971,
+    25322.1,
+    25573.7
    ],
-   "events_per_s": 1071.8,
-   "us_per_event": 933.012,
-   "cpu_ms": 29409.1,
-   "peak_rss_mb": 206
+   "events_per_s": 1218.5,
+   "us_per_event": 820.696,
+   "cpu_ms": 25679.4,
+   "peak_rss_mb": 220.2,
+   "base_rss_mb": 68,
+   "alloc_bytes": 30458496536
   },
   {
    "client": "nostrify-pool",
@@ -225,19 +235,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 31291.8,
-   "median_ms": 29811.3,
-   "min_ms": 29784.3,
-   "p90_ms": 30266.1,
+   "first_run_ms": 25521,
+   "median_ms": 28645.5,
+   "min_ms": 28374.6,
+   "p90_ms": 29543.5,
    "run_ms": [
-    29784.3,
-    29811.3,
-    30266.1
+    28374.6,
+    28645.5,
+    29543.5
    ],
-   "events_per_s": 1045.3,
-   "us_per_event": 956.686,
-   "cpu_ms": 30179.2,
-   "peak_rss_mb": 199.9
+   "events_per_s": 1087.8,
+   "us_per_event": 919.275,
+   "cpu_ms": 28756.2,
+   "peak_rss_mb": 216.2,
+   "base_rss_mb": 65.9,
+   "alloc_bytes": 30528519296
   },
   {
    "client": "welshman-nodelay",
@@ -262,19 +274,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 13078.9,
-   "median_ms": 12957.2,
-   "min_ms": 12944,
-   "p90_ms": 13158.2,
+   "first_run_ms": 14095.3,
+   "median_ms": 14666.2,
+   "min_ms": 13895.7,
+   "p90_ms": 14692.6,
    "run_ms": [
-    13158.2,
-    12957.2,
-    12944
+    14692.6,
+    14666.2,
+    13895.7
    ],
-   "events_per_s": 2404.9,
-   "us_per_event": 415.814,
-   "cpu_ms": 13118.6,
-   "peak_rss_mb": 280.1
+   "events_per_s": 2124.7,
+   "us_per_event": 470.66,
+   "cpu_ms": 14782.3,
+   "peak_rss_mb": 244.3,
+   "base_rss_mb": 82.3,
+   "alloc_bytes": 379191840
   },
   {
    "client": "applesauce-relay",
@@ -299,19 +313,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 28159.5,
-   "median_ms": 28130,
-   "min_ms": 27333.5,
-   "p90_ms": 29395.7,
+   "first_run_ms": 29765.9,
+   "median_ms": 27457.2,
+   "min_ms": 26817.2,
+   "p90_ms": 27584,
    "run_ms": [
-    28130,
-    27333.5,
-    29395.7
+    27457.2,
+    26817.2,
+    27584
    ],
-   "events_per_s": 1107.7,
-   "us_per_event": 902.732,
-   "cpu_ms": 28423,
-   "peak_rss_mb": 185.3
+   "events_per_s": 1134.9,
+   "us_per_event": 881.141,
+   "cpu_ms": 27619.6,
+   "peak_rss_mb": 189.1,
+   "base_rss_mb": 61.6,
+   "alloc_bytes": 30363275264
   },
   {
    "client": "rx-nostr",
@@ -336,19 +352,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 33195.2,
-   "median_ms": 32403.8,
-   "min_ms": 31715.7,
-   "p90_ms": 32460.3,
+   "first_run_ms": 31277.1,
+   "median_ms": 31714,
+   "min_ms": 31665.3,
+   "p90_ms": 32550.9,
    "run_ms": [
-    32460.3,
-    31715.7,
-    32403.8
+    32550.9,
+    31665.3,
+    31714
    ],
-   "events_per_s": 961.6,
-   "us_per_event": 1039.882,
-   "cpu_ms": 32489.5,
-   "peak_rss_mb": 140.3
+   "events_per_s": 982.6,
+   "us_per_event": 1017.745,
+   "cpu_ms": 31798.5,
+   "peak_rss_mb": 144.5,
+   "base_rss_mb": 51.2,
+   "alloc_bytes": 30269885912
   },
   {
    "client": "snort-system",
@@ -370,7 +388,7 @@
    "expired_accepted": null,
    "accepted_ok": false,
    "errors": 1,
-   "error": "load failed: TypeError: [ERR_MODULE_NOT_FOUND] Cannot find module 'file:///home/user/nostrLibBench/node/node_modules/@snort/system/dist/cache/index' imported from 'file:///home/user/nostrLibBench/node/node_modules/@snort/system/dist/index.js'\nDid you mean to import with the \".js\" extension?\n    at async Object.load (file:///home/user/nostrLibBench/node/clients.mjs:574:19)\n    at async runChild (file:///home/user/nostrLibBench/node/bench.mjs:313:11)\n    at async file:///home/user/nostrLibBench/node/bench.mjs:542:1",
+   "error": "load failed: TypeError: [ERR_MODULE_NOT_FOUND] Cannot find module 'file:///home/user/nostrLibBench/node/node_modules/@snort/system/dist/cache/index' imported from 'file:///home/user/nostrLibBench/node/node_modules/@snort/system/dist/index.js'\nDid you mean to import with the \".js\" extension?\n    at async Object.load (file:///home/user/nostrLibBench/node/clients.mjs:574:19)\n    at async runChild (file:///home/user/nostrLibBench/node/bench.mjs:352:11)\n    at async file:///home/user/nostrLibBench/node/bench.mjs:587:1",
    "warmup_runs": 0,
    "runs": 0,
    "first_run_ms": null,
@@ -381,7 +399,9 @@
    "events_per_s": null,
    "us_per_event": null,
    "cpu_ms": null,
-   "peak_rss_mb": null
+   "peak_rss_mb": null,
+   "base_rss_mb": null,
+   "alloc_bytes": null
   },
   {
    "client": "snort-system-wasm",
@@ -403,7 +423,7 @@
    "expired_accepted": null,
    "accepted_ok": false,
    "errors": 1,
-   "error": "load failed: TypeError: [ERR_MODULE_NOT_FOUND] Cannot find module 'file:///home/user/nostrLibBench/node/node_modules/@snort/system/dist/cache/index' imported from 'file:///home/user/nostrLibBench/node/node_modules/@snort/system/dist/index.js'\nDid you mean to import with the \".js\" extension?\n    at async Object.load (file:///home/user/nostrLibBench/node/clients.mjs:588:17)\n    at async runChild (file:///home/user/nostrLibBench/node/bench.mjs:313:11)\n    at async file:///home/user/nostrLibBench/node/bench.mjs:542:1",
+   "error": "load failed: TypeError: [ERR_MODULE_NOT_FOUND] Cannot find module 'file:///home/user/nostrLibBench/node/node_modules/@snort/system/dist/cache/index' imported from 'file:///home/user/nostrLibBench/node/node_modules/@snort/system/dist/index.js'\nDid you mean to import with the \".js\" extension?\n    at async Object.load (file:///home/user/nostrLibBench/node/clients.mjs:588:17)\n    at async runChild (file:///home/user/nostrLibBench/node/bench.mjs:352:11)\n    at async file:///home/user/nostrLibBench/node/bench.mjs:587:1",
    "warmup_runs": 0,
    "runs": 0,
    "first_run_ms": null,
@@ -414,7 +434,9 @@
    "events_per_s": null,
    "us_per_event": null,
    "cpu_ms": null,
-   "peak_rss_mb": null
+   "peak_rss_mb": null,
+   "base_rss_mb": null,
+   "alloc_bytes": null
   },
   {
    "client": "nostr-sdk-node",
@@ -435,10 +457,10 @@
    "ambiguous_accepted": 1,
    "expired_accepted": 0,
    "accepted_ok": true,
-   "errors": 5,
-   "error": "run 4 delivered a different set than the first run (13970 events, xor 66d8c51ebacb5179656ce8269c5fcb77d15cef3cb04ed7506034fa5b85d4a1a1 vs 29548, 008a750b810b6ed995a5b23850ac2d1553f415d0ceec41510a710bd0bdb283ac)",
+   "errors": 7,
+   "error": "run 3 delivered a different set than the first run (10937 events, xor 3b62cc360af304c04781c099e13c74891d14101c187299b858ac74d6ec6dc140 vs 29548, 008a750b810b6ed995a5b23850ac2d1553f415d0ceec41510a710bd0bdb283ac)",
    "warmup_runs": 1,
-   "runs": 7,
+   "runs": 8,
    "first_run_ms": null,
    "median_ms": null,
    "min_ms": null,
@@ -447,7 +469,9 @@
    "events_per_s": null,
    "us_per_event": null,
    "cpu_ms": null,
-   "peak_rss_mb": 720.7
+   "peak_rss_mb": 569.9,
+   "base_rss_mb": 65.1,
+   "alloc_bytes": null
   },
   {
    "client": "qntx-nostr",
@@ -472,19 +496,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 25187.2,
-   "median_ms": 24216,
-   "min_ms": 24108.1,
-   "p90_ms": 25710.9,
+   "first_run_ms": 23758.1,
+   "median_ms": 24758,
+   "min_ms": 23020.9,
+   "p90_ms": 25159.5,
    "run_ms": [
-    25710.9,
-    24108.1,
-    24216
+    24758,
+    25159.5,
+    23020.9
    ],
-   "events_per_s": 1286.8,
-   "us_per_event": 777.127,
-   "cpu_ms": 24191.8,
-   "peak_rss_mb": 140.7
+   "events_per_s": 1258.6,
+   "us_per_event": 794.52,
+   "cpu_ms": 24864,
+   "peak_rss_mb": 143.6,
+   "base_rss_mb": 54.1,
+   "alloc_bytes": 24816391680
   },
   {
    "client": "qntx-nostr-wasm",
@@ -509,19 +535,21 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 3,
-   "first_run_ms": 4179.3,
-   "median_ms": 4218.6,
-   "min_ms": 4118.8,
-   "p90_ms": 4235.3,
+   "first_run_ms": 4580.4,
+   "median_ms": 4374,
+   "min_ms": 4027,
+   "p90_ms": 4626.7,
    "run_ms": [
-    4235.3,
-    4118.8,
-    4218.6
+    4374,
+    4626.7,
+    4027
    ],
-   "events_per_s": 7386.5,
-   "us_per_event": 135.382,
-   "cpu_ms": 4230.4,
-   "peak_rss_mb": 91.3
+   "events_per_s": 7124.1,
+   "us_per_event": 140.369,
+   "cpu_ms": 4488.5,
+   "peak_rss_mb": 103.3,
+   "base_rss_mb": 57.2,
+   "alloc_bytes": 207310336
   },
   {
    "client": "welshman",
@@ -532,7 +560,7 @@
    "websocket": "isomorphic-ws → ws 8.22.1 on Deno's node:http/node:net compat",
    "crypto": "nostr-wasm 0.1.0 (libsecp256k1 in WebAssembly) via @welshman/util verifyEvent → nostr-tools/wasm",
    "verify": "library",
-   "notes": "Slow pass: one timed run, measured after a container restart on a slower host: the go-nostr-relay control took 8,547 ms there against 7,881 ms in the main pass (+8 %), so compare this row with the others only to within ~10 %. Library defaults (the default-configuration row; welshman-nodelay is the ranked speed configuration), including the Socket send and receive queues: the REQ itself waits in the send queue for Socket.sendBatchDelay (100 ms, a setTimeout before each batch of sendBatchSize 5), inside the timed run, and inbound messages reach subscribers through a TaskQueue of recvBatchSize 20 per recvBatchDelay 100 ms, i.e. at most ~200 messages/s per socket, so this row is bound by those timers, not the CPU. On Deno, @welshman/util cannot be imported as is (its module-load proof-of-work benchmark starts a classic Worker, which Deno rejects), so the harness hides globalThis.Worker during the import. @welshman/util verifyEvent: nostr-tools/pure until nostr-wasm finishes loading (it imports it dynamically at module load), then nostr-tools/wasm (id + signature); load() waits until a probe confirms the wasm verifier is the one in use and fails otherwise. Unconditional library work on every event: the request Tracker (dedup by id), matchFilters, and the request's result array (request() resolves with the deduplicated list). A new Pool per run (context.pool), socket opened in setup.",
+   "notes": "Slow pass: one timed run (no warmup for Dart, JVM and Ruby), in the same batch as the other rows. Library defaults (the default-configuration row; welshman-nodelay is the ranked speed configuration), including the Socket send and receive queues: the REQ itself waits in the send queue for Socket.sendBatchDelay (100 ms, a setTimeout before each batch of sendBatchSize 5), inside the timed run, and inbound messages reach subscribers through a TaskQueue of recvBatchSize 20 per recvBatchDelay 100 ms, i.e. at most ~200 messages/s per socket, so this row is bound by those timers, not the CPU. On Deno, @welshman/util cannot be imported as is (its module-load proof-of-work benchmark starts a classic Worker, which Deno rejects), so the harness hides globalThis.Worker during the import. @welshman/util verifyEvent: nostr-tools/pure until nostr-wasm finishes loading (it imports it dynamically at module load), then nostr-tools/wasm (id + signature); load() waits until a probe confirms the wasm verifier is the one in use and fails otherwise. Unconditional library work on every event: the request Tracker (dedup by id), matchFilters, and the request's result array (request() resolves with the deduplicated list). A new Pool per run (context.pool), socket opened in setup.",
    "variant": false,
    "workload": "all",
    "events": 31161,
@@ -546,17 +574,19 @@
    "error": null,
    "warmup_runs": 1,
    "runs": 1,
-   "first_run_ms": 176531.2,
-   "median_ms": 175993.5,
-   "min_ms": 175993.5,
-   "p90_ms": 175993.5,
+   "first_run_ms": 173464.8,
+   "median_ms": 172655.6,
+   "min_ms": 172655.6,
+   "p90_ms": 172655.6,
    "run_ms": [
-    175993.5
+    172655.6
    ],
-   "events_per_s": 177.1,
-   "us_per_event": 5647.879,
-   "cpu_ms": 18424,
-   "peak_rss_mb": 225.2,
+   "events_per_s": 180.5,
+   "us_per_event": 5540.76,
+   "cpu_ms": 15336.5,
+   "peak_rss_mb": 229.1,
+   "base_rss_mb": 84.3,
+   "alloc_bytes": 392388720,
    "pass": 2
   },
   {

@@ -138,6 +138,8 @@ def main():
             r["language"] = lang_label(run)
             w = by_name.get(r["workload"])
             r["ok"], r["why"] = check_accepted(r, w)
+            # A table cell holds one line: an error message may carry a stack trace.
+            r["why"] = " ".join(str(r["why"]).split())
             if r["ok"] and not r.get("median_ms"):
                 r["ok"], r["why"] = False, "no timing"
             if r["ok"] and r.get("accepted_ok") is False:
