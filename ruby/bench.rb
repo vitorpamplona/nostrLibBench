@@ -274,7 +274,10 @@ class NostrRubyDriver
   end
 
   def subscribe
-    @sub[0] = @client.subscribe(filter: Nostr::Filter.new(limit: @events))
+    # The id is set before the REQ goes out (the gem's own default, SecureRandom.hex), so the
+    # EOSE listener never sees a frame before it knows the subscription.
+    @sub[0] = SecureRandom.hex
+    @client.subscribe(subscription_id: @sub[0], filter: Nostr::Filter.new(limit: @events))
   end
 
   def teardown
