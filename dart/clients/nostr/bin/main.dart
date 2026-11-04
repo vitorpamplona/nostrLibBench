@@ -33,7 +33,9 @@ class NostrDartIo extends BenchClient {
       'as in its examples. Message.deserialize parses each frame; for an EVENT it builds the Event with the default '
       'verify: true, which recomputes the id and checks the BIP-340 signature and throws on failure (counted as '
       'rejected). Library cost, named not worked around: each EVENT frame is JSON-decoded twice, once by '
-      'Message.deserialize (to read the message type) and again by Event.deserialize on the same frame string.';
+      'Message.deserialize (to read the message type) and again by Event.deserialize on the same frame string. '
+      'Event\'s constructor rejects created_at <= 0 (event.dart:132, "not a valid Unix timestamp"), so the corpus\'s '
+      'one valid event with created_at 0 is dropped: accepted_ok is false for that reason.';
 
   WebSocket? _ws;
   StreamSubscription<dynamic>? _sub;
