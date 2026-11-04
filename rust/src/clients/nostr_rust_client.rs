@@ -3,6 +3,8 @@
 //! `events::extract_events_ws` parses the event objects out of one; `Event::verify` checks only
 //! the signature (over the hash it recomputes, never compared with the event's `id`), so the
 //! harness also compares `Event::get_content_id()` (the library's own id function) with `id`.
+//! There is no call that does both, so each event is serialised and hashed twice (once in
+//! `verify`, once in `get_content_id`, events.rs:195-248): a library cost, named in notes.
 
 use super::{Client as HarnessClient, Meta};
 use crate::sink::Sink;
@@ -23,7 +25,10 @@ pub const META_NEXT: Meta = Meta {
     verify: "explicit",
     notes: "No verification on receive. Harness calls Event::verify() (signature only, over the \
             recomputed hash) and compares Event::get_content_id() (library's id hash, serde_json \
-            json! serialization) with the event's id. EOSE detected by the harness (frame prefix), \
+            json! serialization) with the event's id. The library has no single verify-both call: \
+            verify() serialises and hashes the event, get_content_id() serialises and hashes it \
+            again (nostr_rust-0.20.3 events.rs:195-248), so every event is serialised and hashed \
+            twice (library cost). EOSE detected by the harness (frame prefix), \
             the library has no EOSE helper on this path. Unmaintained since 2023.",
     variant: false,
     binary: None,
@@ -39,7 +44,10 @@ pub const META_FETCH: Meta = Meta {
     verify: "explicit",
     notes: "Fetch-all API: buffers raw messages until EOSE (dedup by a linear scan of the buffer \
             per message, O(n^2)), then parses them. Harness verifies each returned event with \
-            Event::verify() + get_content_id() == id.",
+            Event::verify() + get_content_id() == id. The library has no single verify-both call: \
+            verify() serialises and hashes the event, get_content_id() serialises and hashes it \
+            again (nostr_rust-0.20.3 events.rs:195-248), so every event is serialised and hashed \
+            twice (library cost).",
     variant: true,
     binary: None,
 };

@@ -26,24 +26,25 @@ type session interface {
 	close()
 }
 
-// collector is what the library delivers to: the app side of a run.
+// collector is what the library delivers to: the app side of a run. Per event it
+// only counts, XORs the id and notes the time (HARNESS.md "Fairness" 5); which of the
+// ambiguous and expired events were delivered is worked out after the run from the
+// count and XOR (expect.classify), or, when they match no correct outcome, from the
+// ids an extra untimed diagnostic run records.
 type collector struct {
-	mu        sync.Mutex
-	accepted  int
-	xor       [32]byte
-	ambiguous int
-	ambXor    [32]byte
-	expired   int
-	last      time.Time // time of the last accepted event
-	eoseAt    time.Time
-	eose      bool
-	cpuEnd    time.Duration // process CPU time at max(EOSE, last accepted event)
-	err       error
-	full      int // valid + every ambiguous: the most a correct library can deliver
-	done      chan struct{}
-	doneOnce  sync.Once
-	ambSet    map[[32]byte]struct{}
-	expSet    map[[32]byte]struct{}
+	mu       sync.Mutex
+	accepted int
+	xor      [32]byte
+	last     time.Time // time of the last accepted event
+	eoseAt   time.Time
+	eose     bool
+	cpuEnd   time.Duration // process CPU time at max(EOSE, last accepted event)
+	err      error
+	full     int // valid + every ambiguous: the most a correct library can deliver
+	done     chan struct{}
+	doneOnce sync.Once
+	record   [][32]byte // the accepted ids, kept only in the untimed diagnostic run
+	keep     bool
 }
 
 func cpuTime() time.Duration {
@@ -65,14 +66,8 @@ func (c *collector) event(id [32]byte) {
 	for i := range c.xor {
 		c.xor[i] ^= id[i]
 	}
-	if _, ok := c.ambSet[id]; ok {
-		c.ambiguous++
-		for i := range c.ambXor {
-			c.ambXor[i] ^= id[i]
-		}
-	}
-	if _, ok := c.expSet[id]; ok {
-		c.expired++
+	if c.keep {
+		c.record = append(c.record, id)
 	}
 	c.last = now
 	if c.eose {
@@ -129,9 +124,7 @@ type runResult struct {
 	ms, cpuMs float64
 	accepted  int
 	xor       [32]byte
-	ambiguous int
-	ambXor    [32]byte
-	expired   int
+	ids       [][32]byte // diagnostic run only
 }
 
 type expect struct {
@@ -177,31 +170,69 @@ func newExpect(w workload) (*expect, error) {
 	return e, nil
 }
 
-// ok applies HARNESS.md "Correctness: the accepted set".
-func (e *expect) ok(r runResult) bool {
+// classify applies HARNESS.md "Correctness: the accepted set": the run's (count, XOR)
+// must equal one of the correct outcomes (the expired events all delivered or all
+// dropped, each ambiguous event either way). ok reports whether it does, and amb / exp
+// say how many ambiguous and expired events that outcome holds.
+func (e *expect) classify(r runResult) (amb, exp int, ok bool) {
+	ambs := make([][32]byte, 0, len(e.ambSet))
+	for id := range e.ambSet {
+		ambs = append(ambs, id)
+	}
+	if len(ambs) > 8 {
+		ambs = ambs[:8]
+	}
 	nExp := len(e.expSet)
-	if r.expired != 0 && r.expired != nExp {
-		return false
-	}
-	if r.accepted != e.valid-nExp+r.expired+r.ambiguous {
-		return false
-	}
-	want := e.validXor
-	if r.expired == 0 {
-		for i := range want {
-			want[i] ^= e.expXor[i]
+	for mask := 0; mask < 1<<len(ambs); mask++ {
+		var ambXor [32]byte
+		n := 0
+		for i, id := range ambs {
+			if mask&(1<<i) == 0 {
+				continue
+			}
+			n++
+			for j := range ambXor {
+				ambXor[j] ^= id[j]
+			}
+		}
+		for _, expIn := range []bool{true, false} {
+			want, count := e.validXor, e.valid+n
+			if !expIn {
+				count -= nExp
+				for j := range want {
+					want[j] ^= e.expXor[j]
+				}
+			}
+			for j := range want {
+				want[j] ^= ambXor[j]
+			}
+			if count == r.accepted && want == r.xor {
+				if expIn {
+					return n, nExp, true
+				}
+				return n, 0, true
+			}
 		}
 	}
-	for i := range want {
-		want[i] ^= r.ambXor[i]
+	return 0, 0, false
+}
+
+// countIn counts how many of ids are in set (diagnostic run).
+func countIn(ids [][32]byte, set map[[32]byte]struct{}) int {
+	n := 0
+	for _, id := range ids {
+		if _, ok := set[id]; ok {
+			n++
+		}
 	}
-	return want == r.xor
+	return n
 }
 
 const quietWait = time.Second
 
 // oneRun is one subscription, end to end (HARNESS.md "A run").
-func oneRun(c *clientDef, url string, w workload, e *expect, timeout time.Duration) (res runResult, err error) {
+// keepIDs makes it the untimed diagnostic run, which also records the accepted ids.
+func oneRun(c *clientDef, url string, w workload, e *expect, timeout time.Duration, keepIDs bool) (res runResult, err error) {
 	// 1. setup, untimed
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	s, err := opens[c.ID](ctx, url)
@@ -211,10 +242,9 @@ func oneRun(c *clientDef, url string, w workload, e *expect, timeout time.Durati
 	}
 
 	h := &collector{
-		full:   e.valid + len(e.ambSet),
-		done:   make(chan struct{}),
-		ambSet: e.ambSet,
-		expSet: e.expSet,
+		full: e.valid + len(e.ambSet),
+		done: make(chan struct{}),
+		keep: keepIDs,
 	}
 
 	// 2. timed
@@ -267,13 +297,11 @@ wait:
 		end = h.last
 	}
 	res = runResult{
-		ms:        float64(end.Sub(t0).Nanoseconds()) / 1e6,
-		cpuMs:     float64((h.cpuEnd - cpu0).Nanoseconds()) / 1e6,
-		accepted:  h.accepted,
-		xor:       h.xor,
-		ambiguous: h.ambiguous,
-		ambXor:    h.ambXor,
-		expired:   h.expired,
+		ms:       float64(end.Sub(t0).Nanoseconds()) / 1e6,
+		cpuMs:    float64((h.cpuEnd - cpu0).Nanoseconds()) / 1e6,
+		accepted: h.accepted,
+		xor:      h.xor,
+		ids:      h.record,
 	}
 	h.mu.Unlock()
 
@@ -357,7 +385,7 @@ func runWorkload(c *clientDef, o opts, w workload) (r row, fatalRun bool) {
 		if !warm && len(measured) == 0 {
 			mStart = time.Now()
 		}
-		res, err := oneRun(c, url, w, e, timeout)
+		res, err := oneRun(c, url, w, e, timeout, false)
 		runs++
 		if err != nil {
 			r.Errors++
@@ -366,8 +394,8 @@ func runWorkload(c *clientDef, o opts, w workload) (r row, fatalRun bool) {
 			fmt.Fprintf(os.Stderr, "   %-9s run %d: %v\n", w.Name, runs, err)
 			return r, isTimeout(err)
 		}
-		fmt.Fprintf(os.Stderr, "   %-9s run %-2d %s %9.1f ms  cpu %9.1f ms  accepted %d (ambiguous %d, expired %d)\n",
-			w.Name, runs, map[bool]string{true: "warm", false: "    "}[warm], res.ms, res.cpuMs, res.accepted, res.ambiguous, res.expired)
+		fmt.Fprintf(os.Stderr, "   %-9s run %-2d %s %9.1f ms  cpu %9.1f ms  accepted %d\n",
+			w.Name, runs, map[bool]string{true: "warm", false: "    "}[warm], res.ms, res.cpuMs, res.accepted)
 		if first == nil {
 			rr := res
 			first = &rr
@@ -391,6 +419,21 @@ func runWorkload(c *clientDef, o opts, w workload) (r row, fatalRun bool) {
 		}
 	}
 
+	// The timed runs only count and XOR. When the set matches no correct outcome, one
+	// more run (untimed, not reported) records the ids to tell how many of the
+	// ambiguous and expired events the library delivered.
+	diagTimeout := false
+	if !r.AcceptedOK {
+		d, derr := oneRun(c, url, w, e, timeout, true)
+		if derr == nil {
+			r.AmbiguousAccepted = intp(countIn(d.ids, e.ambSet))
+			r.ExpiredAccepted = intp(countIn(d.ids, e.expSet))
+		} else {
+			fmt.Fprintf(os.Stderr, "   %-9s diagnostic run: %v\n", w.Name, derr)
+		}
+		diagTimeout = isTimeout(derr)
+	}
+
 	r.Runs = len(measured)
 	ms := make([]float64, len(measured))
 	cpus := make([]float64, len(measured))
@@ -411,19 +454,26 @@ func runWorkload(c *clientDef, o opts, w workload) (r row, fatalRun bool) {
 	r.CPUMs = f64(round1(median(cpus)))
 	r.PeakRssMb = f64(round1(peakRSSMb()))
 	r.FirstRunMs = f64(round1(*r.FirstRunMs))
-	return r, false
+	return r, diagTimeout
 }
 
 func isTimeout(err error) bool {
 	return err != nil && strings.HasPrefix(err.Error(), "timeout")
 }
 
+// setAccepted fills the accepted-set fields from the first run. When the set matches
+// no correct outcome, ambiguous_accepted / expired_accepted stay null (runWorkload
+// fills them from a diagnostic run).
 func setAccepted(r *row, e *expect, res runResult) {
 	r.Accepted = intp(res.accepted)
 	r.AcceptedXor = strp(hex.EncodeToString(res.xor[:]))
-	r.AmbiguousAccepted = intp(res.ambiguous)
-	r.ExpiredAccepted = intp(res.expired)
-	r.AcceptedOK = e.ok(res)
+	amb, exp, ok := e.classify(res)
+	r.AcceptedOK = ok
+	r.AmbiguousAccepted, r.ExpiredAccepted = nil, nil
+	if ok {
+		r.AmbiguousAccepted = intp(amb)
+		r.ExpiredAccepted = intp(exp)
+	}
 }
 
 func nullTimings(r *row) {

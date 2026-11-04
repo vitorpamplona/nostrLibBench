@@ -57,7 +57,7 @@ pub const clients = [_]ClientMeta{
         .websocket = libnostr_z_ws,
         .crypto = libnostr_z_crypto,
         .verify = .explicit,
-        .notes = "Relay.receive parses but does not verify; the harness calls Event.validate (id check, then noscrypt NCVerifyDigest; also rejects created_at > now+900 s) on every delivered event, as the noz CLI does. auto_reconnect off; read_timeout_ms (SO_RCVTIMEO, default 60 s) raised to --timeout-ms. Event.validate hashes the RAW JSON text of tags and content as the relay sent it instead of re-serializing the decoded fields, so every valid event whose JSON uses escapes the canonical form does not (\\uD83C surrogate pairs, \\u2019, \\/) fails IdMismatch and is dropped (82 of 994 valid events on smoke): accepted_ok is false. The Event is lazy (offsets into the raw JSON; content/tags decoded on access). Relay.receive also parses every message twice with std.json.Value besides the event scanner.",
+        .notes = "Relay.receive parses but does not verify; the harness calls Event.validate (id check, then noscrypt NCVerifyDigest; also rejects created_at > now+900 s) on every delivered event, as the noz CLI does. auto_reconnect off; read_timeout_ms (SO_RCVTIMEO, default 60 s) raised to --timeout-ms. Event.validate hashes the RAW JSON text of tags and content as the relay sent it instead of re-serializing the decoded fields, so every valid event whose JSON uses escapes the canonical form does not (\\uD83C surrogate pairs, \\u2019, \\/) fails IdMismatch and is dropped (82 of 994 valid events on smoke): accepted_ok is false. The Event is parsed lazily: content and tag values are never decoded (they are extracted only on access, and nothing accesses them here), and validate() hashes the raw JSON slices, so the row does less parse work than a full-parse client and stays unranked even if the IdMismatch bug is fixed. Relay.receive also parses every message twice with std.json.Value besides the event scanner.",
         .variant = false,
     },
     .{
@@ -70,7 +70,7 @@ pub const clients = [_]ClientMeta{
         .websocket = libnostr_z_ws,
         .crypto = libnostr_z_crypto,
         .verify = .explicit,
-        .notes = "Variant: fetch-all API. A reader thread per relay (the library's own) parses each event for dedup and queues the raw message; queryParallel parses it again into an Event and returns the list after EOSE; the harness then calls Event.validate on each (inside the timed part), so it shares libnostr-z-relay's IdMismatch on escaped JSON. PoolOptions.queue_size raised from 10000 to the workload size (a full queue silently drops its oldest message). Setup sets a 200 ms SO_RCVTIMEO on the pool's socket (RelayHandle.client.setReadTimeout, public API): with the default (none) the reader thread stays blocked in read() once the relay is quiet after EOSE, and queryParallel (stopReceiving) and Pool.deinit join it forever. The consumer side polls the queue with 1 ms sleeps.",
+        .notes = "Variant: fetch-all API. A reader thread per relay (the library's own) parses each event for dedup and queues the raw message; queryParallel parses it again into an Event and returns the list after EOSE; the harness then calls Event.validate on each (inside the timed part), so it shares libnostr-z-relay's IdMismatch on escaped JSON. The Event is parsed lazily: content and tag values are never decoded (they are extracted only on access, and nothing accesses them here), and validate() hashes the raw JSON slices, so the row does less parse work than a full-parse client and stays unranked even if the IdMismatch bug is fixed. PoolOptions.queue_size raised from 10000 to the workload size (a full queue silently drops its oldest message). Setup sets a 200 ms SO_RCVTIMEO on the pool's socket (RelayHandle.client.setReadTimeout, public API): with the default (none) the reader thread stays blocked in read() once the relay is quiet after EOSE, and queryParallel (stopReceiving) and Pool.deinit join it forever. The consumer side polls the queue with 1 ms sleeps.",
         .variant = true,
     },
 };
@@ -319,14 +319,18 @@ pub const Recorder = struct {
     count: u64 = 0,
     xor: @Vector(32, u8) = @splat(0),
     gpa: Allocator,
-    ids: std.ArrayList([32]u8),
+    /// The accepted ids, kept only in the untimed diagnostic run (`keep`).
+    ids: std.ArrayList([32]u8) = .empty,
+    keep: bool = false,
 
-    pub fn init(gpa: Allocator, io: Io, timeout_ms: u64, capacity: usize) !Recorder {
+    /// `keep_ids`: the untimed diagnostic run, which also records every accepted id.
+    pub fn init(gpa: Allocator, io: Io, timeout_ms: u64, capacity: usize, keep_ids: bool) !Recorder {
         return .{
             .io = io,
             .gpa = gpa,
             .timeout_ns = @as(i96, timeout_ms) * std.time.ns_per_ms,
-            .ids = try .initCapacity(gpa, capacity + 16),
+            .ids = if (keep_ids) try .initCapacity(gpa, capacity + 16) else .empty,
+            .keep = keep_ids,
         };
     }
 
@@ -344,7 +348,7 @@ pub const Recorder = struct {
     pub inline fn accept(r: *Recorder, id: *const [32]u8) void {
         r.count += 1;
         r.xor ^= @as(@Vector(32, u8), id.*);
-        r.ids.append(r.gpa, id.*) catch {}; // capacity is reserved; a failure only loses the id list
+        if (r.keep) r.ids.append(r.gpa, id.*) catch {}; // diagnostic run only
         r.last_ns = nowNs(r.io);
     }
 
@@ -394,29 +398,54 @@ pub const RunCtx = struct {
 pub const RunFn = *const fn (client_id: []const u8, ctx: *RunCtx) anyerror!void;
 
 const V = @Vector(32, u8);
-const SetResult = struct { count: u64, xor: [32]u8, ambiguous: u64, expired: u64, amb_xor: V, exp_xor: V };
+const SetResult = struct { count: u64, xor: [32]u8 };
 
 fn contains(list: []const [32]u8, id: [32]u8) bool {
     for (list) |x| if (std.mem.eql(u8, &x, &id)) return true;
     return false;
 }
 
-fn summarize(r: *const Recorder, w: Workload) SetResult {
-    var amb: u64 = 0;
-    var exp: u64 = 0;
-    var amb_xor: V = @splat(0);
+/// HARNESS.md "Correctness: the accepted set": the (count, XOR) of a run must equal one of the
+/// correct outcomes (expired events all delivered or all dropped, each ambiguous event either
+/// way). Returns that outcome's (ambiguous, expired) counts, or null when it matches none.
+const Outcome = struct { ambiguous: u64, expired: u64 };
+fn classify(res: SetResult, w: Workload) ?Outcome {
+    const n_amb: u5 = @intCast(@min(w.ambiguous_ids.len, 8));
     var exp_xor: V = @splat(0);
-    for (r.ids.items) |id| {
-        if (contains(w.ambiguous_ids, id)) {
-            amb += 1;
+    for (w.expired_ids) |id| exp_xor ^= @as(V, id);
+    var mask: u32 = 0;
+    while (mask < (@as(u32, 1) << n_amb)) : (mask += 1) {
+        var amb_xor: V = @splat(0);
+        var n: u64 = 0;
+        for (w.ambiguous_ids[0..n_amb], 0..) |id, i| {
+            if (mask & (@as(u32, 1) << @intCast(i)) == 0) continue;
+            n += 1;
             amb_xor ^= @as(V, id);
         }
-        if (contains(w.expired_ids, id)) {
-            exp += 1;
-            exp_xor ^= @as(V, id);
+        for ([_]bool{ true, false }) |exp_in| {
+            var want: V = w.valid_id_xor;
+            var count: u64 = w.valid_events + n;
+            if (!exp_in) {
+                want ^= exp_xor;
+                count -= w.expired_ids.len;
+            }
+            want ^= amb_xor;
+            const want_arr: [32]u8 = want;
+            if (count == res.count and std.mem.eql(u8, &want_arr, &res.xor)) {
+                return .{ .ambiguous = n, .expired = if (exp_in) w.expired_ids.len else 0 };
+            }
         }
     }
-    return .{ .count = r.count, .xor = r.xor, .ambiguous = amb, .expired = exp, .amb_xor = amb_xor, .exp_xor = exp_xor };
+    return null;
+}
+
+/// Diagnostic run: how many of `list` the recorded ids hold.
+fn countIn(ids: []const [32]u8, list: []const [32]u8) u64 {
+    var n: u64 = 0;
+    for (ids) |id| {
+        if (contains(list, id)) n += 1;
+    }
+    return n;
 }
 
 fn hexAlloc(a: Allocator, b: [32]u8) ![]const u8 {
@@ -467,7 +496,7 @@ pub fn measure(arena: Allocator, gpa: Allocator, io: Io, s: Settings, meta: *con
             if (runs >= s.max_runs) break;
             if (runs >= s.min_runs and measured_ns >= @as(f64, @floatFromInt(s.min_time_ms)) * 1e6) break;
         }
-        var rec = try Recorder.init(gpa, io, s.timeout_ms, w.events);
+        var rec = try Recorder.init(gpa, io, s.timeout_ms, w.events, false);
         defer rec.deinit();
         var ctx: RunCtx = .{ .gpa = gpa, .io = io, .url = url, .limit = limit, .timeout_ms = s.timeout_ms, .rec = &rec };
         run(meta.id, &ctx) catch |err| {
@@ -483,11 +512,11 @@ pub fn measure(arena: Allocator, gpa: Allocator, io: Io, s: Settings, meta: *con
             break;
         }
         const ms = rec.elapsedMs();
-        const res = summarize(&rec, w);
+        const res: SetResult = .{ .count = rec.count, .xor = rec.xor };
         if (first) |f| {
             if (f.count != res.count or !std.mem.eql(u8, &f.xor, &res.xor)) {
+                // Counted once, with every other failure, below.
                 failure = try std.fmt.allocPrint(arena, "run {d} delivered a different set than run 1 ({d} events vs {d})", .{ total + 1, res.count, f.count });
-                row.errors += 1;
                 break;
             }
         } else {
@@ -505,17 +534,24 @@ pub fn measure(arena: Allocator, gpa: Allocator, io: Io, s: Settings, meta: *con
     if (first) |f| {
         row.accepted = f.count;
         row.accepted_xor = try hexAlloc(arena, f.xor);
-        row.ambiguous_accepted = f.ambiguous;
-        row.expired_accepted = f.expired;
-        // HARNESS.md "Correctness: the accepted set": valid XOR (expired it dropped) XOR (ambiguous it accepted)
-        var want: V = w.valid_id_xor;
-        for (w.expired_ids) |id| want ^= @as(V, id);
-        want ^= f.exp_xor;
-        want ^= f.amb_xor;
-        const exp_ok = f.expired == 0 or f.expired == w.expired_ids.len;
-        const want_count = w.valid_events - w.expired_ids.len + f.expired + f.ambiguous;
-        const want_arr: [32]u8 = want;
-        row.accepted_ok = exp_ok and f.count == want_count and std.mem.eql(u8, &want_arr, &f.xor);
+        if (classify(f, w)) |o| {
+            row.accepted_ok = true;
+            row.ambiguous_accepted = o.ambiguous;
+            row.expired_accepted = o.expired;
+        } else if (failure == null) {
+            // The timed runs only count and XOR. The set matches no correct outcome: one more
+            // run (untimed, not reported) records the ids to tell how many of the ambiguous and
+            // expired events the library delivered.
+            var rec = try Recorder.init(gpa, io, s.timeout_ms, w.events, true);
+            defer rec.deinit();
+            var ctx: RunCtx = .{ .gpa = gpa, .io = io, .url = url, .limit = limit, .timeout_ms = s.timeout_ms, .rec = &rec };
+            if (run(meta.id, &ctx)) |_| {
+                row.ambiguous_accepted = countIn(rec.ids.items, w.ambiguous_ids);
+                row.expired_accepted = countIn(rec.ids.items, w.expired_ids);
+            } else |err| {
+                std.debug.print("  {s} {s} diagnostic run: {s}\n", .{ meta.id, w.name, @errorName(err) });
+            }
+        }
     }
 
     row.runs = @intCast(times.items.len);

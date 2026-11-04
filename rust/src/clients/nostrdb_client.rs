@@ -24,15 +24,25 @@ pub const META: Meta = Meta {
     websocket: "tokio-tungstenite 0.28 (paired by the harness, as notedeck's enostr does; nostrdb has no WebSocket client)",
     crypto: "libsecp256k1 0.6.0 (C, bundled in nostrdb)",
     verify: "library",
-    notes: "Variant: nostrdb is a database, not a relay client. Default Config: ingester threads = \
-            cores, verification on (skip_validation=false), full-text and content-block indexes on; \
-            every note is written to a fresh LMDB in a temp dir per run (an existing note would \
-            skip verification). EOSE is read off the socket before the ingesters finish, so the run \
-            ends at the last note delivered after it. The app's read path (subscription poll + \
-            read transaction + get_note_by_key) is timed.",
+    notes: "Variant, unranked: nostrdb is a database, not a relay client; this row belongs with the \
+            app relay stacks (Notedeck/Damus) rather than the client libraries. Config: ingester \
+            threads = cores (default), verification on (skip_validation=false, default), and the \
+            optional indexing turned off with Config::set_flags(NDB_FLAG_NO_FULLTEXT | \
+            NDB_FLAG_NO_NOTE_BLOCKS | NDB_FLAG_NO_STATS) (nostrdb.h:23-25: no full-text index, no \
+            parsed content blocks, no stats). The LMDB write of every note remains: storing it is \
+            the library's job and the only way it delivers a note (subscription -> read \
+            transaction), which is why the row is not ranked. Each run writes to a fresh LMDB in a \
+            temp dir (an existing note would skip verification). EOSE is read off the socket \
+            before the ingesters finish, so the run ends at the last note delivered after it. The \
+            app's read path (subscription poll + read transaction + get_note_by_key) is timed.",
     variant: true,
     binary: None,
 };
+
+// nostrdb.h:23-25 (the crate keeps its bindings private).
+const NDB_FLAG_NO_FULLTEXT: i32 = 1 << 2;
+const NDB_FLAG_NO_NOTE_BLOCKS: i32 = 1 << 3;
+const NDB_FLAG_NO_STATS: i32 = 1 << 4;
 
 pub struct NostrDb {
     rt: tokio::runtime::Runtime,
@@ -51,7 +61,10 @@ impl Client for NostrDb {
         let dir = std::env::temp_dir().join(format!("libbench-ndb-{}-{}", std::process::id(), self.n));
         let _ = std::fs::remove_dir_all(&dir);
         let res = self.rt.block_on(async {
-            let ndb = Ndb::new(dir.to_str().unwrap(), &Config::new()).map_err(|e| format!("ndb: {e}"))?;
+            let cfg = Config::new();
+            let flags = cfg.config.flags | NDB_FLAG_NO_FULLTEXT | NDB_FLAG_NO_NOTE_BLOCKS | NDB_FLAG_NO_STATS;
+            let cfg = cfg.set_flags(flags);
+            let ndb = Ndb::new(dir.to_str().unwrap(), &cfg).map_err(|e| format!("ndb: {e}"))?;
             let (ws, _) = tokio_tungstenite::connect_async(url).await.map_err(|e| format!("connect: {e}"))?;
             let (mut tx, mut rx) = ws.split();
             let (eose_tx, mut eose_rx) = tokio::sync::oneshot::channel::<()>();

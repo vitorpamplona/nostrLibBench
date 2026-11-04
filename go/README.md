@@ -46,7 +46,8 @@ The harness follows HARNESS.md "A run"; the Go specifics:
   call with one filter `{"limit": <events>}`. The adapter (`lib_*.go`) consumes the
   library's streaming API on a goroutine, as an app would: for each delivered event it
   runs the verification the row's `verify`/`notes` name, then the collector counts it,
-  XORs its 32-byte id (from the library's own event object) and notes the time; the
+  XORs its 32-byte id (from the library's own event object) and notes the time (nothing
+  else: no lookup of which ids are ambiguous or expired); the
   EOSE is noted when the library delivers it. `t_end = max(EOSE, last accepted event)`.
   The main goroutine waits until EOSE and either every event a correct library can
   deliver (valid + ambiguous) has arrived or 1 s passed with nothing new (untimed), or
@@ -59,7 +60,10 @@ The harness follows HARNESS.md "A run"; the Go specifics:
 - **Teardown (untimed).** Unsubscribe/cancel, close the client, then `runtime.GC()` so
   every run starts from a collected heap.
 - **Correctness.** `accepted_ok` per HARNESS.md "Correctness" (expired events optional,
-  ambiguous optional). Every run must deliver the same count and id XOR as the first;
+  ambiguous optional), decided after the run: the (count, XOR) must equal one of the
+  correct outcomes (expired all in or all out, each ambiguous event either way), and that
+  outcome gives `ambiguous_accepted` / `expired_accepted`. When it matches none, one more
+  run (untimed, not reported) records the delivered ids to count those two. Every run must deliver the same count and id XOR as the first;
   a run that doesn't makes the row an error (goNDK's does).
 - **Runtime.** Default `GOGC`, no `GOMEMLIMIT`, `GOMAXPROCS` = cores, `GOAMD64=v1`; the
   environment can override them and `runtime` records them.
@@ -77,7 +81,7 @@ The harness follows HARNESS.md "A run"; the Go specifics:
 | `fiatjaf-nostr-pool` (variant) | same | `Pool.SubscribeManyNotifyEOSE` | same | btcec | coder/websocket |
 | `fiatjaf-nostr-fetchmany` (variant) | same | `Pool.FetchMany` | same | btcec | coder/websocket |
 | `orly-ws` | git.smesh.lol/orly/pkg/nostr (mleku's ORLY) | `ws.RelayConnect` + `Client.Subscribe` | library + harness id check (`GetIDBytes()`) | in-tree p256k1 (pure Go + amd64 asm) | gorilla/websocket |
-| `nmilat-read` | github.com/ohstr/nmilat | `client.Connect` + `SubscribeWithID` + `Read()` | explicit `nip01.Event.Verify()` | flokicoin crypto/schnorr (btcec fork) on dcrd secp256k1/v4 | gorilla/websocket |
+| `nmilat-read` | github.com/ohstr/nmilat | `client.Connect` + `SubscribeWithID` + `Read()` | explicit `nip01.Event.Verify(WithoutPowCheck())` | flokicoin crypto/schnorr (btcec fork) on dcrd secp256k1/v4 | gorilla/websocket |
 | `nmilat-subscribe` (variant) | same | `client.Connect` + `Connection.Subscribe` | same | same | gorilla/websocket |
 | `gondk-relaymanager` | github.com/niallyoung/goNDK | `RelayManager.Subscribe` + `Subscription.Receive` / `EOSE()` | explicit `ValidateSignature()` + harness id check | btcec/v2 | nhooyr.io/websocket |
 
@@ -130,6 +134,12 @@ amd64 assembly).
   checks the signature against the **id as received** and recomputes the id only when
   the signature fails. So the harness also compares the library's `GetIDBytes()`
   (canonical hash) with the id.
+- That check has a blind spot: when the signature fails, `Verify` recomputes the id,
+  **overwrites `ev.ID`** with it and returns valid if the signature matches the computed
+  id (`pkg/nostr/encoders/event/verify.go:23-34`; `ws.Client` reads only the bool). So an
+  event with a wrong `id` field but a signature over its true id is delivered under the
+  corrected id, and `GetIDBytes() == ev.ID` passes. No corpus event has that shape (the
+  accepted XOR would show it); it is the library's behaviour, named in `notes`.
 - **Its JSON decoder does not decode `\uXXXX` escapes**: a content of
   `"... 🙄"` on the wire is delivered as those 12 literal characters, not the
   emoji. 2,381 valid events of the corpus carry escaped emoji (some clients send them
@@ -145,8 +155,10 @@ amd64 assembly).
 A 2026 Go SDK (relay engine + `relay/client`).
 
 - The client never verifies; its docs say to call `Verify()` on every event. The
-  harness does (`verify: explicit`): format, id recomputed and compared, signature, and a
-  NIP-13 PoW check when a `nonce` tag is present (no valid corpus event fails it).
+  harness does (`verify: explicit`) with `Verify(nip01.WithoutPowCheck())`: format, id
+  recomputed and compared, signature. Plain `Verify()` also runs a NIP-13 proof-of-work
+  check (a second id hash) on events with a `nonce` tag; that is outside the job and the
+  documented option turns it off.
 - **`Connection.Subscribe` deadlocks on a large download**: the read loop forwards every
   message both to the subscription's channel and to the connection-wide `incoming`
   channel (buffer 10,240) that only `Read()` drains, and its docs say not to mix the two

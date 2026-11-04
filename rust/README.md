@@ -168,7 +168,10 @@ slow consumer, to probe a library's back-pressure (see nostr-sdk and nostro2 bel
 - **Verification.** None on receive. `Event::verify()` checks only the signature, over the
   hash of its own serialization, and never compares it with the event's `id`; so the harness
   calls `Event::verify()` **and** compares `Event::get_content_id()` (the library's id hash)
-  with `id` (`verify: explicit`). secp256k1 0.26 / libsecp256k1 0.2.0 (C).
+  with `id` (`verify: explicit`). secp256k1 0.26 / libsecp256k1 0.2.0 (C). The library has
+  no call that does both: `verify()` serialises (`json!`) and hashes the event,
+  `get_content_id()` serialises and hashes it again (`events.rs:195-248`), so every event is
+  serialised and hashed twice. That is the library's cost, named in `notes`.
 
 ### nostr-types (Mike Dilger, gossip's event model)
 
@@ -193,8 +196,13 @@ slow consumer, to probe a library's back-pressure (see nostr-sdk and nostro2 bel
   `SubscriptionStream` (nostrdb's async subscription on `Ndb::subscribe(filter)`) and reads
   each note with `Transaction` + `get_note_by_key` -> `Note::id()`.
 - Ingester threads (default: one per core) parse with nostrdb's own JSON parser, verify id +
-  signature (bundled libsecp256k1 0.6.0) and pass notes to the LMDB writer thread (with
-  full-text and content-block indexes, the defaults). A fresh database directory per run (in
+  signature (bundled libsecp256k1 0.6.0) and pass notes to the LMDB writer thread. The
+  optional indexing is turned off with `Config::set_flags(NDB_FLAG_NO_FULLTEXT |
+  NDB_FLAG_NO_NOTE_BLOCKS | NDB_FLAG_NO_STATS)` (`nostrdb.h:23-25`: no full-text index, no
+  parsed content blocks, no stats). The LMDB write of every note remains: storing notes is
+  nostrdb's job and the only way it hands one to the app, so the row stays an unranked
+  variant (it belongs with the app relay stacks, Notedeck/Damus, not the client
+  libraries). A fresh database directory per run (in
   the temp dir, removed after the run), since a stored note skips verification. EOSE comes
   off the socket before the ingesters finish, so a run ends at the last note after it.
 - **Bug found:** nostrdb cannot parse `\uXXXX` escapes in strings (`nostrdb.c`:

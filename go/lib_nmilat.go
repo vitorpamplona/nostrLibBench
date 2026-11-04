@@ -11,9 +11,10 @@ import (
 
 // github.com/ohstr/nmilat: relay/client delivers events unverified (its docs: "Relay
 // input is untrusted, so always call Verify() before acting on an event"). The
-// harness calls nip01.Event.Verify() on every delivered event: format, id
-// (recomputed and compared) and BIP-340 signature, plus a NIP-13 proof-of-work check
-// when the event has a nonce tag.
+// harness calls nip01.Event.Verify(nip01.WithoutPowCheck()) on every delivered event:
+// format, id (recomputed and compared) and BIP-340 signature. Without the option Verify
+// also runs a NIP-13 proof-of-work check (a second id hash) on events with a nonce tag,
+// work outside the job, so the documented option turns it off.
 //
 // The connection's read loop needs the app to drain Errors() (unbuffered), so the
 // session does that from setup on.
@@ -22,6 +23,8 @@ func init() {
 	opens["nmilat-subscribe"] = openNmilat(false)
 	opens["nmilat-read"] = openNmilat(true)
 }
+
+var noPow = nip01.WithoutPowCheck()
 
 type nmilatSession struct {
 	conn   *client.Connection
@@ -68,7 +71,7 @@ func (s *nmilatSession) subscribe(h *collector, limit int) error {
 			for msg := range in {
 				switch m := msg.(type) {
 				case *wire.EventSubscriptionResponse:
-					if m.SubscriptionID != subID || m.Event == nil || m.Event.Verify() != nil {
+					if m.SubscriptionID != subID || m.Event == nil || m.Event.Verify(noPow) != nil {
 						continue
 					}
 					h.eventHex(m.Event.ID)
@@ -87,7 +90,7 @@ func (s *nmilatSession) subscribe(h *collector, limit int) error {
 	_, events, _ := s.conn.Subscribe(group)
 	go func() {
 		for ev := range events {
-			if ev.Event == nil || ev.Event.Verify() != nil {
+			if ev.Event == nil || ev.Event.Verify(noPow) != nil {
 				continue
 			}
 			h.eventHex(ev.Event.ID)

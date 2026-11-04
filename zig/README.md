@@ -63,9 +63,11 @@ One run, per HARNESS.md:
 3. **Teardown (untimed):** `CLOSE`, close the connection, free the client.
 
 CPU is `getrusage(RUSAGE_SELF)` user + system over the timed part (all threads); peak RSS is
-`ru_maxrss` at the end of the child process. The accepted ids are also appended to a
-pre-sized array (one 32-byte copy per event) so that the ambiguous and expired counts can be
-worked out after the run, untimed. Every run must deliver the same set as the first.
+`ru_maxrss` at the end of the child process. Per event the harness only counts, XORs the id
+and reads the clock; after the run the (count, XOR) is matched against the correct outcomes
+(expired all in or all out, each ambiguous event either way), which gives the ambiguous and
+expired counts. When it matches none, one more run (untimed, not reported) records the ids to
+count them. Every run must deliver the same set as the first; a run that does not is one error.
 
 ## Libraries and clients
 
@@ -120,7 +122,11 @@ github.com/privkeyio/libnostr-z, by PrivKey LLC, v0.5.0 (2026-10-06), pinned at 
   rows are `accepted_ok: false`. The same shortcut makes it accept the ambiguous U+0000 event
   (the relay's bytes contain `\u0000`).
 - **Event model:** lazy. `Event` keeps the raw JSON plus parsed id/pubkey/sig/created_at/kind
-  and a tag index; `content()` and tag values are extracted on access. `Relay.receive` also
+  and a tag index; `content()` and tag values are extracted only on access, and nothing
+  accesses them here: content and tags are never decoded, and `validate()` hashes the raw
+  JSON slices. So these rows do less parse work than a client that decodes all seven fields
+  (HARNESS.md "Fairness" 2) and stay unranked even if the IdMismatch bug is fixed (named in
+  `notes`). `Relay.receive` also
   parses every message twice into a `std.json.Value` tree (message type, subscription id)
   before the event scanner runs.
 - **`"sig":""`:** `Event.parse` fails (`InvalidSig`), the message arrives with `event = null`

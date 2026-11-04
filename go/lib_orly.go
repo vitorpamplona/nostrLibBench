@@ -15,7 +15,11 @@ import (
 // signature against the id field as received and only recomputes the id when the
 // signature fails, so an event whose id does not match its body but whose signature
 // is valid for that id is accepted: the harness also compares GetIDBytes() (the
-// library's canonical hash) with the id.
+// library's canonical hash) with the id. That check has a blind spot: when the
+// signature fails, Verify recomputes the id, overwrites ev.ID with it and accepts the
+// event if the signature matches the computed id (pkg/nostr/encoders/event/verify.go
+// :23-34; ws.Client only reads the bool), so a wrong-id / valid-sig event arrives with
+// ev.ID already corrected and passes GetIDBytes()==ev.ID. Named in notes.
 //
 // The library logs at level "info" to stderr by default, one line per rejected
 // event; the harness sets lol's level to "off" (an app's logging choice).
