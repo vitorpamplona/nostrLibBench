@@ -7,7 +7,7 @@ subscribe, receive every event of the workload, verify it, hand it to the app, u
 ```bash
 ./jvm/run.sh --relay ws://127.0.0.1:7777                      # every client -> results/jvm.json
 ./jvm/run.sh --relay ws://127.0.0.1:7777 --quick --workloads smoke
-./jvm/run.sh --clients quartz-nostrclient,nostr4j-pool --workloads all,notes
+./jvm/run.sh --clients quartz-fetch,nostr4j-pool --workloads all,notes
 ./jvm/run.sh --list
 ```
 
@@ -79,14 +79,8 @@ The harness follows HARNESS.md "A run"; the JVM specifics:
 
 | client | library | API | verify | variant |
 |---|---|---|---|---|
-| `quartz-nostrclient` | Quartz 2.15.0 | `NostrClient` + `subscribe(subId, {relay: [filter]}, listener)` | explicit | |
+| `quartz-fetch` | Quartz 2.15.0 | `NostrClient.fetch(relay, filter) { event -> }` | explicit | |
 | `quartz-parallelverifier` | Quartz | same + Quartz's `ParallelEventVerifier` | explicit | |
-| `quartz-standalone` | Quartz | `StandaloneRelayClient.sendRequest` | explicit | yes |
-| `quartz-fetch` | Quartz | `fetch(relay, filters) { event -> }` (callback on the delivery coroutine, returns at EOSE) | explicit | yes |
-| `quartz-fetchevents` | Quartz | `fetchEvents(relay, filters): Flow<Event>` (completes at EOSE) | explicit | yes |
-| `quartz-fetchallwithhooks` | Quartz | `fetchAllWithHooks(filters) { relay, event -> }` | explicit | yes |
-| `quartz-fetchall` | Quartz | `fetchAll(relay, filters)` (dedup, sort, list at EOSE) | explicit | yes |
-| `quartz-fetchasflow` | Quartz | `fetchAsFlow(relay, filters)` (conflated list snapshots) | explicit | yes |
 | `nostr-sdk-subscribe` | rust-nostr nostr-sdk 0.45 (UniFFI JVM bindings) | `Client.subscribe` + `notifications()` | library | |
 | `nostr-sdk-stream` | same | `Client.streamEvents` | library | yes |
 | `nostr4j-pool` | nostr4j 0.4.1 | `NostrPool.subscribe(filter, PassthroughEventTracker)` | library | |
@@ -96,35 +90,33 @@ The harness follows HARNESS.md "A run"; the JVM specifics:
 ### Quartz (Amethyst's library), `com.vitorpamplona.quartz:quartz` 2.15.0, MIT
 
 - **API.** `NostrClient(BasicOkHttpWebSocket.Builder { okHttp })`, the pool Amethyst
-  (Android, Desktop, the `amy` CLI) runs on, used with one relay;
-  `subscribe(subId, mapOf(relay to listOf(Filter(limit = n))), SubscriptionListener)`.
-  One `OkHttpClient` per process (with Quartz's `TcpNoDelaySocketFactory`, as amy), a new
+  (Android, Desktop, the `amy` CLI) runs on, used with one relay, and its one-relay read
+  `fetch(relay, Filter(limit = n)) { event -> }`: one REQ, each event handed to the callback
+  on the relay's delivery coroutine as it arrives (nothing collected, deduped or sorted),
+  returning at EOSE. It runs in a coroutine on the client's `Dispatchers.IO` scope. One
+  `OkHttpClient` per process (with Quartz's `TcpNoDelaySocketFactory`, as amy), a new
   `NostrClient` per run. `keepConnected(relay)` opens the socket in setup.
 - **WebSocket.** OkHttp 5.5.1; messages go from OkHttp's reader thread through an
   unbounded channel to one delivery coroutine per relay (`Dispatchers.IO`), which decodes
-  each frame with Kite (`KiteReader`, Quartz's own reader) and calls the listener.
-- **Verification.** The client never verifies. Amethyst verifies in its cache
-  (`LocalCache.justVerify` -> Quartz's `Event.verify()`: `EventHasher.hashIdCheck`, then
-  BIP-340 through secp256k1-kmp, i.e. libsecp256k1 over JNI). The listener does exactly
-  that, inline on the delivery coroutine: `verify: explicit`.
+  each frame with Kite (`KiteReader`, Quartz's own reader) and calls `fetch`'s callback.
+- **Verification.** `fetch` doesn't verify, like every `NostrClient` read. Amethyst verifies
+  in its cache (`LocalCache.justVerify` -> Quartz's `Event.verify()`:
+  `EventHasher.hashIdCheck`, then BIP-340 through secp256k1-kmp, i.e. libsecp256k1 over
+  JNI). The callback does exactly that, inline on the delivery coroutine: `verify: explicit`.
 - **Results.** Accepts the ambiguous U+0000 event (Kite writes `\u0000`) and delivers
   expired events (expiry is the app's business). `"sig":""` events fail `verifySignature`
   on the length check.
 - **Duplicate REQ (a Quartz bug).** `connectedRelaysFlow()` reports the relay before the
-  new connection has replayed its filters (`onConnected` -> `syncFilters`). A
-  `subscribe()` made in that window sent the REQ twice on one socket (seen in the relay's
-  `--verbose` log: two `REQ "bench…"` for one connection), so every event came twice.
-  Amethyst dedups in `LocalCache`, which hides it, but it doubles the download. The
-  harness waits 1 s after the connection opens before subscribing (setup, untimed; an
-  app's relays are connected long before a feed opens), and the duplicates stopped.
-- `quartz-parallelverifier` (speed option, ranked): the listener submits each event to
+  new connection has replayed its filters (`onConnected` -> `syncFilters`). A REQ made in
+  that window went out twice on one socket (seen in the relay's `--verbose` log: two REQs
+  for one connection), so every event came twice. The harness waits 1 s after the
+  connection opens before fetching (setup, untimed; an app's relays are connected long
+  before a feed opens), and the duplicates stopped.
+- `quartz-parallelverifier` (speed option, ranked): the callback submits each event to
   Quartz's own `ParallelEventVerifier` accessory (batches of up to 256, `Event.verify()`
   fanned out on `Dispatchers.Default`, delivered in order). It is opt-in, like other
   libraries' documented speed options (a libsecp256k1 build tag, a wasm verifier), so it is
   a ranked entry of its own; it verifies on several cores, which the CPU columns show.
-  Amethyst still verifies inline on the per-relay coroutine today (`quartz-nostrclient`).
-- `quartz-standalone` (variant): `StandaloneRelayClient`, Quartz's single-relay client
-  (`BasicRelayClient` + REQ replay), events through `RelayConnectionListener.onIncomingMessage`.
 
 ### rust-nostr nostr-sdk, Kotlin/JVM bindings, `org.nostrdevkit:nostr-sdk-jvm` 0.45.1, MIT
 
@@ -252,9 +244,8 @@ the library's strings).
 
 | client | accepted | ambiguous | expired | ok | median ms | cpu ms |
 |---|---|---|---|---|---|---|
-| quartz-nostrclient | 995 | 1 | 66 | true | 150 | 215 |
-| quartz-parallelverifier | 995 | 1 | 66 | true | 88 | 165 |
-| quartz-standalone | 995 | 1 | 66 | true | 229 | 215 |
+| quartz-fetch | 995 | 1 | 66 | true | 74 | 205 |
+| quartz-parallelverifier | 995 | 1 | 66 | true | 51 | 170 |
 | nostr-sdk-subscribe | 929 | 1 | 0 | true | 255 | 465 |
 | nostr-sdk-stream | 929 | 1 | 0 | true | 478 | 360 |
 | nostr4j-pool | 929 | 1 | 0 | true | 211 | 565 |

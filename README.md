@@ -29,14 +29,15 @@ JVM rows on Quartz 2.15.0 right after the rest. Native code is built for a gener
 
 The harness never adds threads. A library verifies on as many cores as its default uses,
 and a documented parallel verifier is a speed option with its own row; "cores used" is CPU
-time over wall time. Quartz's rows are in bold: `quartz-parallelverifier` is Quartz's
-documented speed option (it verifies batches of events on every core), and
-`quartz-nostrclient`, its default client, is listed next to it.
+time over wall time. Quartz's rows are in bold. Both use Quartz's one-relay read, `fetch`:
+`quartz-fetch` verifies each event inline with `Event.verify()`, as Amethyst does, and
+`quartz-parallelverifier`, Quartz's documented speed option, hands each event to its
+`ParallelEventVerifier`, which verifies batches on every core.
 
 | # | language | client | µs/event | CPU µs/event | cores used | accepted | memory growth MB | alloc B/event | forged checks |
 |---:|---|---|---:|---:|---:|---:|---:|---:|---|
-| **1** | **JVM (Kotlin/Java)** | **`quartz-parallelverifier`** | **19.3** | **57.6** | **2.98** | **29,614** | **192** | **3,866** | pass |
-| **–** | **JVM (Kotlin/Java)** | **`quartz-nostrclient`** (default) | **44.3** | **56.3** | **1.27** | **29,614** | **209** | **3,813** | pass |
+| **1** | **JVM (Kotlin/Java)** | **`quartz-parallelverifier`** | **20.6** | **57.9** | **2.81** | **29,614** | **276** | **3,953** | pass |
+| **–** | **JVM (Kotlin/Java)** | **`quartz-fetch`** (default) | **47.1** | **56.3** | **1.19** | **29,614** | **146** | **4,002** | pass |
 | 2 | Zig | `zig-nostr-relay` | 47.5 | 46.1 | 0.97 | 29,614 | 1 | 1,673 | pass |
 | 3 | Go | `fiatjaf-nostr-relay-libsecp256k1` | 51.7 | 87.8 | 1.70 | 29,613 | 6 | 4,036 | pass |
 | 4 | Rust | `nostr-sdk-stream` | 53.0 | 56.2 | 1.06 | 29,548 | 65 | 8,722 | pass |
@@ -115,7 +116,7 @@ the ranking.
 
 | failure | libraries |
 |---|---|
-| a forged copy censors the genuine event (dedup by id before verifying) | the go-nostr and fiatjaf.com/nostr pools (their single-relay `Relay` passes), nostr-tools' `SimplePool` (JS), NDK (JS), welshman, nostr-java, dart_nostr, swift-nostr (websocket-kit transport), aionostr, basic-nostr, nostrclient, libnostr-z's pool, and Quartz's `fetchAll` and `fetchAsFlow` accessories (its `subscribe`, `fetch`, `fetchEvents` and `fetchAllWithHooks` pass) |
+| a forged copy censors the genuine event (dedup by id before verifying) | the go-nostr and fiatjaf.com/nostr pools (their single-relay `Relay` passes), nostr-tools' `SimplePool` (JS), NDK (JS), welshman, nostr-java, dart_nostr, swift-nostr (websocket-kit transport), aionostr, basic-nostr, nostrclient, libnostr-z's pool |
 | delivers an event whose `id` field is wrong | pynostr's pool |
 
 No library that ran the checks accepted forged content or a forged signature.

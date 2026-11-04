@@ -4,9 +4,6 @@ import com.vitorpamplona.libbench.clients.Nostr4jClient
 import com.vitorpamplona.libbench.clients.NostrJavaClient
 import com.vitorpamplona.libbench.clients.NostrSdkClient
 import com.vitorpamplona.libbench.clients.QuartzClient
-import com.vitorpamplona.libbench.clients.QuartzFetch
-import com.vitorpamplona.libbench.clients.QuartzFetchClient
-import com.vitorpamplona.libbench.clients.QuartzStandaloneClient
 import com.vitorpamplona.libbench.clients.RhodiumClient
 
 private val V = Versions
@@ -21,20 +18,22 @@ private val SECP_KMP = "libsecp256k1 (C, JNI via ACINQ secp256k1-kmp-jni-jvm ${V
 val CLIENTS: List<ClientSpec> =
     listOf(
         ClientSpec(
-            id = "quartz-nostrclient",
+            id = "quartz-fetch",
             library = "Quartz",
             version = V["com.vitorpamplona.quartz:quartz-jvm"],
             license = "MIT",
-            api = "NostrClient(BasicOkHttpWebSocket.Builder).subscribe(subId, {relay: [filter]}, SubscriptionListener) (Amethyst's relay pool)",
+            api = "NostrClient.fetch(relay, filter) { event -> } (one REQ, callback per event, returns at EOSE)",
             websocket = OKHTTP,
             crypto = SECP_KMP,
             verify = "explicit",
             notes =
-                "Quartz's client delivers events unverified; Amethyst verifies in LocalCache.justVerify with Quartz's " +
-                    "Event.verify() (id via EventHasher.hashIdCheck, then Schnorr), and the listener does the same, inline on " +
-                    "the relay's delivery coroutine. Parser: Kite (KiteReader, Quartz's own). NostrClient is Quartz's " +
-                    "pool, used here with one relay, as Amethyst uses it. keepConnected() opens the socket in setup, " +
-                    "then 1 s to settle: a REQ sent while the new connection replays its filters can go out twice.",
+                "Quartz's one-relay read on NostrClient, the pool Amethyst runs on, with one relay. fetch hands each " +
+                    "event unverified to its callback on the relay's delivery coroutine, nothing collected, deduped or " +
+                    "sorted, and returns at EOSE; the callback verifies with Quartz's Event.verify() (id via " +
+                    "EventHasher.hashIdCheck, then Schnorr), as Amethyst verifies in LocalCache. Parser: Kite (KiteReader, " +
+                    "Quartz's own). The fetch runs in a coroutine on the client's Dispatchers.IO scope. keepConnected() " +
+                    "opens the socket in setup, then 1 s to settle: a REQ sent while the new connection replays its " +
+                    "filters can go out twice.",
             variant = false,
             create = { QuartzClient(parallel = false) },
         ),
@@ -43,126 +42,17 @@ val CLIENTS: List<ClientSpec> =
             library = "Quartz",
             version = V["com.vitorpamplona.quartz:quartz-jvm"],
             license = "MIT",
-            api = "NostrClient.subscribe + Quartz's ParallelEventVerifier accessory (batched Event.verify() on Dispatchers.Default)",
+            api = "NostrClient.fetch + Quartz's ParallelEventVerifier accessory (batched Event.verify() on Dispatchers.Default)",
             websocket = OKHTTP,
             crypto = SECP_KMP,
             verify = "explicit",
             notes =
-                "As quartz-nostrclient, but the listener submits each event to ParallelEventVerifier (default batch 256, " +
+                "As quartz-fetch, but the callback submits each event to ParallelEventVerifier (default batch 256, " +
                     "parallelism 8), which fans Event.verify() out over Dispatchers.Default and delivers in order. Quartz's " +
-                    "documented speed option (an opt-in accessory; Amethyst still verifies inline on the per-relay " +
-                    "coroutine, quartz-nostrclient), so it is a ranked entry of its own, like other libraries' speed " +
-                    "options; it verifies on several cores, which the CPU columns show.",
+                    "documented speed option (an opt-in accessory), so it is a ranked entry of its own, like other " +
+                    "libraries' speed options; it verifies on several cores, which the CPU columns show.",
             variant = false,
             create = { QuartzClient(parallel = true) },
-        ),
-        ClientSpec(
-            id = "quartz-standalone",
-            library = "Quartz",
-            version = V["com.vitorpamplona.quartz:quartz-jvm"],
-            license = "MIT",
-            api = "StandaloneRelayClient(url, BasicOkHttpWebSocket.Builder, RelayConnectionListener).sendRequest(subId, [filter])",
-            websocket = OKHTTP,
-            crypto = SECP_KMP,
-            verify = "explicit",
-            notes =
-                "Quartz's single-relay client, without the pool: EVENT/EOSE messages (decoded by Kite) reach the " +
-                    "listener's onIncomingMessage, which runs Event.verify() inline as quartz-nostrclient does. Same 1 s " +
-                    "settle after connect.",
-            variant = true,
-            create = { QuartzStandaloneClient() },
-        ),
-        ClientSpec(
-            id = "quartz-fetchallwithhooks",
-            library = "Quartz",
-            version = V["com.vitorpamplona.quartz:quartz-jvm"],
-            license = "MIT",
-            api = "NostrClient.fetchAllWithHooks({relay: [filter]}) { relay, event -> ... } (accessory; returns at EOSE)",
-            websocket = OKHTTP,
-            crypto = SECP_KMP,
-            verify = "explicit",
-            notes =
-                "Quartz's fetch accessory with a per-event hook, over the same NostrClient and socket as " +
-                    "quartz-nostrclient: the listener pushes each event into an UNLIMITED channel, one loop drains it " +
-                    "and calls the hook in arrival order; the hook runs Event.verify() and keeps the verified events, " +
-                    "which the accessory collects into its result list (returned at EOSE, so every event stays " +
-                    "reachable until the run ends). No dedup. idleTimeoutMs 60 s. Run in a coroutine on the client's " +
-                    "Dispatchers.IO scope; EOSE = the accessory returning.",
-            variant = true,
-            create = { QuartzFetchClient(QuartzFetch.WITH_HOOKS) },
-        ),
-        ClientSpec(
-            id = "quartz-fetchall",
-            library = "Quartz",
-            version = V["com.vitorpamplona.quartz:quartz-jvm"],
-            license = "MIT",
-            api = "NostrClient.fetchAll(relay, [filter]) (accessory; suspends until EOSE, returns List<Event>)",
-            websocket = OKHTTP,
-            crypto = SECP_KMP,
-            verify = "explicit",
-            notes =
-                "fetchAll is fetchAllWithHooks with a hook that dedups by id (a HashSet of every id), then sorts the " +
-                    "list newest-first (DefaultFeedOrderEvent). It does not verify: the app verifies each event of the " +
-                    "returned list with Event.verify(), inside the run, after the accessory returns. The dedup runs " +
-                    "before any verification, so a forged copy that arrives first takes the id and the genuine event is " +
-                    "dropped as a duplicate: it fails the forged-content and forged-sig checks (98 of 197 delivered). " +
-                    "idleTimeoutMs 60 s; same pool, socket and coroutine as quartz-fetchallwithhooks.",
-            variant = true,
-            create = { QuartzFetchClient(QuartzFetch.FETCH_ALL) },
-        ),
-        ClientSpec(
-            id = "quartz-fetchasflow",
-            library = "Quartz",
-            version = V["com.vitorpamplona.quartz:quartz-jvm"],
-            license = "MIT",
-            api = "NostrClient.fetchAsFlow(relay, [filter]).collect { list -> ... } (accessory; completes at EOSE)",
-            websocket = OKHTTP,
-            crypto = SECP_KMP,
-            verify = "explicit",
-            notes =
-                "fetchAsFlow: a callbackFlow whose listener dedups by id (a HashSet of every id), appends to an " +
-                    "EventListAccumulator and sends a snapshot view of the whole list per event, conflated (a slow " +
-                    "collector sees only the newest list); it completes at EOSE. The collector verifies the events " +
-                    "appended since its previous emission with Event.verify(). The dedup runs before any " +
-                    "verification, so a forged copy that arrives first censors the genuine event: it fails the " +
-                    "forged-content and forged-sig checks (98 of 197 delivered). Same pool, socket and coroutine as " +
-                    "quartz-fetchallwithhooks.",
-            variant = true,
-            create = { QuartzFetchClient(QuartzFetch.FETCH_AS_FLOW) },
-        ),
-        ClientSpec(
-            id = "quartz-fetch",
-            library = "Quartz",
-            version = V["com.vitorpamplona.quartz:quartz-jvm"],
-            license = "MIT",
-            api = "NostrClient.fetch(relay, filters) { event -> } (accessory; returns at EOSE with the count)",
-            websocket = OKHTTP,
-            crypto = SECP_KMP,
-            verify = "explicit",
-            notes =
-                "Quartz's one-relay read: one REQ, every event handed to the callback unverified, in arrival order, " +
-                    "on the relay's delivery coroutine (no flow in between; startReq registers the REQ and the " +
-                    "callback runs as a SubscriptionListener would); nothing collected, deduped or sorted; returns " +
-                    "at EOSE. The callback verifies with Event.verify(), as quartz-nostrclient's listener does. Same " +
-                    "pool and socket as quartz-nostrclient, run in a coroutine on the client's Dispatchers.IO scope.",
-            variant = true,
-            create = { QuartzFetchClient(QuartzFetch.FETCH) },
-        ),
-        ClientSpec(
-            id = "quartz-fetchevents",
-            library = "Quartz",
-            version = V["com.vitorpamplona.quartz:quartz-jvm"],
-            license = "MIT",
-            api = "NostrClient.fetchEvents(relay, filters): Flow<Event> (accessory; completes at EOSE)",
-            websocket = OKHTTP,
-            crypto = SECP_KMP,
-            verify = "explicit",
-            notes =
-                "fetch as a cold Flow of single events: a callbackFlow over startReq, each event handed over with a " +
-                    "suspending send (default 64-slot buffer) and verified by the collector with Event.verify(); one " +
-                    "coroutine hop per event more than quartz-fetch. Completes at EOSE.",
-            variant = true,
-            create = { QuartzFetchClient(QuartzFetch.FETCH_EVENTS) },
         ),
         ClientSpec(
             id = "nostr-sdk-subscribe",
