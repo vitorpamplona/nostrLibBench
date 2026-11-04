@@ -155,8 +155,8 @@ verifying it then loses the genuine one):
 | `forged-sig` | another event's `sig` | the signature check |
 
 Only the genuine events are valid (`"forged": true` in the manifest). They are correctness
-checks, not speed runs: every client runs them once (`--quick`), and a client that fails
-any of them is not ranked.
+checks, not speed runs: every client runs them once (`--quick`). A client that fails one
+is still ranked on speed; the ranking flags the failure next to its time.
 
 66 valid events are **expired**: a NIP-40 `expiration` tag that passed in 2024 (kinds 15,
 30315 and 1). Some libraries drop expired events (rust-nostr does, unconditionally). A

@@ -32,52 +32,66 @@ time over wall time. Quartz's rows are in bold: `quartz-parallelverifier` is Qua
 documented speed option (it verifies batches of events on every core), and
 `quartz-nostrclient`, its default client, is listed next to it.
 
-| # | language | client | µs/event | CPU µs/event | cores used | peak RSS MB |
-|---:|---|---|---:|---:|---:|---:|
-| **1** | **JVM (Kotlin/Java)** | **`quartz-parallelverifier`** | **22.8** | **69.5** | **3.04** | **616** |
-| **–** | **JVM (Kotlin/Java)** | **`quartz-nostrclient`** (default) | **46.6** | **56.8** | **1.22** | **295** |
-| 2 | Zig | `zig-nostr-relay` | 47.4 | 46.9 | 0.99 | 5 |
-| 3 | Rust | `nostr-sdk-stream` | 54.9 | 60.0 | 1.09 | 64 |
-| 4 | Rust | `nostr_rust-next_data` | 57.0 | 56.6 | 0.99 | 8 |
-| 5 | Rust | `nostro2-relay-secp256k1` | 62.4 | 74.6 | 1.20 | 8 |
-| 6 | C#/.NET | `nostr-sdk` | 63.0 | 74.2 | 1.18 | 343 |
-| 7 | Go | `fiatjaf-nostr-relay-libsecp256k1` | 65.0 | 109.6 | 1.69 | 26 |
-| 8 | JVM (Kotlin/Java) | `nostr4j-pool` | 66.5 | 234.7 | 3.53 | 1,596 |
-| 9 | Python | `monstr-subscribe` | 68.7 | 68.1 | 0.99 | 122 |
-| 10 | Rust | `nostr-types-client` | 72.3 | 79.0 | 1.09 | 83 |
-| 11 | Go | `go-nostr-relay-libsecp256k1` | 73.3 | 99.3 | 1.36 | 25 |
-| 12 | JavaScript (Bun) | `nostr-sdk-node` | 75.9 | 117.9 | 1.55 | 402 |
-| 13 | Python | `nostr-sdk-notifications` | 127.9 | 186.6 | 1.46 | 116 |
-| 14 | JavaScript (Node) | `qntx-nostr-wasm` | 130.0 | 130.4 | 1.00 | 78 |
-| 15 | JavaScript (Deno) | `qntx-nostr-wasm` | 135.4 | 135.8 | 1.00 | 91 |
-| 16 | JavaScript (Bun) | `qntx-nostr-wasm` | 170.3 | 172.8 | 1.01 | 62 |
-| 17 | C#/.NET | `nnostr` | 172.6 | 181.2 | 1.05 | 313 |
-| 18 | C#/.NET | `nostra` | 199.3 | 202.5 | 1.02 | 220 |
-| 19 | C#/.NET | `nostr-client` | 213.8 | 217.0 | 1.01 | 228 |
-| 20 | C#/.NET | `blockcore-nostr-client` | 215.7 | 220.6 | 1.02 | 227 |
-| 21 | Go | `nmilat-read` | 232.0 | 312.4 | 1.35 | 50 |
-| 22 | JVM (Kotlin/Java) | `nostr-sdk-subscribe` | 250.3 | 482.0 | 1.93 | 1,638 |
-| 23 | Python | `nostrj` | 330.6 | 346.9 | 1.05 | 70 |
-| 24 | JavaScript (Node) | `nostr-tools-relay-wasm` | 402.7 | 399.2 | 0.99 | 94 |
-| 25 | JavaScript (Bun) | `nostr-tools-relay-wasm` | 422.1 | 420.8 | 1.00 | 86 |
-| 26 | JavaScript (Deno) | `nostr-tools-relay-wasm` | 434.6 | 436.2 | 1.00 | 109 |
-| 27 | JavaScript (Bun) | `nostrify-relay` | 797.6 | 866.7 | 1.09 | 87 |
-| 28 | JavaScript (Bun) | `applesauce-relay` | 807.1 | 892.4 | 1.11 | 81 |
-| 29 | JavaScript (Deno) | `applesauce-relay` | 902.7 | 912.1 | 1.01 | 185 |
-| 30 | JavaScript (Bun) | `rx-nostr` | 927.2 | 1,036.2 | 1.12 | 73 |
-| 31 | JavaScript (Deno) | `nostrify-relay` | 933.0 | 943.8 | 1.01 | 206 |
-| 32 | JavaScript (Deno) | `rx-nostr` | 1,039.9 | 1,042.6 | 1.00 | 140 |
-| 33 | JavaScript (Node) | `applesauce-relay` | 1,947.4 | 1,944.4 | 1.00 | 136 |
-| 34 | JavaScript (Node) | `nostrify-relay` | 1,957.9 | 1,957.6 | 1.00 | 132 |
-| 35 | JavaScript (Node) | `rx-nostr` | 2,070.7 | 2,079.2 | 1.00 | 121 |
-| 36 | Dart | `nostr_tools` | 13,636.3 | 13,508.6 | 0.99 | 104 |
-| 37 | Dart | `nostr_nips` | 14,450.9 | 14,281.3 | 0.99 | 91 |
-| 38 | Ruby | `nostr-client` | 14,520.0 | 14,422.9 | 0.99 | 67 |
+| # | language | client | µs/event | CPU µs/event | cores used | peak RSS MB | forged checks |
+|---:|---|---|---:|---:|---:|---:|---|
+| **1** | **JVM (Kotlin/Java)** | **`quartz-parallelverifier`** | **22.8** | **69.5** | **3.04** | **616** | pass |
+| **–** | **JVM (Kotlin/Java)** | **`quartz-nostrclient`** (default) | **46.6** | **56.8** | **1.22** | **295** | pass |
+| 2 | Zig | `zig-nostr-relay` | 47.4 | 46.9 | 0.99 | 5 | pass |
+| 3 | Rust | `nostr-sdk-stream` | 54.9 | 60.0 | 1.09 | 64 | pass |
+| 4 | Rust | `nostr_rust-next_data` | 57.0 | 56.6 | 0.99 | 8 | pass |
+| 5 | Rust | `nostro2-relay-secp256k1` | 62.4 | 74.6 | 1.20 | 8 | pass |
+| 6 | C#/.NET | `nostr-sdk` | 63.0 | 74.2 | 1.18 | 343 | pass |
+| 7 | Go | `fiatjaf-nostr-relay-libsecp256k1` | 65.0 | 109.6 | 1.69 | 26 | pass |
+| 8 | JVM (Kotlin/Java) | `nostr4j-pool` | 66.5 | 234.7 | 3.53 | 1,596 | pass |
+| 9 | Python | `monstr-subscribe` | 68.7 | 68.1 | 0.99 | 122 | pass |
+| 10 | Rust | `nostr-types-client` | 72.3 | 79.0 | 1.09 | 83 | pass |
+| 11 | Go | `go-nostr-relay-libsecp256k1` | 73.3 | 99.3 | 1.36 | 25 | pass |
+| 12 | JavaScript (Bun) | `nostr-sdk-node` | 75.9 | 117.9 | 1.55 | 402 | pass |
+| 13 | Python | `nostr-sdk-notifications` | 127.9 | 186.6 | 1.46 | 116 | pass |
+| 14 | JavaScript (Node) | `qntx-nostr-wasm` | 130.0 | 130.4 | 1.00 | 78 | pass |
+| 15 | JavaScript (Deno) | `qntx-nostr-wasm` | 135.4 | 135.8 | 1.00 | 91 | pass |
+| 16 | JavaScript (Bun) | `qntx-nostr-wasm` | 170.3 | 172.8 | 1.01 | 62 | pass |
+| 17 | C#/.NET | `nnostr` | 172.6 | 181.2 | 1.05 | 313 | pass |
+| 18 | C#/.NET | `nostra` | 199.3 | 202.5 | 1.02 | 220 | pass |
+| 19 | C#/.NET | `nostr-client` | 213.8 | 217.0 | 1.01 | 228 | pass |
+| 20 | C#/.NET | `blockcore-nostr-client` | 215.7 | 220.6 | 1.02 | 227 | pass |
+| 21 | Go | `nmilat-read` | 232.0 | 312.4 | 1.35 | 50 | pass |
+| 22 | JVM (Kotlin/Java) | `nostr-sdk-subscribe` | 250.3 | 482.0 | 1.93 | 1,638 | pass |
+| 23 | Python | `nostrclient` | 321.0 | 333.5 | 1.04 | 149 | **fails**: censored by a forged copy |
+| 24 | Python | `nostrj` | 330.6 | 346.9 | 1.05 | 70 | pass |
+| 25 | JavaScript (Node) | `welshman-nodelay` | 377.6 | 383.2 | 1.01 | 232 | **fails**: censored by a forged copy |
+| 26 | JavaScript (Bun) | `welshman-nodelay` | 382.9 | 389.9 | 1.02 | 182 | **fails**: censored by a forged copy |
+| 27 | JavaScript (Node) | `nostr-tools-relay-wasm` | 402.7 | 399.2 | 0.99 | 94 | pass |
+| 28 | JavaScript (Deno) | `welshman-nodelay` | 415.8 | 421.0 | 1.01 | 280 | **fails**: censored by a forged copy |
+| 29 | JavaScript (Bun) | `nostr-tools-relay-wasm` | 422.1 | 420.8 | 1.00 | 86 | pass |
+| 30 | JavaScript (Deno) | `nostr-tools-relay-wasm` | 434.6 | 436.2 | 1.00 | 109 | pass |
+| 31 | JavaScript (Bun) | `nostrify-relay` | 797.6 | 866.7 | 1.09 | 87 | pass |
+| 32 | JavaScript (Bun) | `applesauce-relay` | 807.1 | 892.4 | 1.11 | 81 | pass |
+| 33 | JavaScript (Deno) | `applesauce-relay` | 902.7 | 912.1 | 1.01 | 185 | pass |
+| 34 | JavaScript (Bun) | `rx-nostr` | 927.2 | 1,036.2 | 1.12 | 73 | pass |
+| 35 | JavaScript (Deno) | `nostrify-relay` | 933.0 | 943.8 | 1.01 | 206 | pass |
+| 36 | JavaScript (Deno) | `rx-nostr` | 1,039.9 | 1,042.6 | 1.00 | 140 | pass |
+| 37 | JavaScript (Bun) | `ndk` | 1,809.1 | 1,853.3 | 1.02 | 171 | **fails**: censored by a forged copy |
+| 38 | JavaScript (Node) | `applesauce-relay` | 1,947.4 | 1,944.4 | 1.00 | 136 | pass |
+| 39 | JavaScript (Node) | `nostrify-relay` | 1,957.9 | 1,957.6 | 1.00 | 132 | pass |
+| 40 | JavaScript (Node) | `rx-nostr` | 2,070.7 | 2,079.2 | 1.00 | 121 | pass |
+| 41 | JavaScript (Deno) | `ndk` | 2,397.8 | 2,403.2 | 1.00 | 237 | **fails**: censored by a forged copy |
+| 42 | JavaScript (Node) | `ndk` | 3,504.3 | 3,504.7 | 1.00 | 160 | **fails**: censored by a forged copy |
+| 43 | Dart | `nostr_tools` | 13,636.3 | 13,508.6 | 0.99 | 104 | pass |
+| 44 | Dart | `dart_nostr` | 14,141.7 | 13,954.3 | 0.99 | 117 | **fails**: censored by a forged copy |
+| 45 | Dart | `nostr_nips` | 14,450.9 | 14,281.3 | 0.99 | 91 | pass |
+| 46 | Ruby | `nostr-client` | 14,520.0 | 14,422.9 | 0.99 | 67 | pass |
+| 47 | JVM (Kotlin/Java) | `nostr-java-relaypool` | 16,938.9 | 17,013.9 | 1.00 | 431 | **fails**: censored by a forged copy |
 
-Rows 36 to 38 (Dart and Ruby) ran once each instead of taking the median of three or more.
-The two Dart rows ran after a container restart, on a host about 8 % slower: the go-nostr
-control row took 8,547 ms there against 7,881 ms in the main pass. At over 13 ms per event,
-that does not change their place.
+A row that fails a [verification check](#verification-checks) is ranked on speed and
+flagged in the last column. Peak RSS is the whole process, runtime included (a JVM or a
+JavaScript engine starts at tens to hundreds of MB, a native binary at a few), and a garbage
+collector grows its heap while memory is free: compare it within a runtime, not across.
+
+The slowest rows (the Dart and Ruby rows and `nostr-java-relaypool`) ran once each instead
+of taking the median of three or more. The Dart and JVM ones ran after a container restart,
+on a host about 8 % slower: the go-nostr control row took 8,547 ms there against 7,881 ms in
+the main pass. At over 13 ms per event, that does not change their place.
 
 ## Verification checks
 
@@ -85,7 +99,8 @@ Three more workloads send 197 valid events, each with a forged copy: changed con
 and sig kept), a changed `id` field, or another event's sig. The copy goes first for every
 other event. A library that marks an id as seen before it verifies the event lets the
 forged copy censor the genuine one: it keeps only the 98 events whose genuine copy came
-first. A library that fails any check is not ranked.
+first. A library that fails a check is still ranked on speed, with the failure flagged in
+the ranking.
 
 | failure | libraries |
 |---|---|
