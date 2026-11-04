@@ -29,7 +29,10 @@ class DartNostrClient extends BenchClient {
       'has seen before). The relay layer does not verify: per event the harness calls NostrEvent.getEventId(...) (the '
       'library\'s id function, jsonEncode + SHA-256) against id, then event.isVerified() (BIP-340 only). Per-event '
       'console logging is on by default and turned off (NostrDebugOptions(isLogsEnabled: false)). The relay layer '
-      'dedups by id in a registry and jsonDecodes each EVENT frame twice (canBeDeserialized, then deserialized).';
+      'jsonDecodes each frame once. Library costs paid on every event, named not worked around: every raw frame '
+      'string goes into an LRU set of 5000 (frame-level dedup) and onto an all-data-entities sink; every event is '
+      'stored in the instance\'s unbounded eventsRegistry map (event-level dedup, so a new Nostr() per run); and its '
+      'log strings (frame, content) are interpolated per event even with logs off.';
 
   Nostr? _nostr;
   NostrEventsStream? _sub;

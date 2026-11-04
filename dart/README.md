@@ -58,6 +58,7 @@ rustup the ndk build fails and its rows report the error; the other libraries st
 |---|---|---|---|---|---|
 | `ndk` | ndk 0.10.1 (relaystr) | `Ndk.requests.query(filter, explicitRelays).stream`, `Bip340EventVerifier` (default) | library | bip340 0.3.1 (pure Dart, on compute isolates) | ndk's vendored web_socket_client (dart:io) |
 | `ndk-rust` | ndk 0.10.1 | same, `RustEventVerifier` (documented native verifier) | library | libsecp256k1 via Rust FFI | same |
+| `ndk-cache` (variant) | ndk 0.10.1 | as `ndk-rust`, `query()` with its default `cacheRead`/`cacheWrite: true` | library | libsecp256k1 via Rust FFI | same |
 | `dart_nostr` | dart_nostr 10.0.1 (anasfik) | `Nostr().services.relays.startEventsSubscription(request, onEose)` | explicit | bip340 0.3.0 | web_socket_channel 3 |
 | `nostr_nips` | nostr_nips 0.2.0 | `Relay.connect` + `relay.messages` + `relay.subscribe` | explicit | bip340 0.3.0 | web_socket_channel 3 |
 | `nostr_tools` | nostr_tools 1.0.9 | `RelayApi.connect()` stream + `relay.sub` | explicit | bip340 0.2.0 | web_socket_channel 2 |
@@ -72,22 +73,32 @@ run about 5 minutes, close to the default `--timeout-ms` of 300 s.
 
 Per library (each row's `notes` has the details):
 
-- **ndk** verifies every event (`VerifyEventStream`: Dart id recompute, then the verifier)
-  and keeps an LRU of verified id/sig pairs per `Ndk` instance (a new `Ndk` per run). The
-  default `Bip340EventVerifier` runs on a compute isolate and JSON decoding runs on an
-  encoding isolate. Config: `bootstrapRelays` = the relay, `MemCacheManager`, log level off,
-  and the query timeout raised to 1 h (the default 10 s would cut the stream). Two valid
-  events are **dropped**: `Nip01Event`'s constructor replaces `created_at: 0` with the current
-  time, so that event's id no longer matches; and `query` writes events to the cache and only
-  delivers those the cache keeps visible, so a kind-0 profile older than another one by the
-  same author in the same stream is dropped (default `cacheWrite: true`). Expired events are
-  dropped too (allowed). For every `"sig":""` event the Bip340 verifier throws inside the
-  isolate and ndk prints a stack trace (not silenceable without a patch). `ndk-rust` rejects
-  the ambiguous U+0000 event; `ndk` accepts it. `accepted_ok: false` for both.
+- **ndk** verifies every event (`VerifyEventStream`: Dart id recompute + NIP-13 check, then
+  the verifier) and keeps an LRU of verified id/sig pairs per `Ndk` instance (a new `Ndk` per
+  run). The default `Bip340EventVerifier` runs on a compute isolate and JSON decoding runs on
+  an encoding isolate. Config: `bootstrapRelays` = the relay, `MemCacheManager` (a required
+  parameter), log level off, the query timeout raised to 1 h (the default 10 s would cut the
+  stream), and `query(cacheRead: false, cacheWrite: false)`: `query` defaults to writing every
+  verified event to the cache (save, add sources, then reload it under the cache's visibility
+  rules and deliver it only if it is still visible), a store outside the job; with
+  `cacheWrite: false` ndk hands back the verified stream unchanged. So expired events and a
+  kind-0 profile older than another by the same author are delivered. The defaults run in the
+  `ndk-cache` variant (Rust verifier, to compare with `ndk-rust`), which drops both. Always
+  paid, named in `notes`: the id is computed twice (`isIdValid` in the stream, then again in
+  `Bip340EventVerifier`, or in the native call for `RustEventVerifier`), the NIP-13 check, the
+  frame's string length for relay stats, the query's `returnedIds` dedup set, and an unawaited
+  NIP-11 HTTP GET after connect. One valid event is still **dropped**: `Nip01Event`'s
+  constructor replaces `created_at: 0` with the current time, so its id no longer matches
+  (`accepted_ok: false` on every ndk row). For every `"sig":""` event the Bip340 verifier
+  throws inside the isolate and ndk prints a stack trace (not silenceable without a patch).
+  `ndk-rust` rejects the ambiguous U+0000 event; `ndk` accepts it.
 - **dart_nostr**: `Nostr.instance` is a singleton whose registry drops ids it has seen, so
   each run builds `Nostr()`; per-event console logging is on by default and is turned off.
   The relay layer does not verify: the harness calls `NostrEvent.getEventId` and
-  `isVerified()`. Correct.
+  `isVerified()`. It decodes each frame once. Always paid: every raw frame string goes into
+  an LRU set of 5000 and onto an all-entities sink, every event is kept in the instance's
+  unbounded `eventsRegistry` map, and log strings are interpolated per event even with logs
+  off. Correct.
 - **nostr_nips** parses into `Event` but does not verify: the harness calls `event.verify()`
   (id + BIP-340). Correct.
 - **nostr_tools** (2023): its verifying `Event` constructor body is commented out; the harness
@@ -97,18 +108,24 @@ Per library (each row's `notes` has the details):
   `RelayInfoProvider` (its public constructor parameter) returning `[1, 11, 15, 20]`. It hides
   EOSE, but `pool.subscribe()` returns at the relay's ack (the EOSE). That ack wait has a
   hard-coded 1-minute timeout that disconnects the relay, so an `all` run, which takes ~5 min
-  to verify in pure Dart, will be cut off. Its `bip340 0.0.4` **rejects valid signatures from
+  to verify in pure Dart, will be cut off. `Relay.connect()` does not await the WebSocket
+  handshake (its channel is private), so setup waits 200 ms, untimed, as for nostr_tools and
+  nostr_client. Its `bip340 0.0.4` **rejects valid signatures from
   pubkeys with leading zero bytes** (3 events on smoke): `accepted_ok: false`.
-- **nostr_client** (2023): no id function; the harness checks the id with SHA-256 of
-  `jsonEncode([0, …])` (what the other Dart libraries do) and calls `event.verify()`. Same
-  `bip340 0.0.4` leading-zero bug: `accepted_ok: false`.
-- **nip01**: verifies the signature only (`EventModel.isValid`) inside its stream listener and
-  **throws on the first `"sig":""` event** (`bip340` hex-decodes the empty string), an
-  uncaught error that would kill an app: error row.
+- **nostr_client** (2023): no id function, so the id half is harness code: SHA-256 of
+  `jsonEncode([0, …])` (what the other Dart libraries do) compared with `id`; the signature
+  half is the library's `event.verify()`, called by the harness. Same `bip340 0.0.4`
+  leading-zero bug: `accepted_ok: false`.
+- **nip01**: verifies the signature only (`EventModel.isValid`) inside its stream listener; the
+  id half is the library's own `Event.calculateId`, called by the harness (as go-nostr's
+  `CheckID`, so `verify` stays `library`). It **throws on the first `"sig":""` event**
+  (`bip340` hex-decodes the empty string), an uncaught error that would kill an app: error
+  row.
 - **nostr** (ethicnology) is transport-agnostic (no relay client); paired with dart:io
   `WebSocket` as its examples do: a variant. `Message.deserialize` verifies id + signature by
-  default. It rejects the `created_at: 0` event (its validator requires a positive
-  timestamp): `accepted_ok: false`.
+  default, but decodes each EVENT frame twice (`Message.deserialize` reads the type, then
+  `Event.deserialize` parses the same string again). It rejects the `created_at: 0` event
+  (its validator requires a positive timestamp): `accepted_ok: false`.
 
 ## Not included
 

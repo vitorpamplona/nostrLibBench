@@ -49,7 +49,7 @@ public let allClients: [ClientInfo] = [
         websocket: "URLSessionWebSocketTask (URLSession.shared, Apple Foundation), via the library's WebSocket class",
         crypto: "libsecp256k1 0.3.2 (C, vendored by GigaBitcoin/secp256k1.swift 0.12.2); SHA-256 by CommonCrypto",
         verify: "explicit",
-        notes: "Relay only decodes events (JSONDecoder into a per-kind NostrEvent subclass) and publishes them unverified. The harness calls the library's own EventVerifying.verifyEvent on each one (Relay conforms to it): id = SHA-256 of EventSerializer's JSONEncoder serialization, then Schnorr via secp256k1.swift. Pinned to main (e5855cb, Jan 2026): the 0.3.0 tag predates the fix for the Data.bytes ambiguity that breaks its build with current Xcode. Known gap: its Tag type requires a value, so an event with a one-element tag (NIP-57 [\"anon\"], [\"content-warning\"]) fails to decode and is silently dropped (20 valid events of `all`, none of `smoke`). Defaults kept: Relay logs every received frame at .info through os.Logger (unified logging, not the console; the message text is only formatted when that level is being collected). A new Relay per run.",
+        notes: "Relay only decodes events (JSONDecoder into a per-kind NostrEvent subclass) and publishes them unverified. The harness calls the library's own EventVerifying.verifyEvent on each one (Relay conforms to it): id = SHA-256 of EventSerializer's JSONEncoder serialization, then Schnorr via secp256k1.swift. Pinned to main (e5855cb, Jan 2026): the 0.3.0 tag predates the fix for the Data.bytes ambiguity that breaks its build with current Xcode. Known gap: its Tag type requires a value, so an event with a one-element tag (NIP-57 [\"anon\"], [\"content-warning\"]) fails to decode and is silently dropped (20 valid events of `all`, none of `smoke`). Library cost, named not worked around: Relay logs every received frame with logger.info(\"\\(event.description)\"), and that description is \"Received message: \" + the whole frame (os.Logger, subsystem NostrSDK: unified logging, not the console; no in-app option turns it off). os.Logger only evaluates the interpolation when .info is enabled for the subsystem, so whether the frame string is built per event depends on the system's log configuration (to be confirmed on macOS, see swift/README.md). A new Relay per run.",
         variant: false,
         appleOnly: true
     ),
@@ -64,7 +64,7 @@ public let allClients: [ClientInfo] = [
         websocket: "URLSessionWebSocketTask (URLSession.shared, Apple Foundation), via the library's WebSocket class",
         crypto: "libsecp256k1 0.3.2 (C, vendored by GigaBitcoin/secp256k1.swift 0.12.2); SHA-256 by CommonCrypto",
         verify: "explicit",
-        notes: "Same pipeline as nostr-sdk-ios-relay through the multi-relay RelayPool (one relay): one more Combine hop per event, no dedup. The harness verifies each delivered event with the library's EventVerifying.verifyEvent. A new RelayPool per run.",
+        notes: "Same pipeline as nostr-sdk-ios-relay through the multi-relay RelayPool (one relay): one more Combine hop per event, no dedup; the same per-frame logger.info of the whole frame. The harness verifies each delivered event with the library's EventVerifying.verifyEvent. A new RelayPool per run.",
         variant: true,
         appleOnly: true
     ),
@@ -109,7 +109,7 @@ public let allClients: [ClientInfo] = [
         websocket: urlSessionWS + ", via the library's URLSessionWebSocketFactory",
         crypto: "libsecp256k1 0.7.1 (C, vendored by 21-DOT-DEV/swift-secp256k1 0.24.0, P256K); SHA-256 by swift-crypto (CryptoKit on Apple, BoringSSL on Linux)",
         verify: "explicit",
-        notes: "yysskk/swift-nostr: the RelayPool parses (JSONDecoder) and deduplicates per subscription but does not verify; the harness calls the library's own Event.verify() (id recomputed and compared, then Schnorr) on each delivered event. NostrClient is the library's client; it holds one relay here. A new NostrClient per run.",
+        notes: "yysskk/swift-nostr: the RelayPool parses and deduplicates per subscription but does not verify; the harness calls the library's own Event.verify() (id recomputed and compared, then Schnorr) on each delivered event. Library cost, named not worked around: RelayMessage.parse decodes each frame with JSONSerialization.jsonObject, then Event(jsonObject:) re-serializes the event dictionary with JSONSerialization.data and decodes that with JSONDecoder: two parses and one re-encode per event. NostrClient is the library's client; it holds one relay here. A new NostrClient per run.",
         variant: false,
         appleOnly: false
     ),

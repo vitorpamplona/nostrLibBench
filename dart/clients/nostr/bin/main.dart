@@ -32,7 +32,8 @@ class NostrDartIo extends BenchClient {
       'The library has no WebSocket client ("transport-agnostic"), so this is a variant paired with dart:io WebSocket '
       'as in its examples. Message.deserialize parses each frame; for an EVENT it builds the Event with the default '
       'verify: true, which recomputes the id and checks the BIP-340 signature and throws on failure (counted as '
-      'rejected).';
+      'rejected). Library cost, named not worked around: each EVENT frame is JSON-decoded twice, once by '
+      'Message.deserialize (to read the message type) and again by Event.deserialize on the same frame string.';
 
   WebSocket? _ws;
   StreamSubscription<dynamic>? _sub;

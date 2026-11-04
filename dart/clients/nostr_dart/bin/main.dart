@@ -8,8 +8,8 @@ import 'package:nostr_dart/src/relay_info_provider.dart';
 Future<void> main(List<String> args) => childMain(args, [NostrDartClient()]);
 
 /// Relay.connect() fetches NIP-11 over https:// and refuses relays that do not list NIPs 15
-/// and 20. The bench relay serves NIP-11 over plain http and lists [1, 11] (EOSE and OK are
-/// NIP-01 now), so the harness hands Relay this provider instead.
+/// and 20. The bench relay serves NIP-11 over plain http (it lists [1, 11, 15, 20], but
+/// nostr_dart only fetches https://), so the harness hands Relay this provider instead.
 class _StaticInfo extends RelayInfoProvider {
   _StaticInfo() : super(http: http.Client());
   @override
@@ -43,7 +43,9 @@ class NostrDartClient extends BenchClient {
       'pool.subscribe() awaits the relay\'s ack, which is the EOSE: its return is the EOSE time. Relay.connect() needs '
       'NIP-11 over https and NIPs 15+20 listed, so Relay gets a RelayInfoProvider (its public constructor parameter) '
       'that returns {supported_nips: [1, 11, 15, 20]}. Caveat: the ack wait has a hard-coded 1 min timeout that '
-      'disconnects the relay, so a subscription whose EOSE takes longer than 1 min to process is cut off.';
+      'disconnects the relay, so a subscription whose EOSE takes longer than 1 min to process is cut off. '
+      'Relay.connect() starts IOWebSocketChannel.connect without awaiting the handshake (the channel is private), '
+      'so setup waits 200 ms after pool.add (untimed), as for nostr_tools and nostr_client.';
 
   Nostr? _nostr;
   late String _url;
@@ -55,6 +57,9 @@ class NostrDartClient extends BenchClient {
     if (!await _nostr!.pool.add(Relay(_url, relayInfoProvider: _StaticInfo()))) {
       throw Exception('RelayPool.add: could not connect');
     }
+    // Relay.connect() returns before the WebSocket handshake (IOWebSocketChannel.connect is not
+    // awaited and the channel is private): give it 200 ms, untimed, so it is not in the run.
+    await Future<void>.delayed(const Duration(milliseconds: 200));
   }
 
   @override

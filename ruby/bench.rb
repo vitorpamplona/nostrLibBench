@@ -29,6 +29,7 @@ require 'json'
 require 'optparse'
 require 'etc'
 require 'digest'
+require 'securerandom'
 
 HERE = __dir__
 ROOT = File.expand_path('..', HERE)
@@ -201,7 +202,9 @@ class NostrGemDriver
     @client.on(:error) { |msg| opened << "error: #{msg}" }
     crypto = @crypto
     # event_emitter instance_execs listeners on the client, so no ivars inside the block.
-    sub = @sub = []
+    # The subscription id is chosen here (as the gem's default does, SecureRandom.hex) and passed
+    # to subscribe, so the listener knows it before the REQ is sent.
+    sub = @sub = [SecureRandom.hex]
     @client.on(:message) do |data|
       msg = JSON.parse(data)
       case msg[0]
@@ -227,7 +230,7 @@ class NostrGemDriver
   end
 
   def subscribe
-    @sub[0] = @client.subscribe(filter: Nostr::Filter.new(limit: @events)).id
+    @client.subscribe(subscription_id: @sub[0], filter: Nostr::Filter.new(limit: @events))
   end
 
   def teardown

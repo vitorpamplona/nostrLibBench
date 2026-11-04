@@ -1,5 +1,6 @@
 // yysskk/swift-nostr: NostrClient -> RelayPool -> RelayConnection -> WebSocketSession.
-// The pool parses each frame (RelayMessage.parse, JSONDecoder) and deduplicates per
+// The pool parses each frame (RelayMessage.parse: JSONSerialization.jsonObject, then the event
+// dictionary re-serialized and decoded again with JSONDecoder) and deduplicates per
 // subscription but does not verify, so the harness calls the library's Event.verify()
 // (id recomputed and compared, then Schnorr) on every delivered event, inside the run.
 //

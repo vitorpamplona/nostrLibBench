@@ -27,8 +27,10 @@ class Nip01Client extends BenchClient {
   @override
   String get notes =>
       'EventRepositoryImpl drops events whose signature fails (EventModel.isValid = bip340.verify(pubkey, id, sig)) '
-      'but never checks the id, so the harness also calls the library\'s Event.calculateId(...) (jsonEncode + SHA-256) '
-      'on every delivered event and drops mismatches. The repositories are wired the way SubscribeUseCase does it, '
+      'but never checks the id. Who does which half: the signature is the library\'s (in its stream); the id half is '
+      'the library\'s own Event.calculateId(...) (jsonEncode + SHA-256), called by the harness on every delivered '
+      'event, inside the run, comparing with the id field and dropping mismatches (as go-nostr\'s CheckID; verify '
+      'stays library). The repositories are wired the way SubscribeUseCase does it, '
       'minus the use case (it hides the EOSE stream).';
 
   WebSocketRelayDataSource? _ds;

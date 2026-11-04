@@ -150,9 +150,14 @@ ambiguity (Foundation vs CryptoSwift) that breaks its build with current Apple S
   one included) and `true` on `smoke` (no such event). Every invalid event is rejected
   (the `"sig":""` rumors by the length check, the others by the id check). It accepts the
   ambiguous U+0000 event (`JSONEncoder` writes `\u0000`). Expired events are delivered.
-- **Defaults kept:** `Relay` logs every received frame at `.info` through `os.Logger`
-  (`"Received message: …"`). That is unified logging, not the console, and the message is
-  only formatted when that level is collected; left as shipped.
+- **Per-frame logging (library cost):** `Relay` logs every received frame with
+  `logger.info("\(event.description)")` (`Relay.swift`), and `WebSocketEvent.description`
+  is `"Received message: \(message)"`, the whole frame (`WebSocket.swift`). It goes through
+  `os.Logger` (subsystem `NostrSDK`: unified logging, not the console), and the library
+  offers no option to turn it off, so it is named in `notes` and left as shipped.
+  `os.Logger` evaluates the interpolation only when `.info` is enabled for the subsystem;
+  whether it is on a default Mac (and so whether the frame string is built and copied per
+  event) is not verified: see item 4 of the Mac checklist below.
 
 ### rust-nostr Swift bindings (`nostr-sdk-swift-stream`, `nostr-sdk-swift-notifications`)
 
@@ -186,9 +191,12 @@ yysskk/swift-nostr 0.9.0 (MIT, actively developed, Swift 6 concurrency, actors).
   and `for await` over the returned `SubscriptionSequence` (`.event(relayURL:event:)`,
   `.eose(relayURL:)`). The `NostrClient` is the library's client (a `RelayPool` actor with
   one relay here, as rust-nostr's `Client`), so this is the headline row.
-- **Pipeline:** `RelayConnection` actor receive loop → `RelayMessage.parse`
-  (`JSONDecoder`) → `RelayPool` actor (per-subscription dedup cache, new per client) →
-  `AsyncStream` (unbounded buffer) → app.
+- **Pipeline:** `RelayConnection` actor receive loop → `RelayMessage.parse` → `RelayPool` actor (per-subscription dedup cache, new per client) →
+  `AsyncStream` (unbounded buffer) → app. `RelayMessage.parse` decodes each frame with
+  `JSONSerialization.jsonObject`, then `Event(jsonObject:)` re-serializes the event
+  dictionary with `JSONSerialization.data` and decodes it again with `JSONDecoder`
+  (`NostrCore/Models/RelayMessage.swift`): two parses and one re-encode per event, a library
+  cost named in `notes`.
 - **Verification: none on receive.** The harness calls the library's `Event.verify()` on
   each delivered event in the consuming task: SHA-256 (swift-crypto: CryptoKit on Apple,
   BoringSSL on Linux) of the NIP-01 serialization compared with `id`, `missingSignature`
@@ -269,6 +277,13 @@ Validated here (Swift 6.4.2, Ubuntu 24.04 x86_64):
    EOSE delivery, teardown, and that every correct client reports `accepted_ok: true` on
    `smoke` (expected: all seven rows).
 3. The macOS paths of BenchCore: `ru_maxrss` in bytes, `sysctl` CPU name, `os` string.
+4. nostr-sdk-ios's per-frame `logger.info("\(event.description)")` (the whole frame): confirm
+   whether `os.Logger` formats it on a default Mac. Run `nostr-sdk-ios-relay` on `smoke`
+   with no `log stream` open (streaming turns collection on), then
+   `log show --info --last 2m --predicate 'subsystem == "NostrSDK"'`: do "Received
+   message" lines appear? Also compare its time and CPU with a run after `sudo log config --subsystem NostrSDK --mode "level:default"` (undo with
+   `sudo log config --subsystem NostrSDK --reset`). If `.info` is formatted by default, say
+   so in the row's `notes` (it stays: no in-app option turns it off).
 
 ## Not included
 

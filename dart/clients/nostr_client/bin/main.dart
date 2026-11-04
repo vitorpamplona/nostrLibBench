@@ -29,8 +29,10 @@ class NostrClientDart extends BenchClient {
   String get notes =>
       'Last release 2023. The relay stream delivers raw jsonDecoded messages; the harness turns EVENT messages into '
       'the library\'s Event with Event.fromJson and calls event.verify() (BIP-340 over the id, the library\'s only '
-      'check). The library has no id function, so the id check is harness code: SHA-256 (package:crypto) of '
-      'jsonEncode([0, pubkey, created_at, kind, tags, content]), what the other Dart libraries do. connect() is lazy '
+      'check). Who does which half: the signature is the library\'s event.verify(), called by the harness; the id '
+      'half is harness code, because the library has no id function: the harness recomputes SHA-256 '
+      '(package:crypto) of jsonEncode([0, pubkey, created_at, kind, tags, content]) (what the other Dart libraries '
+      'do) and compares it with the id field, inside the run. connect() is lazy '
       '(IOWebSocketChannel.connect without awaiting the handshake): setup waits 200 ms after it (untimed).';
 
   Relay? _relay;
