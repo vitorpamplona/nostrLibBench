@@ -600,5 +600,5 @@ pub fn childMain(init: std.process.Init, run: RunFn) !void {
 }
 
 pub fn zigRuntime() []const u8 {
-    return "Zig " ++ builtin.zig_version_string ++ " (" ++ @tagName(builtin.mode) ++ ", " ++ @tagName(builtin.cpu.arch) ++ "-" ++ @tagName(builtin.os.tag) ++ ")";
+    return "Zig " ++ builtin.zig_version_string ++ " (" ++ @tagName(builtin.mode) ++ ", " ++ @tagName(builtin.cpu.arch) ++ "-" ++ @tagName(builtin.os.tag) ++ ", cpu " ++ builtin.cpu.model.name ++ ")";
 }

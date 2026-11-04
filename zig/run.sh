@@ -5,7 +5,8 @@
 #
 # Zig is not a system package here: the pinned release tarball from ziglang.org (checked
 # against its published SHA-256) is unpacked into the git-ignored .tools/zig/ when missing.
-# `zig build -Doptimize=ReleaseFast` builds three binaries into zig/zig-out/bin/:
+# `zig build -Doptimize=ReleaseFast -Dcpu=baseline` (generic x86-64, as Go's GOAMD64=v1 and
+# the Rust harness; apps ship generic builds) builds three binaries into zig/zig-out/bin/:
 #   libbench            the driver (no Nostr library): parses flags, re-executes per client
 #   libbench-zignostr   zig-nostr/nostr clients (libsecp256k1 compiled from source)
 #   libbench-libnostrz  privkeyio/libnostr-z clients (noscrypt + libsecp256k1, OpenSSL)
@@ -94,7 +95,7 @@ for p in "${packages[@]}"; do
     prefetch $p
 done
 
-(cd "$here" && "$zig" build -Doptimize=ReleaseFast) >&2
+(cd "$here" && "$zig" build -Doptimize=ReleaseFast -Dcpu=baseline) >&2
 
 cd "$repo"  # the default --corpus/--out paths are relative to the repo root
 exec "$here/zig-out/bin/libbench" "$@"

@@ -92,10 +92,19 @@ paths) is not a patch; name it in `notes`.
 skips an older replaceable version, a `created_at` filter, a dedup rule) counts as not
 delivered: the row is wrong for that workload, and its `notes` say why.
 
-**Threads.** A library may verify on as many threads as it uses by default (that is its
-design), but the harness never adds threads. The ranking is by wall time, `cpu_ms` sits
-next to it, and the report also ranks by CPU time per event, so a library that is fast
-only because it uses every core is visible as such.
+**Threads.** A library may verify on as many threads as its default configuration uses
+(that is its design), and a documented option that verifies on more threads (a parallel
+verifier accessory) is a speed option like any other: a ranked entry of its own, next to
+the default row. The harness never adds threads. Clients run one at a time, so no two
+libraries share the machine. The ranking is by wall time on the machine's cores; the
+report also ranks by CPU time per event (all threads summed: the work the job costs) and
+shows the cores used (CPU / wall), so a library that is fast only because it uses every
+core is visible as such.
+
+**Build flags.** Compiled harnesses build for a generic CPU of the architecture, as apps
+ship: Go `GOAMD64=v1`, Rust's default `x86-64` target (no `-C target-cpu=native`), Zig
+`-Dcpu=baseline`. JIT runtimes (JVM, V8, .NET) compile for the machine they run on; that
+is how they ship.
 
 **Same conditions.** One relay, one machine, the same workload bytes, warm-up runs, one
 client at a time in a fresh process, runtime flags as a typical app ships them (recorded

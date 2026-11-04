@@ -30,7 +30,7 @@ zig/run.sh --list
   `build.zig` puts the system `.so` files into its static archive. It is harmless, the build
   exits 0 and links the static `libsecp256k1.a`.
 
-`zig build -Doptimize=ReleaseFast` makes three binaries in `zig/zig-out/bin/`:
+`zig build -Doptimize=ReleaseFast -Dcpu=baseline` (generic x86-64, like Go's `GOAMD64=v1`) makes three binaries in `zig/zig-out/bin/`:
 
 | binary | what |
 |---|---|

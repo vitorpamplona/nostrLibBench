@@ -47,9 +47,10 @@ val CLIENTS: List<ClientSpec> =
             verify = "explicit",
             notes =
                 "As quartz-nostrclient, but the listener submits each event to ParallelEventVerifier (default batch 256, " +
-                    "parallelism 8), which fans Event.verify() out over Dispatchers.Default and delivers in order. A " +
-                    "variant because it adds verification threads that the app has to opt into (Amethyst verifies inline).",
-            variant = true,
+                    "parallelism 8), which fans Event.verify() out over Dispatchers.Default and delivers in order. Quartz's " +
+                    "documented speed option (an opt-in accessory; Amethyst still verifies inline on the per-relay " +
+                    "coroutine, quartz-nostrclient), so it is a ranked entry of its own, like other libraries' speed " +
+                    "options; it verifies on several cores, which the CPU columns show.",
             create = { QuartzClient(parallel = true) },
         ),
         ClientSpec(

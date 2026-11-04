@@ -69,7 +69,7 @@ The harness follows HARNESS.md "A run"; the JVM specifics:
 | client | library | API | verify | variant |
 |---|---|---|---|---|
 | `quartz-nostrclient` | Quartz 2.13.0 | `NostrClient` + `subscribe(subId, {relay: [filter]}, listener)` | explicit | |
-| `quartz-parallelverifier` | Quartz | same + Quartz's `ParallelEventVerifier` | explicit | yes |
+| `quartz-parallelverifier` | Quartz | same + Quartz's `ParallelEventVerifier` | explicit | |
 | `quartz-standalone` | Quartz | `StandaloneRelayClient.sendRequest` | explicit | yes |
 | `nostr-sdk-subscribe` | rust-nostr nostr-sdk 0.45 (UniFFI JVM bindings) | `Client.subscribe` + `notifications()` | library | |
 | `nostr-sdk-stream` | same | `Client.streamEvents` | library | yes |
@@ -101,10 +101,12 @@ The harness follows HARNESS.md "A run"; the JVM specifics:
   Amethyst dedups in `LocalCache`, which hides it, but it doubles the download. The
   harness waits 1 s after the connection opens before subscribing (setup, untimed; an
   app's relays are connected long before a feed opens), and the duplicates stopped.
-- `quartz-parallelverifier` (variant): the listener submits each event to Quartz's own
-  `ParallelEventVerifier` accessory (batches of up to 256, `Event.verify()` fanned out on
-  `Dispatchers.Default`, delivered in order). It is opt-in and adds verify threads, so it
-  is a variant (verification threads the app opts into); Amethyst still verifies inline today.
+- `quartz-parallelverifier` (speed option, ranked): the listener submits each event to
+  Quartz's own `ParallelEventVerifier` accessory (batches of up to 256, `Event.verify()`
+  fanned out on `Dispatchers.Default`, delivered in order). It is opt-in, like other
+  libraries' documented speed options (a libsecp256k1 build tag, a wasm verifier), so it is
+  a ranked entry of its own; it verifies on several cores, which the CPU columns show.
+  Amethyst still verifies inline on the per-relay coroutine today (`quartz-nostrclient`).
 - `quartz-standalone` (variant): `StandaloneRelayClient`, Quartz's single-relay client
   (`BasicRelayClient` + REQ replay), events through `RelayConnectionListener.onIncomingMessage`.
 

@@ -14,8 +14,8 @@ rust/run.sh --list                                 # client ids
 `run.sh` builds from the pinned `Cargo.lock` (`cargo build --release --locked`, twice: the
 main binary `libbench-rust` and `libbench-rust-nostro2-secp256k1` from `nostro2-secp/`, a
 workspace member that links nostro2 with its `secp256k1` feature, which cannot share a build
-with the default `k256`; separate invocations keep cargo from unifying the features) with
-`RUSTFLAGS="-C target-cpu=native"` and the release profile (`lto = "fat"`, `codegen-units = 1`,
+with the default `k256`; separate invocations keep cargo from unifying the features) for the default generic x86-64 CPU target (no `-C target-cpu=native`: apps ship generic
+builds, and Go (`GOAMD64=v1`) and Zig (`-Dcpu=baseline`) build for the same baseline) and the release profile (`lto = "fat"`, `codegen-units = 1`,
 `opt-level = 3`), recorded in the output's `runtime`. RUSTFLAGS reach Rust code only: the C
 code some libraries bundle (libsecp256k1 in `secp256k1-sys` and in nostrdb, LMDB) is built by
 the `cc` crate with its own default flags. Versions and licenses come from `cargo metadata`,
