@@ -22,8 +22,8 @@ and compared, its signature verified, and handed to a callback that only counts 
 is stored: a store, cache, dedup tracker, NIP-11 fetch or batching delay that an option can
 turn off is off, and the work a library cannot turn off is named in its notes.
 
-Measured on 2026-11-04 on a shared 4-core Xeon cloud VM (2.1 GHz), one client at a time, the
-JVM rows on Quartz 2.15.0 right after the rest. Native code is built for a generic x86-64 CPU
+Measured on 2026-11-04 on a shared 4-core Xeon cloud VM (2.1 GHz), one client at a time; the
+two Quartz rows were re-run later that day on Quartz 2.15.1. Native code is built for a generic x86-64 CPU
 (Go `GOAMD64=v1`, Rust's default target, Zig `-Dcpu=baseline`); the JVM, V8, JavaScriptCore and
 .NET JITs compile for the machine they run on.
 
@@ -36,8 +36,8 @@ time over wall time. Quartz's rows are in bold. Both use Quartz's one-relay read
 
 | # | language | client | µs/event | CPU µs/event | cores used | accepted | memory growth MB | alloc B/event | forged checks |
 |---:|---|---|---:|---:|---:|---:|---:|---:|---|
-| **1** | **JVM (Kotlin/Java)** | **`quartz-parallelverifier`** | **20.6** | **57.9** | **2.81** | **29,614** | **276** | **3,953** | pass |
-| **–** | **JVM (Kotlin/Java)** | **`quartz-fetch`** (default) | **47.1** | **56.3** | **1.19** | **29,614** | **146** | **4,002** | pass |
+| **1** | **JVM (Kotlin/Java)** | **`quartz-parallelverifier`** | **18.9** | **54.4** | **2.88** | **29,614** | **227** | **3,594** | pass |
+| **–** | **JVM (Kotlin/Java)** | **`quartz-fetch`** (default) | **45.3** | **55.4** | **1.22** | **29,614** | **188** | **3,620** | pass |
 | 2 | Zig | `zig-nostr-relay` | 47.5 | 46.1 | 0.97 | 29,614 | 1 | 1,673 | pass |
 | 3 | Go | `fiatjaf-nostr-relay-libsecp256k1` | 51.7 | 87.8 | 1.70 | 29,613 | 6 | 4,036 | pass |
 | 4 | Rust | `nostr-sdk-stream` | 53.0 | 56.2 | 1.06 | 29,548 | 65 | 8,722 | pass |

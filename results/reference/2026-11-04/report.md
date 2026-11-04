@@ -31,7 +31,7 @@ One row per library and runtime: its fastest correct row. Time is one subscripti
 
 | # | language | client | version | verify | crypto | websocket | events/s | µs/event | median ms | first run ms | CPU ms | CPU µs/event | cores used | accepted | peak RSS MB | base RSS MB | RSS growth MB | alloc B/event | ambiguous | expired | forged checks |
 |---:|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|
-| 1 | JVM (Kotlin/Java) | `quartz-parallelverifier` | 2.15.0 | explicit | libsecp256k1 (C, JNI via ACINQ secp256k1-kmp-jni-jvm 0.24.0) | OkHttp 5.5.1 | 48,522 | 20.6 | 642 | 1,352 | 1,805 | 57.9 | 2.81 | 29,614 | 385 | 108 | 276 | 3,953 | accepted | delivered | pass |
+| 1 | JVM (Kotlin/Java) | `quartz-parallelverifier` | 2.15.1 | explicit | libsecp256k1 (C, JNI via ACINQ secp256k1-kmp-jni-jvm 0.24.0) | OkHttp 5.5.1 | 52,986 | 18.9 | 588 | 1,254 | 1,695 | 54.4 | 2.88 | 29,614 | 336 | 109 | 227 | 3,594 | accepted | delivered | pass |
 | 2 | Zig | `zig-nostr-relay` | 0.16.0 | explicit | libsecp256k1 0.7.1 (C, bitcoin-core commit 1a53f496, compiled from source by the package) | zig-nostr's own RFC 6455 client (relay.Connection over std.Io.net TCP; std.crypto.tls for wss) | 21,043 | 47.5 | 1,481 | 1,478 | 1,436 | 46.1 | 0.97 | 29,614 | 5 | 4 | 1 | 1,673 | accepted | delivered | pass |
 | 3 | Go | `fiatjaf-nostr-relay-libsecp256k1` | v0.0.0-20261101164043-96f89895a4b2 | library | libsecp256k1 (C, 0.5-era sources vendored in the module, compiled in with cgo; build tag libsecp256k1) | coder/websocket v1.8.13 | 19,332 | 51.7 | 1,612 | 1,718 | 2,735 | 87.8 | 1.70 | 29,613 | 26 | 20 | 6 | 4,036 | rejected | delivered | pass |
 | 4 | Rust | `nostr-sdk-stream` | 0.45.6 | library | libsecp256k1 0.4.1 (C, via secp256k1 0.30 / secp256k1-sys 0.10.1) | tokio-tungstenite 0.28 (via async-wsocket 0.17) | 18,854 | 53.0 | 1,653 | 1,666 | 1,750 | 56.2 | 1.06 | 29,548 | 79 | 14 | 65 | 8,722 | accepted | dropped | pass |
@@ -86,9 +86,9 @@ The same rows ranked by CPU time per event (all threads): the cost of the job re
 | # | language | client | CPU µs/event | wall µs/event | cores used | forged checks |
 |---:|---|---|---:|---:|---:|---|
 | 1 | Zig | `zig-nostr-relay` | 46.1 | 47.5 | 0.97 | pass |
-| 2 | Rust | `nostr-sdk-stream` | 56.2 | 53.0 | 1.06 | pass |
-| 3 | Rust | `nostr_rust-next_data` | 56.9 | 58.0 | 0.98 | pass |
-| 4 | JVM (Kotlin/Java) | `quartz-parallelverifier` | 57.9 | 20.6 | 2.81 | pass |
+| 2 | JVM (Kotlin/Java) | `quartz-parallelverifier` | 54.4 | 18.9 | 2.88 | pass |
+| 3 | Rust | `nostr-sdk-stream` | 56.2 | 53.0 | 1.06 | pass |
+| 4 | Rust | `nostr_rust-next_data` | 56.9 | 58.0 | 0.98 | pass |
 | 5 | Python | `monstr-subscribe` | 60.2 | 60.5 | 0.99 | pass |
 | 6 | Rust | `nostro2-relay-secp256k1` | 67.4 | 56.2 | 1.20 | pass |
 | 7 | C#/.NET | `nostr-sdk` | 69.2 | 59.0 | 1.17 | pass |
@@ -139,7 +139,7 @@ Variants (another API, option or crypto backend of a ranked library), rows whose
 
 | language | client | version | verify | crypto | events/s | µs/event | median ms | CPU ms | peak RSS MB | RSS growth MB | alloc B/event | notes |
 |---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|
-| JVM (Kotlin/Java) | `quartz-fetch` | 2.15.0 | explicit | libsecp256k1 (C, JNI via ACINQ secp256k1-kmp-jni-jvm 0.24.0) | 21,217 | 47.1 | 1,469 | 1,755 | 255 | 146 | 4,002 | Quartz's one-relay read on NostrClient, the pool Amethyst runs on, with one relay. fetch hands each event unverified to its callback on the relay's delivery coroutine, nothing collected, deduped or sorted, and returns at EOSE; the callback verifies with Quartz's Event.verify() (id via EventHasher.hashIdCheck, then Schnorr), as Amethyst verifies in LocalCache. Parser: Kite (KiteReader, Quartz's own). The fetch runs in a coroutine on the client's Dispatchers.IO scope. keepConnected() opens the socket in setup, then 1 s to settle: a REQ sent while the new connection replays its filters can go out twice. |
+| JVM (Kotlin/Java) | `quartz-fetch` | 2.15.1 | explicit | libsecp256k1 (C, JNI via ACINQ secp256k1-kmp-jni-jvm 0.24.0) | 22,083 | 45.3 | 1,411 | 1,725 | 297 | 188 | 3,620 | Quartz's one-relay read on NostrClient, the pool Amethyst runs on, with one relay. fetch hands each event unverified to its callback on the relay's delivery coroutine, nothing collected, deduped or sorted, and returns at EOSE; the callback verifies with Quartz's Event.verify() (id via EventHasher.hashIdCheck, then Schnorr), as Amethyst verifies in LocalCache. Parser: Kite (KiteReader, Quartz's own). The fetch runs in a coroutine on the client's Dispatchers.IO scope. keepConnected() opens the socket in setup, then 1 s to settle: a REQ sent while the new connection replays its filters can go out twice. |
 | Rust | `nostr-sdk-fetch` | 0.45.6 | library | libsecp256k1 0.4.1 (C, via secp256k1 0.30 / secp256k1-sys 0.10.1) | 20,723 | 48.3 | 1,504 | 1,586 | 174 | 160 | 8,996 | Fetch-all API: events are delivered to the app at EOSE, sorted and deduplicated. max_events raised from its default 10,000 (which fails the request) to the workload size. Drops expired events (NIP-40). |
 | Rust | `nostr-sdk-stream-default` | 0.45.6 | library | libsecp256k1 0.4.1 (C, via secp256k1 0.30 / secp256k1-sys 0.10.1) | 20,109 | 49.7 | 1,550 | 1,661 | 51 | 44 | 8,714 | Verifies id + signature of every event (always on; per-Client LRU cache of verified ids, new Client per run). Drops events whose NIP-40 expiration has passed, before verifying them (unconditional), so expired_accepted is 0. Default limits (5 MB message, 2000 tags) left on. |
 | Rust | `nostr-sdk-notifications` | 0.45.6 | library | libsecp256k1 0.4.1 (C, via secp256k1 0.30 / secp256k1-sys 0.10.1) | 15,791 | 63.3 | 1,973 | 2,196 | 85 | 52 | 8,599 | Same pipeline as nostr-sdk-stream, delivered through the client's broadcast notification channel; both broadcast channels raised from 2048 to 131072 (a reader that lags at the default silently loses events). Drops expired events (NIP-40). |
