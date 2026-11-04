@@ -24,10 +24,12 @@ pub struct Sink {
     full: usize,
     t0: Option<Instant>,
     cpu0: f64,
+    alloc0: u64,
     pub accepted: usize,
     pub xor: [u8; 32],
-    eose: Option<(Instant, f64)>,
-    last_after_eose: Option<(Instant, f64)>,
+    /// (time, cpu ms, allocated bytes) at EOSE and at the last event after it.
+    eose: Option<(Instant, f64, u64)>,
+    last_after_eose: Option<(Instant, f64, u64)>,
     last_event: Instant,
     /// The client calls [`Sink::batch_done`] after each batch of events, so the CPU snapshot
     /// for an event after EOSE is taken once per batch instead of once per event.
@@ -49,6 +51,7 @@ impl Sink {
             full,
             t0: None,
             cpu0: 0.0,
+            alloc0: 0,
             accepted: 0,
             xor: [0; 32],
             eose: None,
@@ -62,10 +65,13 @@ impl Sink {
         }
     }
 
-    /// `t0`: called right before the library's subscription call.
+    /// `t0`: called right before the library's subscription call. The first call of the
+    /// process also records `base_rss_mb` (before the clock starts).
     #[inline]
     pub fn start(&mut self) {
+        crate::harness::note_base_rss();
         self.cpu0 = crate::harness::cpu_ms();
+        self.alloc0 = crate::harness::allocated_bytes();
         self.t0 = Some(Instant::now());
     }
 
@@ -89,7 +95,7 @@ impl Sink {
             let now = Instant::now();
             self.last_event = now;
             let cpu = if self.batching { f64::NAN } else { crate::harness::cpu_ms() };
-            self.last_after_eose = Some((now, cpu));
+            self.last_after_eose = Some((now, cpu, crate::harness::allocated_bytes()));
         }
     }
 
@@ -107,10 +113,11 @@ impl Sink {
 
     /// End of a batch of events (see [`Sink::batching`]).
     pub fn batch_done(&mut self) {
-        if let Some((t, c)) = self.last_after_eose.as_mut() {
+        if let Some((t, c, a)) = self.last_after_eose.as_mut() {
             if c.is_nan() {
                 *c = crate::harness::cpu_ms();
                 *t = Instant::now();
+                *a = crate::harness::allocated_bytes();
             }
         }
     }
@@ -127,7 +134,8 @@ impl Sink {
         if self.eose.is_none() {
             let now = Instant::now();
             self.last_event = now;
-            self.eose = Some((now, crate::harness::cpu_ms()));
+            let cpu = crate::harness::cpu_ms();
+            self.eose = Some((now, cpu, crate::harness::allocated_bytes()));
         }
     }
 
@@ -150,15 +158,15 @@ impl Sink {
         IDLE_AFTER_EOSE.saturating_sub(self.last_event.elapsed())
     }
 
-    /// (ms, cpu_ms) of the run: `t_end = max(EOSE, last accepted event)`.
-    pub fn finish(&self) -> Option<(f64, f64)> {
+    /// (ms, cpu_ms, alloc_bytes) of the run: `t_end = max(EOSE, last accepted event)`.
+    pub fn finish(&self) -> Option<(f64, f64, u64)> {
         let t0 = self.t0?;
-        let (te, ce) = self.eose?;
-        let (t_end, cpu_end) = match self.last_after_eose {
-            Some((t, c)) if t > te => (t, c),
-            _ => (te, ce),
+        let (te, ce, ae) = self.eose?;
+        let (t_end, cpu_end, alloc_end) = match self.last_after_eose {
+            Some((t, c, a)) if t > te => (t, c, a),
+            _ => (te, ce, ae),
         };
-        Some(((t_end - t0).as_secs_f64() * 1e3, cpu_end - self.cpu0))
+        Some(((t_end - t0).as_secs_f64() * 1e3, cpu_end - self.cpu0, alloc_end.wrapping_sub(self.alloc0)))
     }
 
     /// The accepted-set check of HARNESS.md "Correctness": the (count, XOR) must equal one of

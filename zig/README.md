@@ -63,7 +63,14 @@ One run, per HARNESS.md:
 3. **Teardown (untimed):** `CLOSE`, close the connection, free the client.
 
 CPU is `getrusage(RUSAGE_SELF)` user + system over the timed part (all threads); peak RSS is
-`ru_maxrss` at the end of the child process. Per event the harness only counts, XORs the id
+`ru_maxrss` at the end of the child process. `base_rss_mb` is `VmRSS` (`/proc/self/status`)
+read once, at the first run's `begin` (setup done, right before the first REQ). `alloc_bytes`
+comes from a counting wrapper (`CountingAllocator` in `src/common.zig`, an atomic add per
+`alloc` and per growing `resize`/`remap`) around the allocator the harness hands each library,
+read just before `t0` and at `t_end`; the row reports the median run's value (odd run count: the
+run whose time is the median; even: the mean of the two middle alloc values). C code
+(noscrypt, libsecp256k1, OpenSSL) and anything a library allocates outside that allocator (a
+direct `std.heap.page_allocator`, the `std.Io` runtime's own allocations) are not counted. Per event the harness only counts, XORs the id
 and reads the clock; after the run the (count, XOR) is matched against the correct outcomes
 (expired all in or all out, each ambiguous event either way), which gives the ambiguous and
 expired counts. When it matches none, one more run (untimed, not reported) records the ids to

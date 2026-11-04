@@ -54,6 +54,25 @@ fn median(v: &[f64]) -> f64 {
     if n % 2 == 1 { s[n / 2] } else { (s[n / 2 - 1] + s[n / 2]) / 2.0 }
 }
 
+/// `alloc_bytes` of the median run: with an odd number of runs, the run whose time is the
+/// median; with an even number (where `median_ms` averages the two middle runs), the median
+/// of the alloc values (mean of the two middle ones).
+fn median_alloc(runs: &[f64], allocs: &[u64]) -> Option<u64> {
+    let n = runs.len();
+    if n == 0 || allocs.len() != n {
+        return None;
+    }
+    if n % 2 == 1 {
+        let mut idx: Vec<usize> = (0..n).collect();
+        idx.sort_by(|&a, &b| runs[a].partial_cmp(&runs[b]).unwrap());
+        Some(allocs[idx[n / 2]])
+    } else {
+        let mut s = allocs.to_vec();
+        s.sort_unstable();
+        Some((s[n / 2 - 1] + s[n / 2]) / 2)
+    }
+}
+
 fn p90(v: &[f64]) -> f64 {
     let mut s = v.to_vec();
     s.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -202,6 +221,10 @@ fn main() {
                 r["run_ms"].as_array().map(|v| v.iter().filter_map(Value::as_f64).collect()).unwrap_or_default();
             let cpus: Vec<f64> =
                 r["run_cpu_ms"].as_array().map(|v| v.iter().filter_map(Value::as_f64).collect()).unwrap_or_default();
+            let allocs: Vec<u64> = r["run_alloc_bytes"]
+                .as_array()
+                .map(|v| v.iter().filter_map(Value::as_u64).collect())
+                .unwrap_or_default();
             let error = r["error"].as_str().map(String::from);
             let timed = error.is_none() && !runs.is_empty();
             let med = timed.then(|| median(&runs));
@@ -237,6 +260,8 @@ fn main() {
                 "us_per_event": med.map(|m| (m * 1000.0 / exp.events as f64 * 100.0).round() / 100.0),
                 "cpu_ms": (timed && !cpus.is_empty()).then(|| round1(median(&cpus))),
                 "peak_rss_mb": r.get("peak_rss_mb").cloned().unwrap_or(Value::Null),
+                "base_rss_mb": r.get("base_rss_mb").cloned().unwrap_or(Value::Null),
+                "alloc_bytes": if timed { median_alloc(&runs, &allocs) } else { None },
             });
             if let Some(e) = row["error"].as_str() {
                 eprintln!("   {} on {wname}: ERROR {e}", m.id);

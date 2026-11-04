@@ -97,7 +97,13 @@ HARNESS.md "A run", with these Swift specifics:
   child then stops, since a wedged library may never return).
 - **CPU:** `getrusage(RUSAGE_SELF)` user + system (all threads), from `t0` to the EOSE, or
   to the last event when events arrive after it. **Peak RSS:** `ru_maxrss` at the end of
-  the workload (bytes on macOS, KiB on Linux; reported in MiB).
+  the workload (bytes on macOS, KiB on Linux; reported in MiB). **Base RSS:** the current
+  resident set right after the setup of each workload's first run, before `t0` (`VmRSS` from
+  `/proc/self/status` on Linux, `task_info(MACH_TASK_BASIC_INFO).resident_size` on macOS; no
+  GC to run first, Swift is ARC). One child runs every workload of a client, so a later
+  workload's base includes what the earlier ones left. **`alloc_bytes` is always null:**
+  neither the Swift runtime nor the system allocators expose a cumulative allocated-bytes
+  counter (malloc zone statistics and `mallinfo` report current use only).
 - **Setup/teardown** (untimed): a new client object per run, connected before `t0`;
   teardown closes the subscription and the connection, bounded to 5 s.
 - **Accepted set:** each delivered event's id is read from the library's event object
@@ -276,7 +282,8 @@ Validated here (Swift 6.4.2, Ubuntu 24.04 x86_64):
    swift-nostr-client, NostrEssentials) and of the rust-nostr xcframework: connection,
    EOSE delivery, teardown, and that every correct client reports `accepted_ok: true` on
    `smoke` (expected: all seven rows).
-3. The macOS paths of BenchCore: `ru_maxrss` in bytes, `sysctl` CPU name, `os` string.
+3. The macOS paths of BenchCore: `ru_maxrss` in bytes, `task_info` resident size for
+   `base_rss_mb`, `sysctl` CPU name, `os` string.
 4. nostr-sdk-ios's per-frame `logger.info("\(event.description)")` (the whole frame): confirm
    whether `os.Logger` formats it on a default Mac. Run `nostr-sdk-ios-relay` on `smoke`
    with no `log stream` open (streaming turns collection on), then

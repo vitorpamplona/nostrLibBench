@@ -120,4 +120,7 @@ public struct RunResult {
     public var ambiguous = 0
     public var ambiguousXor = ID32()
     public var expired = 0
+    /// `base_rss_mb`: the resident set read after this run's setup, before t0 (first run of a
+    /// workload only).
+    public var baseRssMb: Double?
 }

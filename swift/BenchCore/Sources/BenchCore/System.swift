@@ -40,6 +40,32 @@ public func peakRssMb() -> Double {
     #endif
 }
 
+/// Current resident set of this process in MB (MiB), for `base_rss_mb`: VmRSS from
+/// /proc/self/status on Linux, the Mach task's resident_size (task_info
+/// MACH_TASK_BASIC_INFO) on macOS. nil when it cannot be read.
+public func currentRssMb() -> Double? {
+    #if os(Linux)
+    guard let text = try? String(contentsOfFile: "/proc/self/status", encoding: .utf8),
+          let line = text.split(separator: "\n").first(where: { $0.hasPrefix("VmRSS:") }),
+          let kb = line.split(whereSeparator: { $0 == " " || $0 == "\t" }).dropFirst().first.flatMap({ Double($0) })
+    else { return nil }
+    return kb / 1024
+    #elseif canImport(Darwin)
+    var info = mach_task_basic_info()
+    // MACH_TASK_BASIC_INFO_COUNT (a C macro Swift does not import): the struct's size in natural_t words.
+    var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size / MemoryLayout<natural_t>.size)
+    let kr = withUnsafeMutablePointer(to: &info) { ptr in
+        ptr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { raw in
+            task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), raw, &count)
+        }
+    }
+    guard kr == KERN_SUCCESS else { return nil }
+    return Double(info.resident_size) / (1024 * 1024)
+    #else
+    return nil
+    #endif
+}
+
 private func sysctlString(_ name: String) -> String? {
     #if canImport(Darwin)
     var size = 0

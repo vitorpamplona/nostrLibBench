@@ -48,6 +48,14 @@ read at build time (`build.rs`).
   EOSE, or at the last event after it (for nostrdb, whose notes arrive in batches, once per
   batch). `cpu_ms` is the median over measured runs. `peak_rss_mb` is `ru_maxrss` at the end
   of the child.
+- **Memory.** `base_rss_mb` is `VmRSS` (`/proc/self/status`) read once per child, at the first
+  `sink.start()` (first run, setup done, right before the subscription call; untimed).
+  `alloc_bytes` comes from a counting `#[global_allocator]` around `System` (`src/harness.rs`:
+  an atomic add of the requested size per `alloc`, and of the growth per `realloc`), read at
+  `t0` and `t_end` like the CPU time; the row reports the median run's value (odd run count:
+  the run whose time is the median; even: the mean of the two middle alloc values). C code's
+  `malloc` is not counted: libsecp256k1 does not allocate, but nostrdb (and LMDB, which also
+  writes to a memory map) does, so the nostrdb row counts only its Rust side.
 - **Correctness.** `accepted_ok` per HARNESS.md: the run's (count, XOR) must equal one of the
   correct outcomes (expired events, NIP-40 `expired_ids`, all delivered or all dropped; the
   ambiguous U+0000 event either way); the outcome it matches gives `ambiguous_accepted` and

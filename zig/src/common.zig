@@ -259,6 +259,8 @@ pub const Row = struct {
     us_per_event: ?f64 = null,
     cpu_ms: ?f64 = null,
     peak_rss_mb: ?f64 = null,
+    base_rss_mb: ?f64 = null,
+    alloc_bytes: ?u64 = null,
 
     pub fn init(meta: *const ClientMeta, w: Workload) Row {
         return .{
@@ -301,6 +303,78 @@ pub fn peakRssMb() f64 {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Memory: base_rss_mb and alloc_bytes
+// ---------------------------------------------------------------------------------------------
+
+/// Bytes allocated so far through `CountingAllocator` (all threads): every successful `alloc`'s
+/// length, plus the growth of every successful `resize` / `remap`.
+var allocated = std.atomic.Value(u64).init(0);
+
+pub inline fn allocatedBytes() u64 {
+    return allocated.load(.monotonic);
+}
+
+/// Wraps the allocator the harness hands every library (`RunCtx.gpa`) and counts what it is
+/// asked for. Allocations a library makes elsewhere (C code's malloc, a direct
+/// std.heap.page_allocator) are not counted.
+pub const CountingAllocator = struct {
+    child: Allocator,
+
+    pub fn allocator(self: *CountingAllocator) Allocator {
+        return .{ .ptr = self, .vtable = &.{ .alloc = alloc, .resize = resize, .remap = remap, .free = free } };
+    }
+
+    fn alloc(ctx: *anyopaque, len: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
+        const self: *CountingAllocator = @ptrCast(@alignCast(ctx));
+        const p = self.child.rawAlloc(len, alignment, ret_addr) orelse return null;
+        _ = allocated.fetchAdd(len, .monotonic);
+        return p;
+    }
+
+    fn resize(ctx: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, ret_addr: usize) bool {
+        const self: *CountingAllocator = @ptrCast(@alignCast(ctx));
+        if (!self.child.rawResize(memory, alignment, new_len, ret_addr)) return false;
+        if (new_len > memory.len) _ = allocated.fetchAdd(new_len - memory.len, .monotonic);
+        return true;
+    }
+
+    fn remap(ctx: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
+        const self: *CountingAllocator = @ptrCast(@alignCast(ctx));
+        const p = self.child.rawRemap(memory, alignment, new_len, ret_addr) orelse return null;
+        if (new_len > memory.len) _ = allocated.fetchAdd(new_len - memory.len, .monotonic);
+        return p;
+    }
+
+    fn free(ctx: *anyopaque, memory: []u8, alignment: std.mem.Alignment, ret_addr: usize) void {
+        const self: *CountingAllocator = @ptrCast(@alignCast(ctx));
+        self.child.rawFree(memory, alignment, ret_addr);
+    }
+};
+
+/// `base_rss_mb`: VmRSS (KiB) at the first `Recorder.begin` of the process, i.e. at the end of
+/// the first setup, right before the first subscription call.
+var base_rss_kb: ?u64 = null;
+var base_rss_taken = false;
+
+fn currentRssKb(io: Io) ?u64 {
+    // procfs reports size 0: read it as a stream.
+    const file = Io.Dir.cwd().openFile(io, "/proc/self/status", .{}) catch return null;
+    defer file.close(io);
+    var rbuf: [256]u8 = undefined;
+    var reader = file.readerStreaming(io, &rbuf);
+    var text: [8192]u8 = undefined;
+    const n = reader.interface.readSliceShort(&text) catch return null;
+    var lines = std.mem.splitScalar(u8, text[0..n], '\n');
+    while (lines.next()) |line| {
+        if (std.mem.startsWith(u8, line, "VmRSS:")) {
+            var it = std.mem.tokenizeAny(u8, line["VmRSS:".len..], " \t");
+            return std.fmt.parseInt(u64, it.next() orelse return null, 10) catch null;
+        }
+    }
+    return null;
+}
+
+// ---------------------------------------------------------------------------------------------
 // One run
 // ---------------------------------------------------------------------------------------------
 
@@ -314,6 +388,8 @@ pub const Recorder = struct {
     deadline: i96 = 0,
     cpu0: i64 = 0,
     cpu_end: i64 = 0,
+    alloc0: u64 = 0,
+    alloc_end: u64 = 0,
     last_ns: i96 = 0,
     eose_ns: ?i96 = null,
     count: u64 = 0,
@@ -339,6 +415,11 @@ pub const Recorder = struct {
     }
 
     pub fn begin(r: *Recorder) void {
+        if (!base_rss_taken) {
+            base_rss_taken = true;
+            base_rss_kb = currentRssKb(r.io);
+        }
+        r.alloc0 = allocatedBytes();
         r.cpu0 = cpuUs();
         r.t0 = nowNs(r.io);
         r.deadline = r.t0 + r.timeout_ns;
@@ -355,11 +436,13 @@ pub const Recorder = struct {
     pub fn eose(r: *Recorder) void {
         r.eose_ns = nowNs(r.io);
         r.cpu_end = cpuUs();
+        r.alloc_end = allocatedBytes();
     }
 
     /// For clients that keep delivering after EOSE: call after the last event.
     pub fn end(r: *Recorder) void {
         r.cpu_end = cpuUs();
+        r.alloc_end = allocatedBytes();
     }
 
     /// Nanoseconds left before the run's --timeout-ms deadline (<= 0: timed out).
@@ -375,6 +458,10 @@ pub const Recorder = struct {
     pub fn elapsedMs(r: *const Recorder) f64 {
         const t_end = @max(r.eose_ns orelse r.last_ns, r.last_ns);
         return @as(f64, @floatFromInt(t_end - r.t0)) / 1e6;
+    }
+
+    pub fn allocBytes(r: *const Recorder) u64 {
+        return r.alloc_end -% r.alloc0;
     }
 
     pub fn cpuMs(r: *const Recorder) f64 {
@@ -473,6 +560,29 @@ fn median(a: Allocator, xs: []const f64) !f64 {
     return if (n % 2 == 1) s[n / 2] else (s[n / 2 - 1] + s[n / 2]) / 2.0;
 }
 
+/// `alloc_bytes` of the median run: with an odd number of runs, the run whose time is the
+/// median; with an even number (where `median_ms` averages the two middle runs), the median of
+/// the alloc values (mean of the two middle ones).
+fn medianAlloc(a: Allocator, times: []const f64, allocs: []const u64) !?u64 {
+    const n = times.len;
+    if (n == 0 or allocs.len != n) return null;
+    if (n % 2 == 1) {
+        const idx = try a.alloc(usize, n);
+        for (idx, 0..) |*x, i| x.* = i;
+        const Ctx = struct {
+            t: []const f64,
+            fn lt(c: @This(), x: usize, y: usize) bool {
+                return c.t[x] < c.t[y];
+            }
+        };
+        std.mem.sort(usize, idx, Ctx{ .t = times }, Ctx.lt);
+        return allocs[idx[n / 2]];
+    }
+    const s = try a.dupe(u64, allocs);
+    std.mem.sort(u64, s, {}, std.sort.asc(u64));
+    return (s[n / 2 - 1] + s[n / 2]) / 2;
+}
+
 /// Child mode: runs the warm-up and measured runs of one client on one workload and returns
 /// its row (allocated in `arena`).
 pub fn measure(arena: Allocator, gpa: Allocator, io: Io, s: Settings, meta: *const ClientMeta, w: Workload, run: RunFn) !Row {
@@ -485,6 +595,7 @@ pub fn measure(arena: Allocator, gpa: Allocator, io: Io, s: Settings, meta: *con
     var first: ?SetResult = null;
     var times: std.ArrayList(f64) = .empty;
     var cpus: std.ArrayList(f64) = .empty;
+    var allocs: std.ArrayList(u64) = .empty;
     var measured_ns: f64 = 0;
     var total: u32 = 0;
     var failure: ?[]const u8 = null;
@@ -526,6 +637,7 @@ pub fn measure(arena: Allocator, gpa: Allocator, io: Io, s: Settings, meta: *con
         if (!warm) {
             try times.append(arena, ms);
             try cpus.append(arena, rec.cpuMs());
+            try allocs.append(arena, rec.allocBytes());
             measured_ns += ms * 1e6;
         }
         std.debug.print("  {s} {s} run {d}{s}: {d:.1} ms, {d} accepted\n", .{ meta.id, w.name, total + 1, if (warm) " (warm-up)" else "", ms, res.count });
@@ -556,6 +668,7 @@ pub fn measure(arena: Allocator, gpa: Allocator, io: Io, s: Settings, meta: *con
 
     row.runs = @intCast(times.items.len);
     row.peak_rss_mb = round1(peakRssMb());
+    if (base_rss_kb) |kb| row.base_rss_mb = round1(@as(f64, @floatFromInt(kb)) / 1024.0);
     if (failure) |msg| {
         row.@"error" = msg;
         row.errors += 1;
@@ -577,6 +690,7 @@ pub fn measure(arena: Allocator, gpa: Allocator, io: Io, s: Settings, meta: *con
     row.events_per_s = round1(ev / (med / 1000.0));
     row.us_per_event = @round(med * 1000.0 / ev * 1000.0) / 1000.0;
     row.cpu_ms = round1(try median(arena, cpus.items));
+    row.alloc_bytes = try medianAlloc(arena, times.items, allocs.items);
     return row;
 }
 
@@ -593,7 +707,9 @@ pub fn childMain(init: std.process.Init, run: RunFn) !void {
     const meta = findClient(id) orelse return error.UnknownClient;
     const manifest = try loadManifest(arena, io, s.corpus);
     const w = manifest.find(s.workload orelse "all") orelse return error.UnknownWorkload;
-    const row = try measure(arena, init.gpa, io, s, meta, w, run);
+    // Every library gets the process allocator through this wrapper, which counts alloc_bytes.
+    var counting: CountingAllocator = .{ .child = init.gpa };
+    const row = try measure(arena, counting.allocator(), io, s, meta, w, run);
     const json = try std.json.Stringify.valueAlloc(arena, row, .{});
     try Io.File.stdout().writeStreamingAll(io, json);
     try Io.File.stdout().writeStreamingAll(io, "\n");

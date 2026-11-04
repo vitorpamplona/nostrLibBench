@@ -122,6 +122,72 @@ pub fn cpu_ms() -> f64 {
     tv(ru.ru_utime) + tv(ru.ru_stime)
 }
 
+/// Counts the heap bytes the process requests (all threads) for `alloc_bytes`: every
+/// allocation's size, and a `realloc`'s growth. Memory C code gets from `malloc` directly
+/// (nostrdb / LMDB) does not go through it.
+pub struct CountingAlloc;
+
+static ALLOCATED: AtomicU64 = AtomicU64::new(0);
+
+unsafe impl std::alloc::GlobalAlloc for CountingAlloc {
+    #[inline]
+    unsafe fn alloc(&self, l: std::alloc::Layout) -> *mut u8 {
+        ALLOCATED.fetch_add(l.size() as u64, Ordering::Relaxed);
+        unsafe { std::alloc::System.alloc(l) }
+    }
+    #[inline]
+    unsafe fn alloc_zeroed(&self, l: std::alloc::Layout) -> *mut u8 {
+        ALLOCATED.fetch_add(l.size() as u64, Ordering::Relaxed);
+        unsafe { std::alloc::System.alloc_zeroed(l) }
+    }
+    #[inline]
+    unsafe fn dealloc(&self, p: *mut u8, l: std::alloc::Layout) {
+        unsafe { std::alloc::System.dealloc(p, l) }
+    }
+    #[inline]
+    unsafe fn realloc(&self, p: *mut u8, l: std::alloc::Layout, new_size: usize) -> *mut u8 {
+        if new_size > l.size() {
+            ALLOCATED.fetch_add((new_size - l.size()) as u64, Ordering::Relaxed);
+        }
+        unsafe { std::alloc::System.realloc(p, l, new_size) }
+    }
+}
+
+#[global_allocator]
+static GLOBAL: CountingAlloc = CountingAlloc;
+
+/// Cumulative heap bytes requested so far (see [`CountingAlloc`]).
+#[inline]
+pub fn allocated_bytes() -> u64 {
+    ALLOCATED.load(Ordering::Relaxed)
+}
+
+/// `base_rss_mb`: VmRSS (kB) read once, at the first `Sink::start` of the process.
+static BASE_RSS_KB: AtomicU64 = AtomicU64::new(u64::MAX);
+
+/// Records the current resident set the first time it is called (end of the first setup,
+/// right before the first subscription call); later calls do nothing.
+#[inline]
+pub fn note_base_rss() {
+    if BASE_RSS_KB.load(Ordering::Relaxed) == u64::MAX {
+        let kb = std::fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|s| {
+                s.lines()
+                    .find(|l| l.starts_with("VmRSS:"))
+                    .and_then(|l| l.split_whitespace().nth(1))
+                    .and_then(|v| v.parse::<u64>().ok())
+            })
+            .unwrap_or(u64::MAX - 1);
+        BASE_RSS_KB.store(kb, Ordering::Relaxed);
+    }
+}
+
+fn base_rss_mb() -> Option<f64> {
+    let kb = BASE_RSS_KB.load(Ordering::Relaxed);
+    (kb < u64::MAX - 1).then(|| round1(kb as f64 / 1024.0))
+}
+
 fn peak_rss_mb() -> f64 {
     let mut ru: libc::rusage = unsafe { std::mem::zeroed() };
     unsafe { libc::getrusage(libc::RUSAGE_SELF, &mut ru) };
@@ -213,6 +279,7 @@ pub fn run_child(a: &Args, id: &str, make: Make) {
     let mut first_run_ms: Option<f64> = None;
     let mut run_ms = Vec::new();
     let mut run_cpu = Vec::new();
+    let mut run_alloc: Vec<u64> = Vec::new();
     let mut result = json!({});
     let mut error: Option<String> = None;
     let mut errors = 0usize;
@@ -237,7 +304,7 @@ pub fn run_child(a: &Args, id: &str, make: Make) {
             errors += 1;
             break;
         }
-        let Some((ms, cpu)) = sink.finish() else {
+        let Some((ms, cpu, alloc)) = sink.finish() else {
             error = Some(format!("run {}: no EOSE", i + 1));
             errors += 1;
             break;
@@ -269,6 +336,7 @@ pub fn run_child(a: &Args, id: &str, make: Make) {
         if !warm {
             run_ms.push(ms);
             run_cpu.push(cpu);
+            run_alloc.push(alloc);
         }
         eprintln!(
             "  {id:<28} {wname:<9} {} {:>3}: {ms:>9.1} ms  cpu {cpu:>9.1} ms  accepted {}",
@@ -301,6 +369,8 @@ pub fn run_child(a: &Args, id: &str, make: Make) {
     m.insert("first_run_ms".into(), json!(first_run_ms));
     m.insert("run_ms".into(), json!(run_ms));
     m.insert("run_cpu_ms".into(), json!(run_cpu));
+    m.insert("run_alloc_bytes".into(), json!(run_alloc));
     m.insert("peak_rss_mb".into(), json!(round1(peak_rss_mb())));
+    m.insert("base_rss_mb".into(), json!(base_rss_mb()));
     emit(&o);
 }

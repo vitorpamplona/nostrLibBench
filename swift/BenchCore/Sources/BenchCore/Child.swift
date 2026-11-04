@@ -60,7 +60,7 @@ private struct RunError: Error, CustomStringConvertible {
 }
 
 /// One subscription, end to end (HARNESS.md "A run").
-private func oneRun(_ opener: Opener, url: String, w: Workload, expect: Expect, timeoutMs: Int) throws -> RunResult {
+private func oneRun(_ opener: Opener, url: String, w: Workload, expect: Expect, timeoutMs: Int, readBaseRss: Bool) throws -> RunResult {
     // 1. setup, untimed
     let session: Session
     do {
@@ -69,6 +69,8 @@ private func oneRun(_ opener: Opener, url: String, w: Workload, expect: Expect, 
         throw RunError(description: "setup: \(error)", isTimeout: false)
     }
     let sink = Sink(expect: expect)
+    // base_rss_mb: setup done, before the first REQ (untimed; Swift has no GC to run first).
+    let baseRss = readBaseRss ? currentRssMb() : nil
 
     // 2. timed
     let cpu0 = cpuNs()
@@ -107,6 +109,7 @@ private func oneRun(_ opener: Opener, url: String, w: Workload, expect: Expect, 
         r.ambiguous = s.ambiguous
         r.ambiguousXor = s.ambiguousXor
         r.expired = s.expired
+        r.baseRssMb = baseRss
         return (r, s.error)
     }
 
@@ -146,6 +149,7 @@ private struct Row {
     var usPerEvent: Double?
     var cpuMs: Double?
     var peakRss: Double?
+    var baseRss: Double?
 
     mutating func nullTimings() {
         firstRunMs = nil; medianMs = nil; minMs = nil; p90Ms = nil
@@ -164,7 +168,7 @@ func rowJSON(_ info: ClientInfo, _ w: Workload, version: String,
              acceptedOK: Bool = false, errors: Int = 0, error: String? = nil, warmupRuns: Int = 0, runs: Int = 0,
              firstRunMs: Double? = nil, medianMs: Double? = nil, minMs: Double? = nil, p90Ms: Double? = nil,
              runMs: [Double] = [], eventsPerS: Double? = nil, usPerEvent: Double? = nil, cpuMs: Double? = nil,
-             peakRssMb: Double? = nil) -> JSON {
+             peakRssMb: Double? = nil, baseRssMb: Double? = nil) -> JSON {
     .obj([
         ("client", .str(info.id)),
         ("library", .str(info.library)),
@@ -197,6 +201,10 @@ func rowJSON(_ info: ClientInfo, _ w: Workload, version: String,
         ("us_per_event", .opt(usPerEvent)),
         ("cpu_ms", .opt(cpuMs)),
         ("peak_rss_mb", .opt(peakRssMb)),
+        ("base_rss_mb", .opt(baseRssMb)),
+        // No cumulative allocated-bytes counter in the Swift runtime (ARC over malloc) or in
+        // the system allocators' public statistics (current use only): always null.
+        ("alloc_bytes", .null),
     ])
 }
 
@@ -207,7 +215,8 @@ private func runWorkload(_ info: ClientInfo, _ opener: Opener, _ o: Options, _ w
                 ambiguousAccepted: r.ambiguousAccepted, expiredAccepted: r.expiredAccepted,
                 acceptedOK: r.acceptedOK, errors: r.errors, error: r.error, warmupRuns: r.warmupRuns, runs: r.runs,
                 firstRunMs: r.firstRunMs, medianMs: r.medianMs, minMs: r.minMs, p90Ms: r.p90Ms, runMs: r.runMs,
-                eventsPerS: r.eventsPerS, usPerEvent: r.usPerEvent, cpuMs: r.cpuMs, peakRssMb: r.peakRss)
+                eventsPerS: r.eventsPerS, usPerEvent: r.usPerEvent, cpuMs: r.cpuMs, peakRssMb: r.peakRss,
+                baseRssMb: r.baseRss)
     }
     let expect: Expect
     do {
@@ -230,7 +239,7 @@ private func runWorkload(_ info: ClientInfo, _ opener: Opener, _ o: Options, _ w
         if !warm && measured.isEmpty { mStart = nowNs() }
         let res: RunResult
         do {
-            res = try oneRun(opener, url: url, w: w, expect: expect, timeoutMs: set.timeoutMs)
+            res = try oneRun(opener, url: url, w: w, expect: expect, timeoutMs: set.timeoutMs, readBaseRss: runs == 0)
         } catch {
             runs += 1
             r.errors += 1
@@ -240,6 +249,7 @@ private func runWorkload(_ info: ClientInfo, _ opener: Opener, _ o: Options, _ w
             return (json(), (error as? RunError)?.isTimeout ?? false)
         }
         runs += 1
+        if let b = res.baseRssMb { r.baseRss = round1(b) }
         log(String(format: "   %@ run %-2d %@ %9.1f ms  cpu %9.1f ms  accepted %d (ambiguous %d, expired %d)",
                    w.name.padding(toLength: 9, withPad: " ", startingAt: 0), runs, warm ? "warm" : "    ",
                    res.ms, res.cpuMs, res.accepted, res.ambiguous, res.expired))

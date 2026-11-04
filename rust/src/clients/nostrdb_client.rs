@@ -34,7 +34,9 @@ pub const META: Meta = Meta {
             transaction), which is why the row is not ranked. Each run writes to a fresh LMDB in a \
             temp dir (an existing note would skip verification). EOSE is read off the socket \
             before the ingesters finish, so the run ends at the last note delivered after it. The \
-            app's read path (subscription poll + read transaction + get_note_by_key) is timed.",
+            app's read path (subscription poll + read transaction + get_note_by_key) is timed. \
+            alloc_bytes counts only the Rust side (tokio-tungstenite, the app): nostrdb's C code \
+            mallocs outside the counting allocator and LMDB writes to a memory map.",
     variant: true,
     binary: None,
 };
