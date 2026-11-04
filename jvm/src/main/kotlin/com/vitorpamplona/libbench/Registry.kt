@@ -147,7 +147,11 @@ val CLIENTS: List<ClientSpec> =
                     "default 10 s announces EOSE on its own). The library logs every event at INFO (EventMessage." +
                     "convertValue: log.info(\"Converting map to GenericEvent: {}\", map)); it costs nothing here only " +
                     "because no SLF4J provider is on the classpath (slf4j-api's no-op logger), as in an app that " +
-                    "configures its logger above INFO.",
+                    "configures its logger above INFO. The subscription deduplicates by the id field before the " +
+                    "listener sees the event (RelaySubscription.deliverIfNotAlreadySeen -> DeliveredEventWindow." +
+                    "isFirstSighting) and nothing in the library verifies first, so a forged copy that arrives first " +
+                    "is rejected by the listener and the genuine event that follows is dropped as already seen: it " +
+                    "fails the forged-content and forged-sig checks (98 of 197 delivered).",
             variant = false,
             create = { NostrJavaClient { Child.timeoutMs } },
         ),

@@ -45,7 +45,8 @@ class NostrDartClient extends BenchClient {
       'that returns {supported_nips: [1, 11, 15, 20]}. Caveat: the ack wait has a hard-coded 1 min timeout that '
       'disconnects the relay, so a subscription whose EOSE takes longer than 1 min to process is cut off. '
       'Relay.connect() starts IOWebSocketChannel.connect without awaiting the handshake (the channel is private), '
-      'so setup waits 200 ms after pool.add (untimed), as for nostr_tools and nostr_client.';
+      'so setup waits 200 ms after pool.add (untimed), as for nostr_tools and nostr_client.'
+      ' It pins bip340 ^0.0.4 (as nostr_client and nostr_dart do), whose verify serializes the public key with bigToBytes (helpers.dart:12, no left padding): for a pubkey whose first byte is 0 the BIP-340 challenge hashes 31 bytes and the valid signature fails, so every event from such a key is dropped (83 in the full corpus; fixed in bip340 0.2.0, which the ^0.0.4 constraint excludes).';
 
   Nostr? _nostr;
   late String _url;

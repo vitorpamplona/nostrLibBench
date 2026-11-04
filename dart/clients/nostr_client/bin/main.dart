@@ -33,7 +33,8 @@ class NostrClientDart extends BenchClient {
       'half is harness code, because the library has no id function: the harness recomputes SHA-256 '
       '(package:crypto) of jsonEncode([0, pubkey, created_at, kind, tags, content]) (what the other Dart libraries '
       'do) and compares it with the id field, inside the run. connect() is lazy '
-      '(IOWebSocketChannel.connect without awaiting the handshake): setup waits 200 ms after it (untimed).';
+      '(IOWebSocketChannel.connect without awaiting the handshake): setup waits 200 ms after it (untimed).'
+      ' It pins bip340 ^0.0.4 (as nostr_client and nostr_dart do), whose verify serializes the public key with bigToBytes (helpers.dart:12, no left padding): for a pubkey whose first byte is 0 the BIP-340 challenge hashes 31 bytes and the valid signature fails, so every event from such a key is dropped (83 in the full corpus; fixed in bip340 0.2.0, which the ^0.0.4 constraint excludes).';
 
   Relay? _relay;
   StreamSubscription<Message>? _sub;

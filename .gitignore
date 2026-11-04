@@ -33,3 +33,4 @@ swift/**/.build/
 swift/**/.swiftpm/
 /results/full/
 /results/full-*/
+.relay-forged.log

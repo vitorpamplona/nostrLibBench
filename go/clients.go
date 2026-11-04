@@ -37,7 +37,7 @@ const (
 
 	gonostrIDNote = "Verification is the library's default (Relay.AssumeValid=false): CheckSignature hashes the event body and verifies the signature, but never compares that hash with the id field, so the harness also calls the library's Event.CheckID() on every delivered event. JSON: gjson envelope split + easyjson event decoder"
 	fiatjafNote   = "Verification is the library's default (RelayOptions.AssumeValid=false): VerifySignature recomputes the id into a copy of the event and verifies the signature against it, never comparing it with the id field, so the harness also calls the library's Event.CheckID() on every delivered event. SubscriptionOptions.MaxWaitForEOSE is disabled (math.MaxInt64): its 7 s default dispatches a fake EOSE and drops the stored events still queued. InfoLogger (stderr by default, one line per rejected event) is sent to io.Discard. JSON: gjson envelope split + easyjson event decoder"
-	poolNote      = "A new pool per run, connected untimed with EnsureRelay; the pool deduplicates by id (a map per subscription)"
+	poolNote      = "A new pool per run, connected untimed with EnsureRelay; the pool deduplicates by id (a map per subscription), and it does so on the raw frame before the event is parsed or verified (go-nostr relay.go:235, fiatjaf.com/nostr relay.go:350): a forged copy that arrives first marks its id seen and the genuine event that follows is dropped as a duplicate, so it fails the forged-content and forged-sig checks (98 of 197 delivered: exactly the events whose genuine copy came first)"
 )
 
 var clients = []*clientDef{

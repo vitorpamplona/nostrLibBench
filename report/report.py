@@ -52,6 +52,10 @@ def check_accepted(r, w):
     acc, axor = r.get("accepted"), r.get("accepted_xor")
     if acc is None or axor is None:
         return False, "no accepted set reported"
+    if w is not None and w.get("genuine_first_xor") and acc == w["genuine_first_events"] \
+            and axor.lower() == w["genuine_first_xor"]:
+        return False, (f"delivered only the {acc} genuine events sent before their forged copy: it marks "
+                       "an id seen before verifying the event, so a forged copy censors the genuine one")
     if w is None:
         return bool(r.get("accepted_ok")), "workload not in manifest"
     amb = w.get("ambiguous_ids", [])

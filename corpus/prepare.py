@@ -381,6 +381,10 @@ def main():
                 "ambiguous_ids": [],
                 "expired_ids": [],
                 "forged": True,
+                # the genuine events sent before their forged copy (odd n): what a client that
+                # marks an id seen before verifying keeps when the copy has the same id
+                "genuine_first_events": len(base_ids[1::2]),
+                "genuine_first_xor": xor_ids(base_ids[1::2]),
             }
         )
         print(f"{name:14s} {len(raws):6d} events, {len(base_ids)} valid, {len(raws) - len(base_ids)} forged")
