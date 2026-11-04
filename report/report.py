@@ -96,6 +96,20 @@ def cpu_us(r):
     return r["cpu_ms"] * 1000 / r["events"]
 
 
+def rss_growth(r):
+    """MB the process grew from the end of its first setup to its peak: the run's own memory."""
+    if r.get("peak_rss_mb") is None or r.get("base_rss_mb") is None:
+        return None
+    return max(r["peak_rss_mb"] - r["base_rss_mb"], 0.0)
+
+
+def alloc_per_event(r):
+    """Heap bytes allocated per event sent over the median run (null where the runtime has no counter)."""
+    if r.get("alloc_bytes") is None or not r.get("events"):
+        return None
+    return r["alloc_bytes"] / r["events"]
+
+
 def lang_label(run):
     lang = run.get("language", run["harness"])
     if run["harness"] in RUNTIME_HARNESSES:
@@ -213,16 +227,18 @@ def main():
         )
         L.append(
             "| # | language | client | version | verify | crypto | websocket | events/s | µs/event | "
-            "median ms | first run ms | CPU ms | CPU µs/event | cores used | peak RSS MB | ambiguous | expired | forged checks |"
+            "median ms | first run ms | CPU ms | CPU µs/event | cores used | accepted | peak RSS MB | base RSS MB | "
+            "RSS growth MB | alloc B/event | ambiguous | expired | forged checks |"
         )
-        L.append("|---:|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|")
+        L.append("|---:|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|")
         for i, r in enumerate(ranked, 1):
             util = r["cpu_ms"] / r["median_ms"] if r.get("cpu_ms") and r.get("median_ms") else None
             L.append(
                 f"| {i} | {r['language']} | `{r['client']}` | {r.get('version', '')} | {r.get('verify', '')} | "
                 f"{r.get('crypto', '')} | {r.get('websocket', '')} | {fmt(r.get('events_per_s'))} | "
                 f"{fmt(r.get('us_per_event'), 1)} | {fmt(r.get('median_ms'))} | {fmt(r.get('first_run_ms'))} | "
-                f"{fmt(r.get('cpu_ms'))} | {fmt(cpu_us(r), 1)} | {fmt(util, 2)} | {fmt(r.get('peak_rss_mb'))} | "
+                f"{fmt(r.get('cpu_ms'))} | {fmt(cpu_us(r), 1)} | {fmt(util, 2)} | {fmt(r.get('accepted'))} | {fmt(r.get('peak_rss_mb'))} | "
+                f"{fmt(r.get('base_rss_mb'))} | {fmt(rss_growth(r))} | {fmt(alloc_per_event(r))} | "
                 f"{'accepted' if r.get('ambiguous_accepted') else 'rejected'} | "
                 f"{'dropped' if r.get('expired_accepted') == 0 else 'delivered'} | {forged_flag(r)} |"
             )
@@ -251,13 +267,14 @@ def main():
             "Variants (another API, option or crypto backend of a ranked library), rows whose "
             "verification is the harness's rather than the library's, and slower rows of a ranked library.\n"
         )
-        L.append("| language | client | version | verify | crypto | events/s | µs/event | median ms | CPU ms | peak RSS MB | notes |")
-        L.append("|---|---|---|---|---|---:|---:|---:|---:|---:|---|")
+        L.append("| language | client | version | verify | crypto | events/s | µs/event | median ms | CPU ms | peak RSS MB | RSS growth MB | alloc B/event | notes |")
+        L.append("|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|")
         for r in sorted(others, key=lambda r: r["median_ms"]):
             L.append(
                 f"| {r['language']} | `{r['client']}` | {r.get('version', '')} | {r.get('verify', '')} | "
                 f"{r.get('crypto', '')} | {fmt(r.get('events_per_s'))} | {fmt(r.get('us_per_event'), 1)} | "
                 f"{fmt(r.get('median_ms'))} | {fmt(r.get('cpu_ms'))} | {fmt(r.get('peak_rss_mb'))} | "
+                f"{fmt(rss_growth(r))} | {fmt(alloc_per_event(r))} | "
                 f"{('**Fails the forged-event checks.** ' if (r['harness'], r['client']) in forged_fail else '') + (r.get('notes') or '').replace('|', '/')} |"
             )
         L.append("")

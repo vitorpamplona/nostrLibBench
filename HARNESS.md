@@ -237,6 +237,32 @@ than a single-threaded one on the wall clock and still burn more CPU; `cpu_ms` s
 `peak_rss_mb` is the process's peak resident set at the end (`ru_maxrss`), over warm-up
 and every run.
 
+Peak RSS counts the runtime too (a JVM, a JavaScript engine or a Python interpreter holds
+tens to hundreds of MB before the library sees an event), so two more numbers isolate the
+library:
+
+- `base_rss_mb`: the process's current resident set (`VmRSS` in `/proc/self/status`,
+  `process.memoryUsage().rss`, `task_info` on macOS, …) at the end of the **first** setup,
+  just before the first REQ: runtime and library loaded, client connected, no event
+  received yet. Read it after a full GC where the runtime offers one cheaply
+  (`System.gc()`, `runtime.GC()`, `GC.Collect()`), so it is the steady state, not leftover
+  startup garbage. The report shows `peak_rss_mb - base_rss_mb` as the memory the run
+  itself took.
+- `alloc_bytes`: heap bytes the process allocated over the timed part of each run (all
+  threads), read from the runtime's own cumulative counter just before `t0` and just after
+  `t_end`; the row reports the median run's value, and the report divides it by the events
+  sent (`alloc B/event`). Sources: JVM `com.sun.management.ThreadMXBean.
+  getTotalThreadAllocatedBytes()` (live and terminated threads), Go
+  `runtime.MemStats.TotalAlloc`, .NET `GC.GetTotalAllocatedBytes(true)`, Rust a counting
+  `#[global_allocator]` around `System`, Zig a counting wrapper around the allocator the
+  harness hands the library. Memory a library allocates outside that counter (C code
+  calling `malloc` directly, a native addon) is not counted: say so in `notes` when the
+  library does. A runtime without a cumulative counter reports `null`; do not substitute
+  a sampled or current-heap number. Reading the counter must not trigger a GC or add work
+  inside the timed part (Go's `ReadMemStats` stops the world: read it outside `t0`..`t_end`).
+  Compare `alloc B/event` within a runtime: runtimes count differently (a JVM TLAB, a Go
+  size class, a Rust exact request).
+
 **Isolation.** Every client runs in a **fresh process** (the harness re-executes itself or
 launches one binary per client), so one library's JIT profile, heap, thread pools and
 global caches never tax the next. Clients run one after another, never in parallel.
@@ -303,7 +329,9 @@ builds its project from pinned versions (lockfile) before running.
       "events_per_s": 8900.0,
       "us_per_event": 112.4,
       "cpu_ms": 3620.5,
-      "peak_rss_mb": 210.4
+      "peak_rss_mb": 210.4,
+      "base_rss_mb": 61.2,
+      "alloc_bytes": null
     }
   ]
 }
