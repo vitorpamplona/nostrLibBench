@@ -20,7 +20,7 @@ val CLIENTS: List<ClientSpec> =
         ClientSpec(
             id = "quartz-fetch",
             library = "Quartz",
-            version = V["com.vitorpamplona.quartz:quartz-jvm"],
+            version = V.quartz,
             license = "MIT",
             api = "NostrClient.fetch(relay, filter) { event -> } (one REQ, callback per event, returns at EOSE)",
             websocket = OKHTTP,
@@ -40,7 +40,7 @@ val CLIENTS: List<ClientSpec> =
         ClientSpec(
             id = "quartz-parallelverifier",
             library = "Quartz",
-            version = V["com.vitorpamplona.quartz:quartz-jvm"],
+            version = V.quartz,
             license = "MIT",
             api = "NostrClient.fetch + Quartz's ParallelEventVerifier accessory (batched Event.verify() on Dispatchers.Default)",
             websocket = OKHTTP,

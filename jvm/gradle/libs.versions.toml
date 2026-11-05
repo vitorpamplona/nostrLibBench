@@ -3,8 +3,10 @@
 # Gradle's dependency lock file (gradle.lockfile) pins every transitive version on top.
 [versions]
 kotlin = "2.4.21"
-# Amethyst's Nostr library (NostrClient + BasicOkHttpWebSocket + Kite parser).
-quartz = "2.15.1"
+# Amethyst's Nostr library (NostrClient + BasicOkHttpWebSocket + Kite parser). 2.16.0 is not on
+# Maven Central (the release was refused for exceeding the free publishing limits), so it comes from
+# JitPack, built from the v2.16.0 tag: com.github.vitorpamplona.quartz:quartz-jvm, version "v2.16.0".
+quartz = "v2.16.0"
 # rust-nostr's nostr-sdk through its UniFFI Kotlin/JVM bindings (now published by nostrdevkit).
 nostrSdkJvm = "0.45.1"
 # NostrGameEngine's pure-Java library.
@@ -23,7 +25,7 @@ ktor = "3.5.0"
 kotlinxSerialization = "1.12.0"
 
 [libraries]
-quartz = { group = "com.vitorpamplona.quartz", name = "quartz", version.ref = "quartz" }
+quartz = { group = "com.github.vitorpamplona.quartz", name = "quartz-jvm", version.ref = "quartz" }
 nostr-sdk-jvm = { group = "org.nostrdevkit", name = "nostr-sdk-jvm", version.ref = "nostrSdkJvm" }
 nostr4j = { group = "org.ngengine", name = "nostr4j", version.ref = "nostr4j" }
 nge-platform-jvm = { group = "org.ngengine", name = "nge-platform-jvm", version.ref = "ngePlatform" }

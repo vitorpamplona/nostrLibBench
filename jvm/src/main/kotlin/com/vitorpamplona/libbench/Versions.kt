@@ -13,4 +13,11 @@ object Versions {
         }
 
     operator fun get(module: String): String = props.getProperty(module) ?: "unknown"
+
+    /** Quartz's version: from Maven Central, a local checkout, or JitPack (its tag, labelled so). */
+    val quartz: String
+        get() =
+            props.getProperty("com.vitorpamplona.quartz:quartz-jvm")
+                ?: props.getProperty("com.github.vitorpamplona.quartz:quartz-jvm")?.let { "${it.removePrefix("v")} (JitPack)" }
+                ?: "unknown"
 }
