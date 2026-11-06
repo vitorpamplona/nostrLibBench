@@ -148,7 +148,9 @@ impl Ingester {
                 frame.len() as c_int,
                 &mut tce,
                 self.buf.as_mut_ptr(),
-                self.buf.len() as c_int,
+                // This frame's size, as nostrdb's ingester allocates it, not the grown buffer:
+                // nostrdb's parse slows down with the size it is given.
+                need as c_int,
                 std::ptr::null_mut(),
             );
             if size <= 0 || tce.evtype != NDB_TCE_EVENT {
