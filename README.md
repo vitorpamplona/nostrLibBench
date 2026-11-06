@@ -29,6 +29,9 @@ on a host about 20% faster, and say so in the report. Native code is built for a
 (Go `GOAMD64=v1`, Rust's default target, Zig `-Dcpu=baseline`); the JVM, V8, JavaScriptCore and
 .NET JITs compile for the machine they run on.
 
+The JVM rows ran on JDK 21. The harness now runs on JDK 27, which on one host matched JDK 21
+on warm runs and was 6-9% faster on the first: [2026-11-06 JDK 27 rerun](results/reference/2026-11-06-jdk27/README.md).
+
 The harness never adds threads. A library verifies on as many cores as its default uses,
 and a documented parallel verifier is a speed option with its own row; "cores used" is CPU
 time over wall time. Quartz's rows are in bold. Both use Quartz's one-relay read, `fetch`:
