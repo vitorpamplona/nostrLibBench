@@ -6,6 +6,7 @@ mod nostr_rust_client;
 mod nostr_sdk_client;
 mod nostr_types_client;
 mod nostrdb_client;
+mod nostrdb_notedeck_client;
 mod nostro2_client;
 
 pub use crate::harness::{Client, Meta};
@@ -23,6 +24,8 @@ pub fn all() -> Vec<Meta> {
         nostr_rust_client::META_FETCH,
         nostr_types_client::META,
         nostrdb_client::META,
+        nostrdb_notedeck_client::META,
+        nostrdb_notedeck_client::META_INLINE,
     ]
 }
 
@@ -38,6 +41,8 @@ pub fn make(id: &str) -> Result<Box<dyn Client>, String> {
         "nostr_rust-get_events_of" => Box::new(nostr_rust_client::NostrRust { fetch: true }),
         "nostr-types-client" => Box::new(nostr_types_client::NostrTypes::new()?),
         "nostrdb-tungstenite" => Box::new(nostrdb_client::NostrDb::new()?),
+        "nostrdb-notedeck" => Box::new(nostrdb_notedeck_client::NostrDbNotedeck::new(false)?),
+        "nostrdb-notedeck-inline" => Box::new(nostrdb_notedeck_client::NostrDbNotedeck::new(true)?),
         other => return Err(format!("unknown client {other}")),
     })
 }
