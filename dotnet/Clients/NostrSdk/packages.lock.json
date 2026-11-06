@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "Nostr.Sdk": {
+        "type": "Direct",
+        "requested": "[0.45.1, )",
+        "resolved": "0.45.1",
+        "contentHash": "U+1Lfx9jGLQozbwJJhgwKnJR9REZcAefuezr9rzcufi0ZwLjA9X+EUKWYbRlfSTEOO0Osq46L6DxaM5eqkvjhg=="
+      }
+    },
+    "net10.0/linux-x64": {
+      "Nostr.Sdk": {
+        "type": "Direct",
+        "requested": "[0.45.1, )",
+        "resolved": "0.45.1",
+        "contentHash": "U+1Lfx9jGLQozbwJJhgwKnJR9REZcAefuezr9rzcufi0ZwLjA9X+EUKWYbRlfSTEOO0Osq46L6DxaM5eqkvjhg=="
+      }
+    }
+  }
+}

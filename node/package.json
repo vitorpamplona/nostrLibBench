@@ -1,0 +1,29 @@
+{
+  "name": "nostrlibbench-node",
+  "private": true,
+  "type": "module",
+  "description": "nostrLibBench JavaScript harness (Node, Bun, Deno)",
+  "license": "MIT",
+  "dependencies": {
+    "@nostr-dev-kit/ndk": "3.0.3",
+    "@nostrdevkit/nostr-sdk-node": "0.45.1",
+    "@nostrify/nostrify": "0.55.1",
+    "@qntx/nostr": "0.15.3",
+    "@qntx/nostr-wasm": "0.15.3",
+    "@rx-nostr/crypto": "3.1.6",
+    "@snort/system": "2.1.11",
+    "@snort/system-wasm": "2.0.0",
+    "@welshman/net": "0.14.0-pre5",
+    "@welshman/util": "0.14.0-pre5",
+    "applesauce-core": "7.0.3",
+    "applesauce-relay": "7.0.0",
+    "nostr-tools": "2.25.5",
+    "nostr-wasm": "0.1.0",
+    "rx-nostr": "3.7.8",
+    "ws": "8.22.1"
+  },
+  "devDependencies": {
+    "bun": "1.4.3",
+    "deno": "2.9.6"
+  }
+}

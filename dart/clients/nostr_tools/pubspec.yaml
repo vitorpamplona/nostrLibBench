@@ -1,0 +1,9 @@
+name: bench_nostr_tools
+description: nostrLibBench Dart harness, client for package:nostr_tools (not published).
+publish_to: none
+environment:
+  sdk: ^3.9.0
+dependencies:
+  bench_common:
+    path: ../../common
+  nostr_tools: 1.0.9

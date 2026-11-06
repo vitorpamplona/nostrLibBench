@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsBenchClient>true</IsBenchClient>
+    <AssemblyName>NNostr</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="NNostr.Client" Version="0.0.55" />
+  </ItemGroup>
+</Project>

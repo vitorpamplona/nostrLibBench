@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsBenchClient>true</IsBenchClient>
+    <AssemblyName>NostrSdk</AssemblyName>
+    <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Nostr.Sdk" Version="0.45.1" />
+  </ItemGroup>
+</Project>

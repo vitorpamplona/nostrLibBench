@@ -1,0 +1,70 @@
+{
+    "harness": "jvm",
+    "language": "JVM (Kotlin/Java)",
+    "runtime": "OpenJDK 64-Bit Server VM 27.0.1.0.2+1 (Eclipse Adoptium), GC G1, -Xmx2g -XX:+UseG1GC, one JVM per client",
+    "jvm": {
+        "vm": "OpenJDK 64-Bit Server VM",
+        "vendor": "Eclipse Adoptium",
+        "version": "27.0.1.0.2+1",
+        "gc": "G1",
+        "args": [
+            "-Xmx2g",
+            "-XX:+UseG1GC",
+            "-Dfile.encoding=UTF-8",
+            "-Dlibbench.logDir=/home/user/nostrLibBench/jvm/build/logs"
+        ]
+    },
+    "host": {
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+        "cores": 4,
+        "os": "Linux 6.18.44-fc-v242"
+    },
+    "settings": {
+        "warmup_runs": 0,
+        "min_runs": 1,
+        "min_time_ms": 0,
+        "max_runs": 1,
+        "timeout_ms": 2700000
+    },
+    "relay": "ws://127.0.0.1:7859",
+    "corpus_fingerprint": "f995f42b68b5386e990c859e6c8058e8df7cd1d430e38e9e14d6e954e81c89bb",
+    "results": [
+        {
+            "client": "nostr-java-relaypool",
+            "library": "nostr-java",
+            "version": "2.4.2",
+            "license": "MIT",
+            "api": "RelayPool.subscribe(filters, SubscriptionListener) (what NostrClient.subscribe delegates to)",
+            "websocket": "Spring StandardWebSocketClient 6.2.10 on Tomcat JSR-356 client 10.1.44",
+            "crypto": "pure-Java BIP-340 on BigInteger (nostr-java-core Schnorr), JDK SHA-256",
+            "verify": "explicit",
+            "notes": "The pool never verifies and the library has no event verify; the listener checks the id with EventSerializer.serializeAndComputeId (its Jackson NIP-01 serializer) and the signature with nostr.crypto.schnorr.Schnorr.verify. Parser: Jackson. backlogTimeout set to --timeout-ms (the default 10 s announces EOSE on its own). The library logs every event at INFO (EventMessage.convertValue: log.info(\"Converting map to GenericEvent: {}\", map)); it costs nothing here only because no SLF4J provider is on the classpath (slf4j-api's no-op logger), as in an app that configures its logger above INFO. The subscription deduplicates by the id field before the listener sees the event (RelaySubscription.deliverIfNotAlreadySeen -> DeliveredEventWindow.isFirstSighting) and nothing in the library verifies first, so a forged copy that arrives first is rejected by the listener and the genuine event that follows is dropped as already seen: it fails the forged-content and forged-sig checks (98 of 197 delivered).",
+            "variant": false,
+            "workload": "all",
+            "events": 31161,
+            "bytes": 26995371,
+            "accepted": 29614,
+            "accepted_xor": "81a87a09251a11299257dcc0ec4e3b467ed86ab2db38775a93bd28302f9e147b",
+            "ambiguous_accepted": 1,
+            "expired_accepted": 66,
+            "accepted_ok": true,
+            "errors": 0,
+            "error": null,
+            "warmup_runs": 0,
+            "runs": 1,
+            "first_run_ms": 383621.5,
+            "median_ms": 383621.5,
+            "min_ms": 383621.5,
+            "p90_ms": 383621.5,
+            "run_ms": [
+                383621.5
+            ],
+            "events_per_s": 81.2,
+            "us_per_event": 12310.95,
+            "cpu_ms": 389550.0,
+            "peak_rss_mb": 527.1,
+            "base_rss_mb": 89.1,
+            "alloc_bytes": 113711808952
+        }
+    ]
+}

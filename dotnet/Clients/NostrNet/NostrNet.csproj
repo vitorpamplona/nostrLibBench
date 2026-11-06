@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsBenchClient>true</IsBenchClient>
+    <AssemblyName>NostrNet</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="NostrNet.Relay" Version="0.1.0-preview8" />
+  </ItemGroup>
+</Project>

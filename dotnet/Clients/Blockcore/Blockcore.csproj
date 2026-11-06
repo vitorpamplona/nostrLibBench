@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsBenchClient>true</IsBenchClient>
+    <AssemblyName>Blockcore</AssemblyName>
+    <DefineConstants>$(DefineConstants);BLOCKCORE</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../NostrClient/Client.cs" Link="Client.cs" />
+    <PackageReference Include="Blockcore.Nostr.Client" Version="2.0.2" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,32 @@
+{
+  "originHash" : "e03f8be7b5e5d4af5f5c261505ab874234f7a541e7f1ed759b2e22fd0b9b1313",
+  "pins" : [
+    {
+      "identity" : "cryptoswift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/krzyzanowskim/CryptoSwift.git",
+      "state" : {
+        "revision" : "f2a627b84c1ff96f21ac2fcb623ab36142dd5512",
+        "version" : "1.10.0"
+      }
+    },
+    {
+      "identity" : "nostr-essentials",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/nostur-com/nostr-essentials",
+      "state" : {
+        "revision" : "50bd46edd4cf2fed1d042868aa91ea4fcb953787"
+      }
+    },
+    {
+      "identity" : "secp256k1.swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/GigaBitcoin/secp256k1.swift",
+      "state" : {
+        "revision" : "1a14e189def5eaa92f839afdd2faad8e43b61a6e",
+        "version" : "0.12.2"
+      }
+    }
+  ],
+  "version" : 3
+}

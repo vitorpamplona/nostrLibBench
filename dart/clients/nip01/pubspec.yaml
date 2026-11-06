@@ -1,0 +1,9 @@
+name: bench_nip01
+description: nostrLibBench Dart harness, client for package:nip01 (not published).
+publish_to: none
+environment:
+  sdk: ^3.9.0
+dependencies:
+  bench_common:
+    path: ../../common
+  nip01: 0.3.0+1

@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "NostrNet.Relay": {
+        "type": "Direct",
+        "requested": "[0.1.0-preview8, )",
+        "resolved": "0.1.0-preview8",
+        "contentHash": "p39Hvnw9InKKIpJ0ymx/AjBlOgYfVeuVVeULNeO/uaynIFMyRgvmg52+NyoQErKpQVWwCofWU8FtZvJZi2SB3w==",
+        "dependencies": {
+          "NBitcoin.Secp256k1": "4.0.0",
+          "NostrNet.Core": "0.1.0-preview8"
+        }
+      },
+      "NBitcoin.Secp256k1": {
+        "type": "Transitive",
+        "resolved": "4.0.0",
+        "contentHash": "VTw04h/JQKzReqAvLQHsGyGTwzaTR3NUmw6cA37mp6M0q1r9K3uUHCsO7uz1nq95BOD4vv4Ebp4TwHPf4l1NUA=="
+      },
+      "NostrNet.Core": {
+        "type": "Transitive",
+        "resolved": "0.1.0-preview8",
+        "contentHash": "rW/zXoUF/69gIQ2tu2DdkKDlPZ9UzI9HkyJsVJJT2wq8Nujc2plx2OeZylkjHE0dN+wnyLvODp5zMB2/lQdK7w==",
+        "dependencies": {
+          "NBitcoin.Secp256k1": "4.0.0"
+        }
+      }
+    }
+  }
+}
