@@ -51,24 +51,23 @@
             "errors": 0,
             "error": null,
             "warmup_runs": 1,
-            "runs": 5,
-            "first_run_ms": 1711.3,
-            "median_ms": 1281.2,
-            "min_ms": 1242.3,
-            "p90_ms": 1315.2,
+            "runs": 4,
+            "first_run_ms": 1689.0,
+            "median_ms": 1310.3,
+            "min_ms": 1279.9,
+            "p90_ms": 1356.5,
             "run_ms": [
-                1281.2,
-                1305.3,
-                1242.3,
-                1315.2,
-                1250.9
+                1356.5,
+                1296.9,
+                1279.9,
+                1323.7
             ],
-            "events_per_s": 24321.7,
-            "us_per_event": 41.115,
-            "cpu_ms": 1480.0,
-            "peak_rss_mb": 361.0,
-            "base_rss_mb": 103.3,
-            "alloc_bytes": 111404880
+            "events_per_s": 23781.6,
+            "us_per_event": 42.049,
+            "cpu_ms": 1510.0,
+            "peak_rss_mb": 378.2,
+            "base_rss_mb": 104.3,
+            "alloc_bytes": 108913032
         },
         {
             "client": "quartz-parallelverifier",
@@ -93,24 +92,24 @@
             "error": null,
             "warmup_runs": 1,
             "runs": 6,
-            "first_run_ms": 1178.3,
-            "median_ms": 563.8,
-            "min_ms": 502.8,
-            "p90_ms": 723.1,
+            "first_run_ms": 1189.1,
+            "median_ms": 524.1,
+            "min_ms": 458.0,
+            "p90_ms": 625.2,
             "run_ms": [
-                723.1,
-                577.4,
-                591.2,
-                550.1,
-                534.0,
-                502.8
+                625.2,
+                578.0,
+                521.7,
+                497.5,
+                458.0,
+                526.4
             ],
-            "events_per_s": 55274.5,
-            "us_per_event": 18.092,
-            "cpu_ms": 1600.0,
-            "peak_rss_mb": 364.7,
-            "base_rss_mb": 102.8,
-            "alloc_bytes": 108685324
+            "events_per_s": 59461.9,
+            "us_per_event": 16.817,
+            "cpu_ms": 1525.0,
+            "peak_rss_mb": 352.6,
+            "base_rss_mb": 102.6,
+            "alloc_bytes": 108573548
         }
     ]
 }

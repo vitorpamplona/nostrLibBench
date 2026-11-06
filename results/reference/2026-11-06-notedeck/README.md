@@ -5,15 +5,21 @@ stores every event in LMDB before it delivers it, so it is a variant and doesn't
 the client libraries. This run adds two rows that read a relay the way Notedeck does and stop
 where nostrdb would store the note, and reruns `nostrdb-tungstenite` beside them.
 
-- **Code:** nostrLibBench `7896125`. nostrdb is nostrdb-rs `e22e5632a75e` (0.10.0, git), the
+- **Code:** nostrLibBench `b06d3b5`. nostrdb is nostrdb-rs `e22e5632a75e` (0.10.0, git), the
   revision Notedeck pins (damus-io/notedeck `9395544`, 2026-10-18); its C library is nostrdb
   `12398c2`, which bundles libsecp256k1 0.4.1. crates.io's nostrdb 0.9.0, which the
   2026-11-05 row ran, bundles 0.6.0.
-- **Settings:** the 2026-11-05 settings: `all`, 1 warm-up, ≥ 3 runs and ≥ 10 s, ≤ 30 runs;
-  the forged checks one run each (`rust-forged.json`).
-- **Host:** a 4-core Xeon @ 2.1 GHz, the reference's host type. The Go control row
-  (`fiatjaf-nostr-relay-libsecp256k1`, `control/`) ran 51.7 µs/event before and 53.7 after,
-  against 63.8 to 66.8 during the 2026-11-05 run: this host is about 19% faster.
+- **Settings:** the 2026-11-05 settings: `all`, 1 warm-up, ≥ 3 runs and ≥ 10 s, ≤ 30 runs,
+  three rounds of the three rows (`rounds/`, the same runs as the
+  [Quartz comparison](../2026-11-06-quartz-vs-notedeck/README.md)); the forged checks one run
+  each (`rust-forged.json`).
+- **Host:** a 4-core Xeon @ 2.1 GHz, the reference's host type, one host for the whole run.
+  The Go control row (`fiatjaf-nostr-relay-libsecp256k1`, `control/`) ran 52.7 µs/event before
+  and 60.3 after: the host slowed down during the run, so compare rows within a round.
+- **Earlier version:** this directory first held a run in which the new rows gave nostrdb
+  their whole reused buffer, which grows to the largest frame seen, instead of the
+  per-event size its ingester allocates. nostrdb's parse slows down with the size it is
+  given, so that run understated them; these are the rows after the fix.
 
 ## What the rows do
 
@@ -48,24 +54,20 @@ pair it with, as a variant.
 
 ## Results
 
-`all` workload (31,161 events):
+`all` workload (31,161 events), median of the three rounds (range of the rounds):
 
-| row | wall ms (runs) | CPU ms | cores | first run ms | peak RSS | accepted |
+| row | wall ms | CPU ms | cores | first run ms | peak RSS | accepted |
 |---|---:|---:|---:|---:|---:|---:|
-| `nostrdb-tungstenite` (stores in LMDB) | 453 (433–511) | 1,572 | 3.5 | 470 | 209 MB | 27,233 |
-| `nostrdb-notedeck` (no write) | 433 (417–482) | 1,495 | 3.5 | 395 | 83 MB | 27,233 |
-| `nostrdb-notedeck-inline` (one thread) | 1,383 (1,177–1,403) | 1,377 | 1.0 | 1,329 | 11 MB | 27,233 |
+| `nostrdb-tungstenite` (stores in LMDB) | 464 (452–475) | 1,632 | 3.5 | 485–530 | 197–211 MB | 27,233 |
+| `nostrdb-notedeck` (no write) | 407 (390–426) | 1,462 | 3.6 | 398–464 | 82–91 MB | 27,233 |
+| `nostrdb-notedeck-inline` (one thread) | 1,216 (1,206–1,363) | 1,209 | 1.0 | 1,143–1,285 | 11 MB | 27,233 |
 
-- **The write costs little time on 4 cores:** 4.6% wall and 5% CPU, with the two rows' runs
-  overlapping. The writer is a thread of its own, off the ingesters' path. What it costs is
-  memory: peak RSS 209 MB against 83.
-- **Parsing and verifying on one thread** takes 44.4 µs per event; the ingester threads spread
-  it over the 4 cores (3.5 used).
-- **Against the 2026-11-05 ranking,** scaled by the Go control: `nostrdb-notedeck` would be about
-  17 µs/event, ahead of `quartz-parallelverifier` (21.1, also every core: 64 µs of CPU per event
-  against about 48), and `nostrdb-notedeck-inline` about 55, level with `nostr-sdk-stream` (55.3)
-  and behind `zig-nostr-relay` (46.2) and `quartz-fetch` (48.7). The stored row's 14.6 µs/event
-  here matches its 17.5 on 2026-11-05 after the same scaling, so nostrdb 0.10.0 is as fast as 0.9.0.
+- **Without the write, the threaded path is 12% faster and uses 10% less CPU on 4 cores:**
+  407 ms against 464, ahead in every round (390, 407 and 426 against 452, 464 and 475).
+  Three later long rounds of 25 runs agree: 422 ms against 495. It also costs memory: peak RSS 197–211 MB against 82–91.
+- **Parsing and verifying on one thread** takes 44.7 µs per delivered event; nostrdb's
+  ingester threads spread it over the 4 cores (3.6 used).
+- **Against Quartz on the same host:** [Quartz vs Notedeck](../2026-11-06-quartz-vs-notedeck/README.md).
 - **Not the same job as a ranked row:** nostrdb's parser can't read `\uXXXX` escapes and drops
   those 2,380 valid events (and the ambiguous one) before verifying them, so these rows verify
   about 8% fewer events than a correct client and deliver 27,233 of 29,613. nostrdb 0.10.0 still

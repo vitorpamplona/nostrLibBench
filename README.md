@@ -144,12 +144,11 @@ did not run on the full set.
 
 nostrdb is a database, not a client: it writes every event to LMDB before it delivers it,
 so its row is a variant either way. Notedeck's relay path with the LMDB write left out
-(`nostrdb-notedeck`) is 5% faster on 4 cores and uses 83 MB instead of 209; on one thread its
-parse and verify take about 55 µs per event on the reference host:
+(`nostrdb-notedeck`) is 12% faster on 4 cores and peaks at 82–91 MB instead of 197–211:
 [2026-11-06 Notedeck run](results/reference/2026-11-06-notedeck/README.md). Against Quartz on
-the same host, warm, the threaded path is level with `quartz-parallelverifier` and the
-single-threaded one 10% slower than `quartz-fetch`; before the JIT is done, nostrdb is ahead:
-[Quartz vs Notedeck](results/reference/2026-11-06-quartz-vs-notedeck/README.md).
+one host, warm, it takes 20% less time than `quartz-parallelverifier` at the same CPU, and its
+single-threaded path is level with `quartz-fetch`, though it verifies 8% fewer events (it
+drops those with `\u` escapes): [Quartz vs Notedeck](results/reference/2026-11-06-quartz-vs-notedeck/README.md).
 
 ## Run
 

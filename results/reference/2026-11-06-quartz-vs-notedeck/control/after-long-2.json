@@ -40,22 +40,22 @@
       "error": null,
       "warmup_runs": 1,
       "runs": 4,
-      "first_run_ms": 1556.6,
-      "median_ms": 1581.9,
-      "min_ms": 1529,
-      "p90_ms": 1665.5,
+      "first_run_ms": 1777.4,
+      "median_ms": 1757.3,
+      "min_ms": 1739.2,
+      "p90_ms": 1851.8,
       "run_ms": [
-        1665.5,
-        1578.8,
-        1529,
-        1585.1
+        1773,
+        1741.6,
+        1739.2,
+        1851.8
       ],
-      "events_per_s": 19697.8,
-      "us_per_event": 50.767,
-      "cpu_ms": 2762.2,
-      "peak_rss_mb": 25.7,
-      "base_rss_mb": 20,
-      "alloc_bytes": 125760504
+      "events_per_s": 17732.3,
+      "us_per_event": 56.394,
+      "cpu_ms": 3090.9,
+      "peak_rss_mb": 25.6,
+      "base_rss_mb": 19.9,
+      "alloc_bytes": 125756520
     }
   ]
 }
