@@ -1609,6 +1609,7 @@ dependencies = [
  "nostro2-relay",
  "serde_json",
  "tokio",
+ "tokio-tungstenite 0.24.0",
  "tokio-tungstenite 0.28.0",
 ]
 
@@ -2003,9 +2004,8 @@ dependencies = [
 
 [[package]]
 name = "nostrdb"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05b2685d093dca579807150b6fafab4dcb974fc6e31017d273ae32d42795d41b"
+version = "0.10.0"
+source = "git+https://github.com/damus-io/nostrdb-rs?rev=e22e5632a75e#e22e5632a75ed0637964335decb48fd125997754"
 dependencies = [
  "bindgen",
  "cc",
@@ -3324,6 +3324,18 @@ dependencies = [
 
 [[package]]
 name = "tokio-tungstenite"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "edc5f74e248dc973e0dbb7b74c7e0d6fcc301c694ff50049504004ef4d0cdcd9"
+dependencies = [
+ "futures-util",
+ "log",
+ "tokio",
+ "tungstenite 0.24.0",
+]
+
+[[package]]
+name = "tokio-tungstenite"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d25a406cddcc431a75d3d9afc6a7c0f7428d4891dd973e4d54c56b46127bf857"
@@ -3489,6 +3501,24 @@ dependencies = [
  "utf-8",
  "webpki",
  "webpki-roots 0.22.6",
+]
+
+[[package]]
+name = "tungstenite"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18e5b8366ee7a95b16d32197d0b2604b43a0be89dc5fac9f8e96ccafbaedda8a"
+dependencies = [
+ "byteorder",
+ "bytes",
+ "data-encoding",
+ "http 1.5.0",
+ "httparse",
+ "log",
+ "rand 0.8.8",
+ "sha1",
+ "thiserror 1.0.69",
+ "utf-8",
 ]
 
 [[package]]

@@ -16,9 +16,13 @@ nostro2-relay = "=0.10.0"
 nostro2 = "=0.9.0"
 nostr_rust = "=0.20.3"
 nostr-types = { git = "https://github.com/mikedilger/nostr-types", rev = "0ada3e403cac2fad15a90c1558d35c2d4fae51c7", features = ["client"] }
-nostrdb = "=0.9.0"
+# nostrdb at the nostrdb-rs commit Notedeck pins (its workspace Cargo.toml, 2026-10-18): 0.10.0,
+# unreleased on crates.io. One nostrdb serves both nostrdb rows (it links one C library).
+nostrdb = { git = "https://github.com/damus-io/nostrdb-rs", rev = "e22e5632a75e" }
 # nostrdb has no WebSocket client: notedeck's enostr pairs it with tokio-tungstenite.
 tokio-tungstenite = "0.28"
+# The version enostr itself depends on (Notedeck's Cargo.lock), for the nostrdb-notedeck rows.
+tokio-tungstenite-024 = { package = "tokio-tungstenite", version = "=0.24.0" }
 
 # Harness plumbing.
 tokio = { version = "1", features = ["full"] }
