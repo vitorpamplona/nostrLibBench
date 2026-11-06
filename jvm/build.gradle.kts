@@ -19,8 +19,8 @@ application {
 }
 
 kotlin {
-    jvmToolchain(21)
-    compilerOptions { jvmTarget.set(JvmTarget.JVM_21) }
+    jvmToolchain(27)
+    compilerOptions { jvmTarget.set(JvmTarget.JVM_27) }
 }
 
 // gradle.lockfile pins every resolved version, transitive ones included:

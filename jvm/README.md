@@ -12,10 +12,12 @@ subscribe, receive every event of the workload, verify it, hand it to the app, u
 ```
 
 `run.sh` builds this directory's standalone Gradle project (`./gradlew installDist`, Gradle
-wrapper 9.8, Kotlin 2.4.21, JDK 21: `JAVA_HOME`, else `/usr/lib/jvm/java-21-openjdk-*`) and
-runs `build/install/libbench/bin/libbench` from the repo root. It takes every HARNESS.md flag.
-`BENCH_JAVA_HOME=<jdk>` runs the benchmark on another JDK; extra JVM flags go through
-`JAVA_OPTS`.
+wrapper 9.8 running on JDK 21: `JAVA_HOME`, else `/usr/lib/jvm/java-21-openjdk-*`) with Kotlin
+2.5.0-Beta2 (the first Kotlin that emits Java 27 bytecode) and a JDK 27 toolchain, and runs
+`build/install/libbench/bin/libbench` from the repo root on JDK 27: `JDK27_HOME`, else
+`/usr/lib/jvm/{java-27-openjdk,temurin-27-jdk}*` or `~/.jdks/jdk-27`. It takes every HARNESS.md
+flag. `BENCH_JAVA_HOME=<jdk>` runs the benchmark on another JDK (27 or newer); extra JVM flags
+go through `JAVA_OPTS`.
 
 Versions: the libraries are pinned in `gradle/libs.versions.toml`, and `gradle.lockfile`
 pins every transitive module (`./gradlew dependencies --write-locks` after changing one).
@@ -175,7 +177,7 @@ the library's strings).
   The platform layer is a separate artifact the README asks for (`nge-platform-jvm`,
   needs Java 21); it refuses loopback URIs unless
   `-Dnge-platforms.allowLoopbackInURIs=true` (the client sets the property).
-- **WebSocket.** `java.net.http.WebSocket` (JDK 21 HttpClient) in
+- **WebSocket.** `java.net.http.WebSocket` (the JDK's HttpClient) in
   `JVMWebsocketTransport`; JSON through Gson.
 - **Verification (library, default on).** `NostrRelay` verifies every EVENT before its
   listeners see it: id recomputed with its own serializer, then BIP-340 in
