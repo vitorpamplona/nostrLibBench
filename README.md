@@ -143,7 +143,10 @@ nostr-php's one-request API took 46 ms per event on the 1,417-event smoke worklo
 did not run on the full set.
 
 nostrdb is a database, not a client: it writes every event to LMDB before it delivers it,
-so its row is a variant either way.
+so its row is a variant either way. Notedeck's relay path with the LMDB write left out
+(`nostrdb-notedeck`) is 5% faster on 4 cores and uses 83 MB instead of 209; on one thread its
+parse and verify take about 55 µs per event on the reference host:
+[2026-11-06 Notedeck run](results/reference/2026-11-06-notedeck/README.md).
 
 ## Run
 

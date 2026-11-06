@@ -101,7 +101,9 @@ slow consumer, to probe a library's back-pressure (see nostr-sdk and nostro2 bel
 | `nostr_rust-next_data` | nostr_rust 0.20.3 | explicit | libsecp256k1 0.2.0 (secp256k1-sys 0.8.2) | tungstenite 0.18 (sync) | no |
 | `nostr_rust-get_events_of` | nostr_rust 0.20.3 | explicit | same | same | yes |
 | `nostr-types-client` | nostr-types 0.8.0-unstable (git 0ada3e4) | explicit | libsecp256k1 0.6.0 (secp256k1-sys 0.11.0) | tokio-tungstenite 0.28 | no |
-| `nostrdb-tungstenite` | nostrdb 0.9.0 (GPL-3.0-or-later) | library | libsecp256k1 0.6.0 (bundled C) | tokio-tungstenite 0.28 (harness-paired) | yes |
+| `nostrdb-tungstenite` | nostrdb 0.10.0 (git e22e563, GPL-3.0-or-later) | library | libsecp256k1 0.4.1 (bundled C) | tokio-tungstenite 0.28 (harness-paired) | yes |
+| `nostrdb-notedeck` | same | explicit (`ndb_note_verify`) | same | tokio-tungstenite 0.24 (enostr's) | yes |
+| `nostrdb-notedeck-inline` | same | explicit (`ndb_note_verify`) | same | same | yes |
 
 ### nostr-sdk (rust-nostr, `nostrdevkit/nostr`)
 
@@ -196,7 +198,11 @@ slow consumer, to probe a library's back-pressure (see nostr-sdk and nostro2 bel
 - gossip itself does not use this `client` module (it has its own relay code on
   tokio-tungstenite); the row measures the crate's own client.
 
-### nostrdb (Damus / notedeck core) — variant
+### nostrdb (Damus / notedeck core) — variants
+
+- **Version:** nostrdb-rs `e22e5632a75e` (0.10.0, unreleased on crates.io), the revision
+  Notedeck pins (damus-io/notedeck `9395544`). Its C library (nostrdb `12398c2`) bundles
+  libsecp256k1 0.4.1; crates.io's 0.9.0, which the 2026-11-05 reference ran, bundles 0.6.0.
 
 - No WebSocket client: notedeck's `enostr` reads relays with tokio-tungstenite and hands
   frames to nostrdb, so the harness does the same: a tokio-tungstenite reader task calls
@@ -204,7 +210,7 @@ slow consumer, to probe a library's back-pressure (see nostr-sdk and nostro2 bel
   `SubscriptionStream` (nostrdb's async subscription on `Ndb::subscribe(filter)`) and reads
   each note with `Transaction` + `get_note_by_key` -> `Note::id()`.
 - Ingester threads (default: one per core) parse with nostrdb's own JSON parser, verify id +
-  signature (bundled libsecp256k1 0.6.0) and pass notes to the LMDB writer thread. The
+  signature (bundled libsecp256k1) and pass notes to the LMDB writer thread. The
   optional indexing is turned off with `Config::set_flags(NDB_FLAG_NO_FULLTEXT |
   NDB_FLAG_NO_NOTE_BLOCKS | NDB_FLAG_NO_STATS)` (`nostrdb.h:23-25`: no full-text index, no
   parsed content blocks, no stats). The LMDB write of every note remains: storing notes is
@@ -215,9 +221,31 @@ slow consumer, to probe a library's back-pressure (see nostr-sdk and nostro2 bel
   off the socket before the ingesters finish, so a run ends at the last note after it.
 - **Bug found:** nostrdb cannot parse `\uXXXX` escapes in strings (`nostrdb.c`:
   `case 'u': // these aren't handled yet; return 0`). Every event whose JSON has one is
-  dropped: 2,380 valid events of `all` and 71 of `smoke` (non-BMP characters written as
+  dropped: 2,380 valid events of `all` and, on 0.10.0, 82 of `smoke` (non-BMP characters written as
   `\uD83D\uDE80` surrogate pairs, control characters, ...), and the ambiguous `\u0000`
   event. Its rows are therefore `accepted_ok: false`.
+- **`nostrdb-notedeck`: Notedeck's relay path without the write.** Notedeck's `enostr` reads
+  a relay with a tokio task on a tokio-tungstenite 0.24 socket that pushes text frames into an
+  unbounded channel; its outbox service classifies each frame by its first bytes (no JSON
+  parse), and each `EVENT` becomes a `tokio::spawn`ed `Ndb::process_event_with(frame)`, which
+  copies the frame and pushes it round-robin to an ingester thread (one per core, a
+  32,768-entry inbox, full = dropped). The row does all of that, and on each ingester calls
+  nostrdb's own `ndb_ws_event_from_json` and `ndb_note_verify` (id recomputed and compared,
+  then libsecp256k1's x-only pubkey parse and Schnorr verify, with a
+  `SECP256K1_CONTEXT_VERIFY` context and a 2 MiB scratch buffer, as nostrdb's ingesters
+  have), then hands the id to the app. Left out is what only storing needs: the writer
+  thread and LMDB, the id lookup in LMDB during the parse (no id callback), and the per-note
+  `malloc` for the hand-off to the writer (each thread reuses one buffer of
+  `max(len × 8, 4096)` bytes). nostrdb-rs keeps its bindings private and has no public
+  parse-and-verify, so the row declares those C functions from `nostrdb.h` and resolves them
+  against the library the `nostrdb` crate links.
+- **`nostrdb-notedeck-inline`:** the same parse and verify on the task that reads the
+  socket, single-threaded, with no channel, spawn, copy or ingester threads, to compare with
+  the single-threaded clients.
+- The stored row also delivers the note a kind 6 repost carries in its content, which
+  nostrdb's writer stores as an event of its own. It is in the stream anyway on `all`, but
+  not on `smoke` (11 extra) or on the forged checks (4 extra).
+- 2026-11-06 run of all three: `results/reference/2026-11-06-notedeck/`.
 - License GPL-3.0-or-later (the harness binary links it; nothing is distributed).
 
 ## Not included
@@ -227,7 +255,7 @@ slow consumer, to probe a library's back-pressure (see nostr-sdk and nostro2 bel
   through nostr-sdk.
 - **enostr** (notedeck's relay crate): git-only, a member of the notedeck workspace (egui
   app dependencies); its transport (tokio-tungstenite) + nostrdb ingest is what
-  `nostrdb-tungstenite` reproduces.
+  `nostrdb-tungstenite` and, without the database write, `nostrdb-notedeck` reproduce.
 - **nk / nula** (qntx, 2026): new SDKs with a relay client, under 300 downloads each; nk
   0.15 needs rustc 1.99. Not notable yet.
 - **iris-nostr** 0.5.0: a CLI/agent query tool (social-graph filtering over `nostr-pubsub`),
