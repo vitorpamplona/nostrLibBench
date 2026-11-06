@@ -11,7 +11,7 @@ delivered events is checked against the corpus: exactly the 29,613 valid ones, n
 forged, nothing lost.
 
 How it works: [HARNESS.md](HARNESS.md). Every table, including the variants, the forged-event
-checks and the failures with their reasons: [report.md](results/reference/2026-11-04/report.md).
+checks and the failures with their reasons: [report.md](results/reference/2026-11-05/report.md).
 
 ## Results
 
@@ -22,8 +22,10 @@ and compared, its signature verified, and handed to a callback that only counts 
 is stored: a store, cache, dedup tracker, NIP-11 fetch or batching delay that an option can
 turn off is off, and the work a library cannot turn off is named in its notes.
 
-Measured on 2026-11-04 on a shared 4-core Xeon cloud VM (2.1 GHz), one client at a time; the
-two Quartz rows were re-run later that day on Quartz 2.15.1. Native code is built for a generic x86-64 CPU
+Measured on 2026-11-05 on a shared 4-core Xeon cloud VM (2.1 GHz), one client at a time, with
+Quartz 2.16.0. A Go row measured at the start, between the two passes and at the end tracks the
+host's speed (63.8-66.8 µs/event over the run); the slow Dart rows ran after a container restart,
+on a host about 20% faster, and say so in the report. Native code is built for a generic x86-64 CPU
 (Go `GOAMD64=v1`, Rust's default target, Zig `-Dcpu=baseline`); the JVM, V8, JavaScriptCore and
 .NET JITs compile for the machine they run on.
 
@@ -36,54 +38,56 @@ time over wall time. Quartz's rows are in bold. Both use Quartz's one-relay read
 
 | # | language | client | µs/event | CPU µs/event | cores used | accepted | memory growth MB | alloc B/event | forged checks |
 |---:|---|---|---:|---:|---:|---:|---:|---:|---|
-| **1** | **JVM (Kotlin/Java)** | **`quartz-parallelverifier`** | **18.9** | **54.4** | **2.88** | **29,614** | **227** | **3,594** | pass |
-| **–** | **JVM (Kotlin/Java)** | **`quartz-fetch`** (default) | **45.3** | **55.4** | **1.22** | **29,614** | **188** | **3,620** | pass |
-| 2 | Zig | `zig-nostr-relay` | 47.5 | 46.1 | 0.97 | 29,614 | 1 | 1,673 | pass |
-| 3 | Go | `fiatjaf-nostr-relay-libsecp256k1` | 51.7 | 87.8 | 1.70 | 29,613 | 6 | 4,036 | pass |
-| 4 | Rust | `nostr-sdk-stream` | 53.0 | 56.2 | 1.06 | 29,548 | 65 | 8,722 | pass |
-| 5 | Rust | `nostro2-relay-secp256k1` | 56.2 | 67.4 | 1.20 | 29,614 | 3 | 2,758 | pass |
-| 6 | Rust | `nostr_rust-next_data` | 58.0 | 56.9 | 0.98 | 29,614 | 2 | 11,038 | pass |
-| 7 | C#/.NET | `nostr-sdk` | 59.0 | 69.2 | 1.17 | 29,548 | 284 | 2,346 | pass |
-| 8 | Python | `monstr-subscribe` | 60.5 | 60.2 | 0.99 | 29,614 | 71 | – | pass |
-| 9 | Go | `go-nostr-relay-libsecp256k1` | 66.3 | 88.8 | 1.34 | 29,614 | 6 | 5,312 | pass |
-| 10 | JVM (Kotlin/Java) | `nostr4j-pool` | 69.3 | 237.2 | 3.42 | 29,548 | 1,445 | 139,590 | pass |
-| 11 | Rust | `nostr-types-client` | 71.4 | 77.1 | 1.08 | 29,614 | 69 | 3,830 | pass |
-| 12 | JavaScript (Bun) | `nostr-sdk-node` | 75.8 | 128.7 | 1.70 | 29,548 | 348 | – | pass |
-| 13 | Python | `nostr-sdk-notifications` | 115.0 | 166.5 | 1.45 | 29,548 | 71 | – | pass |
-| 14 | JavaScript (Node) | `qntx-nostr-wasm` | 121.4 | 120.9 | 1.00 | 29,614 | 11 | – | pass |
-| 15 | JavaScript (Deno) | `qntx-nostr-wasm` | 140.4 | 144.0 | 1.03 | 29,614 | 46 | 6,653 | pass |
-| 16 | C#/.NET | `nnostr` | 153.7 | 161.8 | 1.05 | 29,614 | 270 | 16,427 | pass |
-| 17 | C#/.NET | `nostra` | 172.3 | 173.8 | 1.01 | 29,614 | 168 | 33,249 | pass |
-| 18 | JavaScript (Bun) | `qntx-nostr-wasm` | 182.4 | 183.5 | 1.01 | 29,614 | 24 | – | pass |
-| 19 | C#/.NET | `nostr-client` | 194.4 | 197.1 | 1.01 | 29,614 | 167 | 57,957 | pass |
-| 20 | C#/.NET | `blockcore-nostr-client` | 200.2 | 206.0 | 1.03 | 29,614 | 180 | 62,835 | pass |
-| 21 | Go | `nmilat-read` | 204.2 | 270.2 | 1.32 | 29,614 | 29 | 10,287 | pass |
-| 22 | JVM (Kotlin/Java) | `nostr-sdk-subscribe` | 241.2 | 476.2 | 1.97 | 29,548 | 1,373 | 105,354 | pass |
-| 23 | Python | `nostrj` | 306.5 | 322.8 | 1.05 | 29,614 | 40 | – | pass |
-| 24 | JavaScript (Node) | `welshman-nodelay` | 325.4 | 330.3 | 1.02 | 29,614 | 82 | – | **fails**: censored by a forged copy |
-| 25 | Python | `nostrclient` | 328.4 | 339.3 | 1.03 | 29,614 | 109 | – | **fails**: censored by a forged copy |
-| 26 | JavaScript (Node) | `nostr-tools-relay-wasm` | 335.7 | 333.8 | 0.99 | 29,614 | 31 | – | pass |
-| 27 | JavaScript (Bun) | `nostr-tools-relay-wasm` | 384.8 | 381.1 | 0.99 | 29,614 | 49 | – | pass |
-| 28 | JavaScript (Bun) | `welshman-nodelay` | 417.0 | 421.6 | 1.01 | 29,614 | 126 | – | **fails**: censored by a forged copy |
-| 29 | JavaScript (Deno) | `nostr-tools-relay-wasm` | 426.2 | 423.4 | 0.99 | 29,614 | 55 | 11,397 | pass |
-| 30 | JavaScript (Deno) | `welshman-nodelay` | 470.7 | 474.4 | 1.01 | 29,614 | 162 | 12,169 | **fails**: censored by a forged copy |
-| 31 | JavaScript (Bun) | `nostrify-relay` | 738.5 | 793.5 | 1.07 | 29,614 | 40 | – | pass |
-| 32 | JavaScript (Deno) | `nostrify-relay` | 820.7 | 824.1 | 1.00 | 29,614 | 152 | 977,456 | pass |
-| 33 | JavaScript (Deno) | `applesauce-relay` | 881.1 | 886.4 | 1.01 | 29,614 | 128 | 974,400 | pass |
-| 34 | JavaScript (Bun) | `applesauce-relay` | 884.2 | 967.9 | 1.09 | 29,614 | 38 | – | pass |
-| 35 | JavaScript (Bun) | `rx-nostr` | 938.8 | 1,041.3 | 1.11 | 29,548 | 43 | – | pass |
-| 36 | JavaScript (Deno) | `rx-nostr` | 1,017.7 | 1,020.5 | 1.00 | 29,548 | 93 | 971,403 | pass |
-| 37 | JavaScript (Bun) | `ndk` | 1,606.6 | 1,634.6 | 1.02 | 29,614 | 125 | – | **fails**: censored by a forged copy |
-| 38 | JavaScript (Node) | `nostrify-relay` | 1,903.4 | 1,893.1 | 0.99 | 29,614 | 56 | – | pass |
-| 39 | JavaScript (Node) | `applesauce-relay` | 1,929.7 | 1,909.3 | 0.99 | 29,614 | 50 | – | pass |
-| 40 | JavaScript (Node) | `rx-nostr` | 2,043.8 | 2,032.8 | 0.99 | 29,548 | 66 | – | pass |
-| 41 | JavaScript (Deno) | `ndk` | 2,194.6 | 2,190.9 | 1.00 | 29,614 | 137 | 1,249,608 | **fails**: censored by a forged copy |
-| 42 | JavaScript (Node) | `ndk` | 3,282.4 | 3,250.1 | 0.99 | 29,614 | 83 | – | **fails**: censored by a forged copy |
-| 43 | Dart | `nostr_tools` | 12,087.1 | 11,973.0 | 0.99 | 29,614 | 66 | – | pass |
-| 44 | Dart | `dart_nostr` | 12,381.1 | 12,279.8 | 0.99 | 29,614 | 106 | – | **fails**: censored by a forged copy |
-| 45 | Dart | `nostr_nips` | 12,812.3 | 12,703.7 | 0.99 | 29,614 | 96 | – | pass |
-| 46 | Ruby | `nostr-client` | 13,356.4 | 13,233.0 | 0.99 | 29,614 | 26 | – | pass |
-| 47 | JVM (Kotlin/Java) | `nostr-java-relaypool` | 14,618.9 | 14,670.3 | 1.00 | 29,614 | 197 | 3,860,197 | **fails**: censored by a forged copy |
+| **1** | **JVM (Kotlin/Java)** | **`quartz-parallelverifier`** | **21.1** | **63.9** | **3.03** | **29,614** | **269** | **3,607** | pass |
+| 2 | Zig | `zig-nostr-relay` | 46.2 | 45.6 | 0.99 | 29,614 | 1 | 1,673 | pass |
+| **–** | **JVM (Kotlin/Java)** | **`quartz-fetch`** (default) | **48.7** | **62.4** | **1.28** | **29,614** | **267** | **3,631** | pass |
+| 3 | Rust | `nostr-sdk-stream` | 55.3 | 58.8 | 1.06 | 29,548 | 61 | 8,718 | pass |
+| 4 | Rust | `nostr_rust-next_data` | 57.9 | 57.2 | 0.99 | 29,614 | 2 | 11,038 | pass |
+| 5 | Rust | `nostro2-relay-secp256k1` | 60.9 | 71.8 | 1.18 | 29,614 | 3 | 2,758 | pass |
+| 6 | C#/.NET | `nostr-sdk` | 62.3 | 75.9 | 1.22 | 29,548 | 275 | 2,225 | pass |
+| 7 | Go | `fiatjaf-nostr-relay-libsecp256k1` | 64.9 | 107.6 | 1.66 | 29,613 | 6 | 4,036 | pass |
+| 8 | Python | `monstr-subscribe` | 64.9 | 64.8 | 1.00 | 29,614 | 70 | – | pass |
+| 9 | JavaScript (Bun) | `nostr-sdk-node` | 70.4 | 105.9 | 1.50 | 29,548 | 348 | – | pass |
+| 10 | Rust | `nostr-types-client` | 71.3 | 76.0 | 1.06 | 29,614 | 78 | 3,830 | pass |
+| 11 | JVM (Kotlin/Java) | `nostr4j-pool` | 74.2 | 261.5 | 3.53 | 29,548 | 1,358 | 139,762 | pass |
+| 12 | Go | `go-nostr-relay-libsecp256k1` | 74.3 | 100.1 | 1.35 | 29,614 | 6 | 5,312 | pass |
+| 13 | JavaScript (Node) | `nostr-sdk-node` | 91.7 | 155.8 | 1.70 | 29,548 | 598 | – | pass |
+| 14 | Python | `nostr-sdk-notifications` | 120.3 | 176.4 | 1.47 | 29,548 | 66 | – | pass |
+| 15 | JavaScript (Node) | `qntx-nostr-wasm` | 129.1 | 130.1 | 1.01 | 29,614 | 13 | – | pass |
+| 16 | JavaScript (Deno) | `qntx-nostr-wasm` | 130.1 | 130.9 | 1.01 | 29,614 | 47 | 6,026 | pass |
+| 17 | JavaScript (Bun) | `qntx-nostr-wasm` | 168.3 | 167.8 | 1.00 | 29,614 | 23 | – | pass |
+| 18 | C#/.NET | `nnostr` | 173.9 | 182.2 | 1.05 | 29,614 | 268 | 16,426 | pass |
+| 19 | C#/.NET | `nostra` | 191.6 | 195.1 | 1.02 | 29,614 | 166 | 33,249 | pass |
+| 20 | C#/.NET | `blockcore-nostr-client` | 215.1 | 218.9 | 1.02 | 29,614 | 173 | 62,845 | pass |
+| 21 | C#/.NET | `nostr-client` | 216.9 | 222.2 | 1.02 | 29,614 | 173 | 57,957 | pass |
+| 22 | Go | `nmilat-read` | 227.4 | 304.3 | 1.34 | 29,614 | 30 | 10,288 | pass |
+| 23 | JVM (Kotlin/Java) | `nostr-sdk-subscribe` | 237.5 | 487.1 | 2.05 | 29,548 | 1,408 | 105,466 | pass |
+| 24 | Python | `nostrj` | 323.0 | 340.9 | 1.06 | 29,614 | 39 | – | pass |
+| 25 | Python | `nostrclient` | 324.4 | 337.1 | 1.04 | 29,614 | 106 | – | **fails**: a forged copy censors the genuine event |
+| 26 | JavaScript (Node) | `welshman-nodelay` | 363.0 | 370.3 | 1.02 | 29,614 | 79 | – | **fails**: a forged copy censors the genuine event |
+| 27 | JavaScript (Node) | `nostr-tools-relay-wasm` | 380.5 | 376.9 | 0.99 | 29,614 | 32 | – | pass |
+| 28 | JavaScript (Bun) | `nostr-tools-relay-wasm` | 395.5 | 394.0 | 1.00 | 29,614 | 56 | – | pass |
+| 29 | JavaScript (Bun) | `welshman-nodelay` | 397.8 | 399.1 | 1.00 | 29,614 | 131 | – | **fails**: a forged copy censors the genuine event |
+| 30 | JavaScript (Deno) | `nostr-tools-relay-wasm` | 411.6 | 408.5 | 0.99 | 29,614 | 59 | 11,368 | pass |
+| 31 | JavaScript (Deno) | `welshman-nodelay` | 421.6 | 427.3 | 1.01 | 29,614 | 166 | 12,053 | **fails**: a forged copy censors the genuine event |
+| 32 | JavaScript (Bun) | `nostrify-relay` | 758.2 | 814.9 | 1.07 | 29,614 | 40 | – | pass |
+| 33 | JavaScript (Bun) | `applesauce-relay` | 829.5 | 916.9 | 1.11 | 29,614 | 36 | – | pass |
+| 34 | JavaScript (Deno) | `nostrify-relay` | 841.4 | 848.7 | 1.01 | 29,614 | 151 | 978,392 | pass |
+| 35 | JavaScript (Deno) | `applesauce-relay` | 849.5 | 852.2 | 1.00 | 29,614 | 112 | 974,245 | pass |
+| 36 | JavaScript (Bun) | `rx-nostr` | 898.3 | 1,005.7 | 1.12 | 29,548 | 43 | – | pass |
+| 37 | JavaScript (Deno) | `rx-nostr` | 941.5 | 946.1 | 1.00 | 29,548 | 94 | 970,584 | pass |
+| 38 | JavaScript (Bun) | `ndk` | 1,697.7 | 1,735.2 | 1.02 | 29,614 | 122 | – | **fails**: a forged copy censors the genuine event |
+| 39 | JavaScript (Node) | `nostrify-relay` | 1,910.4 | 1,899.5 | 0.99 | 29,614 | 44 | – | pass |
+| 40 | JavaScript (Node) | `applesauce-relay` | 1,932.8 | 1,918.7 | 0.99 | 29,614 | 52 | – | pass |
+| 41 | JavaScript (Node) | `rx-nostr` | 2,027.1 | 2,028.5 | 1.00 | 29,548 | 64 | – | pass |
+| 42 | JavaScript (Deno) | `ndk` | 2,123.1 | 2,120.9 | 1.00 | 29,614 | 148 | 1,250,220 | **fails**: a forged copy censors the genuine event |
+| 43 | JavaScript (Node) | `ndk` | 3,436.0 | 3,435.7 | 1.00 | 29,614 | 83 | – | **fails**: a forged copy censors the genuine event |
+| 44 | Dart | `nostr_tools` | 10,597.4 | 10,573.5 | 1.00 | 29,614 | 64 | – | pass |
+| 45 | Dart | `dart_nostr` | 10,958.1 | 10,939.6 | 1.00 | 29,614 | 111 | – | **fails**: a forged copy censors the genuine event |
+| 46 | Dart | `nostr_nips` | 11,199.6 | 11,170.1 | 1.00 | 29,614 | 69 | – | pass |
+| 47 | Ruby | `nostr-client` | 13,701.7 | 13,633.5 | 1.00 | 29,614 | 26 | – | pass |
+| 48 | JVM (Kotlin/Java) | `nostr-java-relaypool` | 14,956.2 | 15,048.6 | 1.01 | 29,614 | 202 | 3,860,448 | **fails**: a forged copy censors the genuine event |
+| 49 | PHP | `nostr-php-persistent` | 86,253.3 | 85,852.0 | 1.00 | 29,614 | 88 | – | pass |
 
 **Accepted** is the count the row delivered: 29,613 valid events, plus the one ambiguous
 event if the library takes it, minus the 66 expired ones (29,547 or 29,548) if it drops

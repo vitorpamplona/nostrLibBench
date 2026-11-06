@@ -1,0 +1,61 @@
+{
+  "harness": "go",
+  "language": "Go",
+  "runtime": "go1.26.8 linux/amd64, GOAMD64=v1, GOGC=100 (default), GOMEMLIMIT=off (default), GOMAXPROCS=4, one child process per client",
+  "host": {
+    "cores": 4,
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "os": "Linux 6.18.44-fc-v236"
+  },
+  "settings": {
+    "warmup_runs": 1,
+    "min_runs": 3,
+    "min_time_ms": 10000,
+    "max_runs": 30,
+    "timeout_ms": 300000
+  },
+  "relay": "ws://127.0.0.1:7777",
+  "corpus_fingerprint": "f995f42b68b5386e990c859e6c8058e8df7cd1d430e38e9e14d6e954e81c89bb",
+  "results": [
+    {
+      "client": "fiatjaf-nostr-relay-libsecp256k1",
+      "library": "fiatjaf.com/nostr",
+      "version": "v0.0.0-20261101164043-96f89895a4b2",
+      "license": "Unlicense",
+      "api": "RelayConnect + Relay.Subscribe (Events / EndOfStoredEvents channels)",
+      "websocket": "coder/websocket v1.8.13",
+      "crypto": "libsecp256k1 (C, 0.5-era sources vendored in the module, compiled in with cgo; build tag libsecp256k1)",
+      "verify": "library",
+      "notes": "Built with the library's libsecp256k1 build tag. Verification is the library's default (RelayOptions.AssumeValid=false): VerifySignature recomputes the id into a copy of the event and verifies the signature against it, never comparing it with the id field, so the harness also calls the library's Event.CheckID() on every delivered event. SubscriptionOptions.MaxWaitForEOSE is disabled (math.MaxInt64): its 7 s default dispatches a fake EOSE and drops the stored events still queued. InfoLogger (stderr by default, one line per rejected event) is sent to io.Discard. JSON: gjson envelope split + easyjson event decoder",
+      "variant": false,
+      "workload": "all",
+      "events": 31161,
+      "bytes": 26995371,
+      "accepted": 29613,
+      "accepted_xor": "c876c4774bcf3cde1f609b6d7c1a5df932d9546eb6a142ea6c44e98533755ee6",
+      "ambiguous_accepted": 0,
+      "expired_accepted": 66,
+      "accepted_ok": true,
+      "errors": 0,
+      "error": null,
+      "warmup_runs": 1,
+      "runs": 4,
+      "first_run_ms": 2259.9,
+      "median_ms": 2081,
+      "min_ms": 2001.8,
+      "p90_ms": 2109.9,
+      "run_ms": [
+        2095.6,
+        2066.3,
+        2109.9,
+        2001.8
+      ],
+      "events_per_s": 14974.4,
+      "us_per_event": 66.781,
+      "cpu_ms": 3490.2,
+      "peak_rss_mb": 23.6,
+      "base_rss_mb": 17.2,
+      "alloc_bytes": 125777012
+    }
+  ]
+}
